@@ -1,7 +1,7 @@
 package.loaded.gml = nil
 package.loaded.gfxbuffer = nil
 
-local wersja = "0.2.4"
+local wersja = "0.3.2"
 local startArgs = {...}
 
 local computer = require("computer")
@@ -13,19 +13,32 @@ local term = require("term")
 local gml = require("gml")
 local serial = require("serialization")
 local gpu = component.gpu
+local mod = component.modem
 
 --parametry wrot
-local address = nil
 local sg = nil
+local address = nil
 local closeIrisOnIncomming = false
+local statusKanalu = false
+local numerKanalu = math.random(10000,65530)
+local kodPrzeslony = math.random(10000,99999)
+local czasOtwarciaPrzeslony = 11
 
 --zmienne techniczne
 local dialDialog = false
 local timerID = nil
 local timerEneriga = nil
+local czasTimerPrzeslona = 0
+local timerPrzeslona = nil
 local czasDoZamkniecia = 0
+local isModem = false
 
-local cfgInfo = "\n--Struktura pliku konfiguracyjnego:\nadres sterownika wrot: string,\nAutomatyczne zamykanie przeslony przy polaczeniu przychodzacym: bool"
+if  mod ~= nil then
+	if mod.isWireless() then isModem = true end
+end
+
+
+local cfgInfo = "\n--Struktura pliku konfiguracyjnego:\nadres sterownika wrot: string,\nAutomatyczne zamykanie przeslony przy polaczeniu przychodzacym: bool\nStatus kanalu (otwarty/zamkniety): bool\n Numer portu: number\nKod otwarcia przeslony: number\nCzas otwarcia przeslony po wpisaniu poprawnego kodu przeslony: number"
 
 --funkcja skopiowana z gmlDialogs i przerobiona
 local function messageBox(message,buttons, colorb, colorf)
@@ -92,6 +105,10 @@ local function messageBox(message,buttons, colorb, colorf)
   return choice
 end
 
+if mod==nil then
+	messageBox("fuck",{"close"})
+end
+
 if computer.totalMemory() < 1536 * 1024 then
 	retu = messageBox("Ten komputer nie spełnia zalecanych wymagan sprzetowych aplikacji (1.5MB RAM). Moga wystapic problemy z dzialaniem aplikacji. Czy chcesz kontynuowac?", {"Tak", "Nie"})
 	if retu == "Nie" then 
@@ -102,7 +119,7 @@ end
 
 local function zapiszPlik()
 	local plik = io.open("sgConf.cfg", "w")
-	plik:write(serial.serialize(table.pack(address, closeIrisOnIncomming))..cfgInfo)
+	plik:write(serial.serialize(table.pack(address, closeIrisOnIncomming, statusKanalu, numerKanalu, kodPrzeslony, czasOtwarciaPrzeslony))..cfgInfo)
 	plik:close()
 end
 
@@ -115,18 +132,19 @@ if not fs.exists(shell.resolve("sgConf.cfg")) or startArgs[1]~=nil then
 	sg = component.proxy(address)
 	if sg==nil then
 		messageBox("Adres sterownika wrot jest nieprawidlowy",{"Zamknij"})
-		--return
+		return
 	end
-	zapiszPlik()
-	if sg==nil then return end
 else
+	--wczytywanie pliku
 	local plik = io.open("sgConf.cfg", "r")
-	address, closeIrisOnIncomming = table.unpack(serial.unserialize(plik:read()))
+	address, closeIrisOnIncomming, statusKanalu, numerKanalu, kodPrzeslony, czasOtwarciaPrzeslony = table.unpack(serial.unserialize(plik:read()))
 	sg = component.proxy(address)
+	plik:close()
 	if sg == nil then
 		messageBox("Adres sterownika wrot jest nieprawidlowy",{"Zamknij"})
 		return
 	end
+	if mod~=nil and statusKanalu then mod.open(numerKanalu) end
 end
 
 local function gammaLogo()
@@ -223,6 +241,16 @@ local function fTimerEnergia()
 	computer.pushSignal("energy_reload")
 end
 
+local function fTimerPrzeslona()
+	if czasTimerPrzeslona < 0 then
+		sg.closeIris()
+		event.cancel(timerPrzeslona)
+		timerPrzeslona = nil
+	else
+		czasTimerPrzeslona = czasTimerPrzeslona - 1
+	end
+end
+
 local function nowyTunel()
 	dialDialog = true
 	local gTunel = gml.create("center", res[2]-math.floor((res[2]/3))-3, 60, 9)
@@ -317,9 +345,9 @@ local function zamknijTunel()
 	if sg.stargateState() == "Connected" then sg.disconnect() end
 end
 
-
 local gui = gml.create(0, 0, res[1], res[2])
-local lNazwaProgramu = gui:addLabel("left", 1, 85, "Kontroler Wrot, wersja "..wersja)
+local lNazwaProgramu = gui:addLabel("left", 1, 30, "Kontroler Wrot, wersja "..wersja)
+local bWyjscie = gui:addButton("right", 1, 10, 1, "Wyjscie", function() gui:close() end)
 local lAdresWrot = gui:addLabel("left", 4, 60, "Adres wrot: "..separateAddress(sg.localAddress()))
 lAdresWrot["text-color"] = 0x4F72FF
 local lStatusWrot = gui:addLabel("left", 5, 35, "Status wrot: "..translateState())
@@ -331,7 +359,70 @@ local bAutomatyczne = gui:addButton(58, 8, 9, 1, "Zmien", zmienAZP)
 local bPrzeslona = gui:addButton(2,11, 22, 3, "Przelacz przeslone", przelaczPrzeslone)
 local bOtworzTunel = gui:addButton(27, 11, 22, 3, "Otworz tunel", nowyTunel)
 local bZamknijPolaczenie = gui:addButton(52, 11, 22, 3, "Zamknij tunel", zamknijTunel)
-local bWyjscie = gui:addButton("right", 15, 10, 1, "Wyjscie", function() gui:close() end)
+local lKanalStatus = gui:addLabel(42, 16, 14, "Status kanalu:")
+lKanalStatus["text-color"] = 0x4F72FF
+local lKanalStatus2 = gui:addLabel(58, 16, 10, "<STATUS>")
+local bZmienStatus = gui:addButton(69, 16, 10, 1, "Przelacz", function()
+	if isModem then
+		if mod.isOpen(numerKanalu) then
+			statusKanalu = false
+			mod.close(numerKanalu)
+			lKanalStatus2["text"] = "Zamkniety"
+			lKanalStatus2["text-color"] = 0xDB5656
+			lKanalStatus2:draw()
+		else
+			statusKanalu = true
+			mod.open(numerKanalu)
+			lKanalStatus2["text"] = "Otwarty"
+			lKanalStatus2["text-color"] = 0x47F041
+			lKanalStatus2:draw()
+		end
+	end
+end)
+local lNumerKanalu = gui:addLabel(42, 17, 14, "Numer kanalu:")
+local lNumerKanalu2 = gui:addLabel(58, 17, 6, "00000")
+local bLosujKanal = gui:addButton(69, 17, 10, 1, "Losuj", function()
+	if isModem then
+		if mod.isOpen(numerKanalu) then mod.close(numerKanalu) end
+		numerKanalu = math.random(10000,65530)
+		lNumerKanalu2["text"] = tostring(numerKanalu)
+		lNumerKanalu2:draw()
+		if statusKanalu then mod.open(numerKanalu) end
+	else
+		messageBox("Co do uja?", {"Close"})
+	end
+end)
+local lKodPrzeslony = gui:addLabel(42, 18, 15, "Kod przeslony:")
+local lKodPrzeslony2 = gui:addLabel(58, 18, 6, "00000")
+local bLosujKod = gui:addButton(69, 18, 10, 1, "Losuj", function()
+	kodPrzeslony = math.random(10000,99999)
+	lKodPrzeslony2["text"] = tostring(kodPrzeslony)
+	lKodPrzeslony2:draw()
+end)
+if not isModem then
+	lKanalStatus2["text"] = "BRAK"
+	lKanalStatus2["text-color"] = 0x450000
+	bZmienStatus:hide()
+	lNumerKanalu:hide()
+	lNumerKanalu2:hide()
+	bLosujKanal:hide()
+	lKodPrzeslony:hide()
+	lKodPrzeslony2:hide()
+	bLosujKod:hide()
+else
+	if statusKanalu then
+		mod.open(numerKanalu)
+		lKanalStatus2["text"] = "Otwarty"
+		lKanalStatus2["text-color"] = 0x47F041
+		
+	else
+		mod.close(numerKanalu)
+		lKanalStatus2["text"] = "Zamkniety"
+		lKanalStatus2["text-color"] = 0xDB5656
+	end
+	lNumerKanalu2["text"] = tostring(numerKanalu)
+	lKodPrzeslony2["text"] = tostring(kodPrzeslony)
+end
 lInfo[1] = gui:addLabel(3, 17, 40, "Info1")
 lInfo[2] = gui:addLabel(3, 18, 40, "Info2")
 lInfo[3] = gui:addLabel(3, 19, 40, "Info3")
@@ -402,6 +493,19 @@ local function eventListener(...)
 	elseif ev[1] == "energy_reload" then
 		lEnergia["text"] = "Dostepna energia: "..getEnergy()
 		lEnergia:draw()
+	elseif ev[1] == "modem_message" then
+		if ev[4] == numerKanalu then
+			if ev[6] == tostring(kodPrzeslony) then
+				sg.openIris()
+				os.sleep(0.1)
+				mod.broadcast(ev[4], serial.serialize({true, "Przeslona otwarta", czasOtwarciaPrzeslony}))
+				czasTimerPrzeslona = czasOtwarciaPrzeslony
+				timerPrzeslona = event.timer(1, fTimerPrzeslona, math.huge)
+			else
+				os.sleep(0.1)
+				mod.broadcast(ev[4], serial.serialize(table.pack(false, "Bledny kod przeslony!", czasOtwarciaPrzeslony)))
+			end
+		end
 	end
 end
 
@@ -411,10 +515,12 @@ event.listen("sgIrisStateChange", eventListener)
 event.listen("sgStargateStateChange", eventListener)
 event.listen("sgChevronEngaged", eventListener)
 event.listen("energy_reload", eventListener)
+event.listen("modem_message", eventListener)
 
 timerEneriga = event.timer(3, fTimerEnergia, math.huge)
 gui:run()
 event.cancel(timerEneriga)
+zapiszPlik()
 
 event.ignore("sgDialIn", eventListener)
 event.ignore("sgDialOut", eventListener)
@@ -422,3 +528,4 @@ event.ignore("sgIrisStateChange", eventListener)
 event.ignore("sgStargateStateChange", eventListener)
 event.ignore("sgChevronEngaged", eventListener)
 event.ignore("energy_reload", eventListener)
+event.ignore("modem_message", eventListener)
