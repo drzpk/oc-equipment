@@ -1,8 +1,10 @@
 package.loaded.gml = nil
 package.loaded.gfxbuffer = nil
 
-local wersja = "0.3.2"
+local wersja = "0.3.3"
 local startArgs = {...}
+
+if startArgs[1] == "version_check" then return wersja end
 
 local computer = require("computer")
 local component = require("component")
@@ -38,7 +40,7 @@ if  mod ~= nil then
 end
 
 
-local cfgInfo = "\n--Struktura pliku konfiguracyjnego:\nadres sterownika wrot: string,\nAutomatyczne zamykanie przeslony przy polaczeniu przychodzacym: bool\nStatus kanalu (otwarty/zamkniety): bool\n Numer portu: number\nKod otwarcia przeslony: number\nCzas otwarcia przeslony po wpisaniu poprawnego kodu przeslony: number"
+local cfgInfo = "\n\n--Struktura pliku konfiguracyjnego:\nadres sterownika wrót: string,\nAutomatyczne zamykanie przesłony przy połączeniu przychodzącym: bool\nStatus kanału (otwarty/zamknięty): bool\n Numer portu: number\nKod otwarcia przesłony: number\nCzas otwarcia przesłony po wpisaniu poprawnego kodu przesłony: number"
 
 --funkcja skopiowana z gmlDialogs i przerobiona
 local function messageBox(message,buttons, colorb, colorf)
@@ -93,7 +95,7 @@ local function messageBox(message,buttons, colorb, colorf)
 
   local xpos=2
   for i=1,#buttons do
-    if type(buttons[i])~="string" then error("Tablica musi byc wypelniona typem string",2) end
+    if type(buttons[i])~="string" then error("Tablica musi być wypełniona typem string",2) end
     if i==#buttons then xpos=-2 end
     buttonObjs[i]=guiD:addButton(xpos,-2,#buttons[i]+2,1,buttons[i],function() choice=buttons[i] guiD.close() end)
     xpos=xpos+#buttons[i]+3
@@ -105,14 +107,10 @@ local function messageBox(message,buttons, colorb, colorf)
   return choice
 end
 
-if mod==nil then
-	messageBox("fuck",{"close"})
-end
-
 if computer.totalMemory() < 1536 * 1024 then
-	retu = messageBox("Ten komputer nie spełnia zalecanych wymagan sprzetowych aplikacji (1.5MB RAM). Moga wystapic problemy z dzialaniem aplikacji. Czy chcesz kontynuowac?", {"Tak", "Nie"})
+	retu = messageBox("Ten komputer nie spełnia zalecanych wymagań sprzętowych aplikacji (1.5MB RAM). Mogą wystapić problemy z działaniem aplikacji. Czy chcesz kontynuować?", {"Tak", "Nie"})
 	if retu == "Nie" then 
-		error("Za malo pamieci operacyjnej!")
+		error("Za mało pamięci operacyjnej!")
 		return
 	end
 end
@@ -126,12 +124,12 @@ end
 if not fs.exists(shell.resolve("sgConf.cfg")) or startArgs[1]~=nil then
 	address = startArgs[1]
 	if address == nil then
-		messageBox("Adres sterownika wrot jest nieprawidlowy",{"Zamknij"})
+		messageBox("Adres sterownika wrót jest nieprawidłowy",{"Zamknij"})
 		return
 	end
 	sg = component.proxy(address)
 	if sg==nil then
-		messageBox("Adres sterownika wrot jest nieprawidlowy",{"Zamknij"})
+		messageBox("Adres sterownika wrót jest nieprawidłowy",{"Zamknij"})
 		return
 	end
 else
@@ -141,7 +139,7 @@ else
 	sg = component.proxy(address)
 	plik:close()
 	if sg == nil then
-		messageBox("Adres sterownika wrot jest nieprawidlowy",{"Zamknij"})
+		messageBox("Adres sterownika wrót jest nieprawidłowy",{"Zamknij"})
 		return
 	end
 	if mod~=nil and statusKanalu then mod.open(numerKanalu) end
@@ -182,16 +180,16 @@ end
 local function translateIrisState()
 	if sg.irisState()=="Open" then return "Otwarta" end
 	if sg.irisState()=="Opening" then return "Otwieranie" end
-	if sg.irisState()=="Closed" then return "Zamknieta" end
+	if sg.irisState()=="Closed" then return "Zamknięta" end
 	if sg.irisState()=="Closing" then return "Zamykanie" end
 	return "Offline"
 end
 
 local function translateResponse(res)
-	if res=="Malformed stargate address" or res=="bad arguments #1 (string expected, got no value)" then return "Niepoprawny adres wrot!"
-	elseif string.sub(res, 1, 23)=="No stargate at address " then return "Brak wrot o adresie "..string.sub(res, 24).."!"
-	elseif string.sub(res, 1, 28)=="Not enough chevrons to dial " then return "Te wrota nie obsluguja tunelow miedzywymiarowych"
-	else return "Nie mozna otworzyc tunelu!"
+	if res=="Malformed stargate address" or res=="bad arguments #1 (string expected, got no value)" then return "Niepoprawny adres wrót!"
+	elseif string.sub(res, 1, 23)=="No stargate at address " then return "Brak wrót o adresie "..string.sub(res, 24).."!"
+	elseif string.sub(res, 1, 28)=="Not enough chevrons to dial " then return "Te wrota nie obslugują tunelów międzywymiarowych"
+	else return "Nie można otworzyć tunelu!"
 	end
 end
 
@@ -201,9 +199,9 @@ local function round(num, idp)
 end
 
 local function getEnergy()
-	--maksymalna energia: 1 023 400 EU
-	proc = math.floor(100*(sg.energyAvailable()*20/1000000)+0.5)
-	if proc > 100 then proc = 100 end
+	--maksymalna energia: 1 008 400 EU
+	proc = math.floor(100*(sg.energyAvailable()*20/1000000)+0.5)-1
+	--if proc > 100 then proc = 100 end
 	procenty = proc.."%"
 	eu = string.reverse(tostring(round(sg.energyAvailable(), 0)*20))
 	eu2 = ""
@@ -221,7 +219,7 @@ end
 local function przelaczPrzeslone()
 	if translateIrisState() == "Otwarta" then
 		sg.closeIris()
-	elseif translateIrisState() == "Zamknieta" then
+	elseif translateIrisState() == "Zamknięta" then
 		sg.openIris()
 	end
 end
@@ -231,7 +229,7 @@ local lInfo = {}
 
 local function zmienAZP()
 	closeIrisOnIncomming = not closeIrisOnIncomming
-	lAutomatyczne["text"] = "Automatyczne przelaczanie przeslony: "..translateBool(closeIrisOnIncomming)
+	lAutomatyczne["text"] = "Automatyczne przełączanie przesłony: "..translateBool(closeIrisOnIncomming)
 	lAutomatyczne:draw()
 end
 
@@ -257,17 +255,17 @@ local function nowyTunel()
 	local background = 0xFFD078
 	gTunel["fill-color-bg"] = background
 	gTunel["border-color-bg"] = background
-	local lAdres = gTunel:addLabel("left", 3, 26, "Wprowadz adres docelowy:")
+	local lAdres = gTunel:addLabel("left", 3, 26, "Wprowadź adres docelowy:")
 	lAdres["text-background"] = background
 	local tAdres = gTunel:addTextField(-2, 3, 12)
-	local lCzas = gTunel:addLabel("left", 5, 34, "Wprowadz czas polaczenia[15-300]:")
+	local lCzas = gTunel:addLabel("left", 5, 37, "Wprowadź czas połączenia[15-300]:")
 	lCzas["text-background"] = background
 	local tCzas = gTunel:addTextField(-2, 5, 7)
-	local lWykryto = gTunel:addLabel("center", 5, 33, "Wykryto polaczenie przychodzace!")
+	local lWykryto = gTunel:addLabel("center", 5, 33, "Wykryto połączenie przychodzące!")
 	lWykryto["text-background"] = background
 	lWykryto["text-color"] = 0xFF9191
 	lWykryto:hide()
-	local bZatwierdz = gTunel:addButton(20, 7, 13, 1, "Zatwierdz",
+	local bZatwierdz = gTunel:addButton(20, 7, 13, 1, "Zatwierdź",
 	function()
 		if translateState()=="Bezczynny" then
 			status, out = pcall(sg.energyToDial, tAdres["text"])
@@ -283,11 +281,11 @@ local function nowyTunel()
 						else
 							czasDoZamkniecia = 300
 						end
-						lInfo[1]["text"] = "<< Polaczenie wychodzace >>"
+						lInfo[1]["text"] = "<< Połączenie wychodzące >>"
 						lInfo[1]["text-color"] = 0x23DB1D
 						lInfo[1]:show()
 						lInfo[1]:draw()
-						lInfo[2]["text"] = "Zewnetrzny adres: "..separateAddress(sg.remoteAddress())
+						lInfo[2]["text"] = "Zewnętrzny adres: "..separateAddress(sg.remoteAddress())
 						lInfo[2]:show()
 						lInfo[2]:draw()
 						lInfo[3]["text"] = "Zablokowane symbole: 0"
@@ -299,7 +297,7 @@ local function nowyTunel()
 						messageBox(translateResponse(out2), {"OK"})
 					end
 				else
-					messageBox("Brak wystarczajacej ilosci energii do wykonania polaczenia", {"OK"})
+					messageBox("Brak wystarczającej ilości energii do wykonania połączenia", {"OK"})
 				end
 			else
 				messageBox(translateResponse(out), {"Zamknij"})
@@ -308,7 +306,7 @@ local function nowyTunel()
 			translateState()=="Tunel aktywny" then messageBox("Jest już otwarty inny tunel", {"OK"})
 			gTunel:close()
 		else 
-			messageBox("Blad: nie mozna otworzyc tunelu", {"OK"})
+			messageBox("Błąd: nie można otworzyć tunelu", {"OK"})
 			gTunel:close()
 		end
 	end)
@@ -347,27 +345,27 @@ end
 
 local gui = gml.create(0, 0, res[1], res[2])
 local lNazwaProgramu = gui:addLabel("left", 1, 30, "Kontroler Wrot, wersja "..wersja)
-local bWyjscie = gui:addButton("right", 1, 10, 1, "Wyjscie", function() gui:close() end)
-local lAdresWrot = gui:addLabel("left", 4, 60, "Adres wrot: "..separateAddress(sg.localAddress()))
+local bWyjscie = gui:addButton("right", 1, 10, 1, "Wyjście", function() gui:close() end)
+local lAdresWrot = gui:addLabel("left", 4, 60, "Adres wrót: "..separateAddress(sg.localAddress()))
 lAdresWrot["text-color"] = 0x4F72FF
-local lStatusWrot = gui:addLabel("left", 5, 35, "Status wrot: "..translateState())
+local lStatusWrot = gui:addLabel("left", 5, 35, "Status wrót: "..translateState())
 lStatusWrot["text-color"] = 0x4F72FF
-local lStatusPrzeslony = gui:addLabel("left", 6, 90, "Status przeslony: "..translateIrisState())
-local lEnergia = gui:addLabel("left", 7, 130, "Dostepna energia: "..getEnergy())
-lAutomatyczne = gui:addLabel("left", 8, 41, "Automatyczne przelaczanie przeslony: "..translateBool(closeIrisOnIncomming))
-local bAutomatyczne = gui:addButton(58, 8, 9, 1, "Zmien", zmienAZP)
-local bPrzeslona = gui:addButton(2,11, 22, 3, "Przelacz przeslone", przelaczPrzeslone)
-local bOtworzTunel = gui:addButton(27, 11, 22, 3, "Otworz tunel", nowyTunel)
-local bZamknijPolaczenie = gui:addButton(52, 11, 22, 3, "Zamknij tunel", zamknijTunel)
-local lKanalStatus = gui:addLabel(42, 16, 14, "Status kanalu:")
+local lStatusPrzeslony = gui:addLabel("left", 6, 90, "Status przesłony: "..translateIrisState())
+local lEnergia = gui:addLabel("left", 7, 80, "Dostępna energia: "..getEnergy())
+lAutomatyczne = gui:addLabel("left", 8, 44, "Automatyczne przełączanie przesłony: "..translateBool(closeIrisOnIncomming))
+local bAutomatyczne = gui:addButton(58, 8, 9, 1, "Zmień", zmienAZP)
+local bPrzeslona = gui:addButton(2,11, 23, 3, "Przełącz przeslonę", przelaczPrzeslone)
+local bOtworzTunel = gui:addButton(28, 11, 23, 3, "Otwórz tunel", nowyTunel)
+local bZamknijPolaczenie = gui:addButton(54, 11, 23, 3, "Zamknij tunel", zamknijTunel)
+local lKanalStatus = gui:addLabel(42, 16, 14, "Status kanału:")
 lKanalStatus["text-color"] = 0x4F72FF
 local lKanalStatus2 = gui:addLabel(58, 16, 10, "<STATUS>")
-local bZmienStatus = gui:addButton(69, 16, 10, 1, "Przelacz", function()
+local bZmienStatus = gui:addButton(69, 16, 10, 1, "Przełącz", function()
 	if isModem then
 		if mod.isOpen(numerKanalu) then
 			statusKanalu = false
 			mod.close(numerKanalu)
-			lKanalStatus2["text"] = "Zamkniety"
+			lKanalStatus2["text"] = "Zamknięty"
 			lKanalStatus2["text-color"] = 0xDB5656
 			lKanalStatus2:draw()
 		else
@@ -379,7 +377,7 @@ local bZmienStatus = gui:addButton(69, 16, 10, 1, "Przelacz", function()
 		end
 	end
 end)
-local lNumerKanalu = gui:addLabel(42, 17, 14, "Numer kanalu:")
+local lNumerKanalu = gui:addLabel(42, 17, 14, "Numer kanału:")
 local lNumerKanalu2 = gui:addLabel(58, 17, 6, "00000")
 local bLosujKanal = gui:addButton(69, 17, 10, 1, "Losuj", function()
 	if isModem then
@@ -392,7 +390,7 @@ local bLosujKanal = gui:addButton(69, 17, 10, 1, "Losuj", function()
 		messageBox("Co do uja?", {"Close"})
 	end
 end)
-local lKodPrzeslony = gui:addLabel(42, 18, 15, "Kod przeslony:")
+local lKodPrzeslony = gui:addLabel(42, 18, 15, "Kod przesłony:")
 local lKodPrzeslony2 = gui:addLabel(58, 18, 6, "00000")
 local bLosujKod = gui:addButton(69, 18, 10, 1, "Losuj", function()
 	kodPrzeslony = math.random(10000,99999)
@@ -417,7 +415,7 @@ else
 		
 	else
 		mod.close(numerKanalu)
-		lKanalStatus2["text"] = "Zamkniety"
+		lKanalStatus2["text"] = "Zamknięty"
 		lKanalStatus2["text-color"] = 0xDB5656
 	end
 	lNumerKanalu2["text"] = tostring(numerKanalu)
@@ -436,7 +434,7 @@ local function odliczanie()
 		minuty = tostring(math.floor(czasDoZamkniecia/60))
 		sekundy = tostring(60*((czasDoZamkniecia/60)-math.floor(czasDoZamkniecia/60)))
 		if string.len(sekundy)==1 then sekundy = "0"..sekundy end
-		lInfo[3]["text"] = "Pozostaly czas: "..minuty..":"..sekundy
+		lInfo[3]["text"] = "Pozostały czas: "..minuty..":"..sekundy
 		lInfo[3]:draw()
 		czasDoZamkniecia = czasDoZamkniecia-1
 	end
@@ -451,11 +449,11 @@ local function eventListener(...)
 				sg.closeIris()
 			end))
 		end
-		lInfo[1]["text"] = ">> Polaczenie przychodzace <<"
+		lInfo[1]["text"] = ">> Połączenie przychodzące <<"
 		lInfo[1]["text-color"] = 0xC47300
 		lInfo[1]:show()
 		lInfo[1]:draw()
-		lInfo[2]["text"] = "Zewnetrzny adres: "..separateAddress(sg.remoteAddress())
+		lInfo[2]["text"] = "Zewnętrzny adres: "..separateAddress(sg.remoteAddress())
 		lInfo[2]:show()
 		lInfo[2]:draw()
 		lInfo[3]["text"] = "Zablokowane symbole: 0"
@@ -464,10 +462,10 @@ local function eventListener(...)
 	elseif ev[1]=="sgDialOut" then
 	
 	elseif ev[1]=="sgIrisStateChange" then
-		lStatusPrzeslony["text"] = "Status przeslony: "..translateIrisState()
+		lStatusPrzeslony["text"] = "Status przesłony: "..translateIrisState()
 		lStatusPrzeslony:draw()
 	elseif ev[1]=="sgStargateStateChange" then
-		lStatusWrot["text"] = "Status wrot: "..translateState()
+		lStatusWrot["text"] = "Status wrót: "..translateState()
 		lStatusWrot:draw()
 		if ev[3]=="Idle" then
 			if closeIrisOnIncomming then
@@ -480,7 +478,7 @@ local function eventListener(...)
 			event.cancel(timerID)
 			czasDoZamkniecia = 0
 		elseif ev[3]=="Connected" then
-			lInfo[3]["text"] = "Pozostaly czas: "
+			lInfo[3]["text"] = "Pozostały czas: "
 			lInfo[3]:draw()
 			if czasDoZamkniecia==0 then czasDoZamkniecia = 300-4 end
 			os.sleep(0.2)
@@ -491,19 +489,19 @@ local function eventListener(...)
 		lInfo[3]["text"] = "Zablokowane symbole: "..chevronNumber
 		lInfo[3]:draw()
 	elseif ev[1] == "energy_reload" then
-		lEnergia["text"] = "Dostepna energia: "..getEnergy()
+		lEnergia["text"] = "Dostępna energia: "..getEnergy()
 		lEnergia:draw()
 	elseif ev[1] == "modem_message" then
 		if ev[4] == numerKanalu then
 			if ev[6] == tostring(kodPrzeslony) then
 				sg.openIris()
 				os.sleep(0.1)
-				mod.broadcast(ev[4], serial.serialize({true, "Przeslona otwarta", czasOtwarciaPrzeslony}))
+				mod.broadcast(ev[4], serial.serialize({true, "Przesłona otwarta", czasOtwarciaPrzeslony}))
 				czasTimerPrzeslona = czasOtwarciaPrzeslony
 				timerPrzeslona = event.timer(1, fTimerPrzeslona, math.huge)
 			else
 				os.sleep(0.1)
-				mod.broadcast(ev[4], serial.serialize(table.pack(false, "Bledny kod przeslony!", czasOtwarciaPrzeslony)))
+				mod.broadcast(ev[4], serial.serialize(table.pack(false, "Błędny kod przesłony!", czasOtwarciaPrzeslony)))
 			end
 		end
 	end
