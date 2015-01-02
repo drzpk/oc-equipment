@@ -83,7 +83,7 @@ local function usage()
 end
 
 local function getAppList()
-	local result, appsFunction = pcall(internet.request,"http://pastebin.com/raw.php?i=deQNZ8vE")
+	local result, appsFunction = pcall(internet.request,"https://bitbucket.org/Admox/oc_equipment/raw/master/installer/setup-list")
 	if result then
 		apps = appsFunction()
 		return serial.unserialize(tostring(apps))
