@@ -1,7 +1,7 @@
 package.loaded.gml = nil
 package.loaded.gfxbuffer = nil
 
-local wersja = "0.3.3"
+local wersja = "0.3.4"
 local startArgs = {...}
 
 if startArgs[1] == "version_check" then return wersja end
@@ -116,25 +116,25 @@ if computer.totalMemory() < 1536 * 1024 then
 end
 
 local function zapiszPlik()
-	local plik = io.open("sgConf.cfg", "w")
+	if not fs.isDirectory("config") then fs.makeDirectory("config") end
+	local plik = io.open("config/sgConf.cfg", "w")
 	plik:write(serial.serialize(table.pack(address, closeIrisOnIncomming, statusKanalu, numerKanalu, kodPrzeslony, czasOtwarciaPrzeslony))..cfgInfo)
 	plik:close()
 end
 
-if not fs.exists(shell.resolve("sgConf.cfg")) or startArgs[1]~=nil then
+if not fs.exists(shell.resolve("config/sgConf.cfg")) or startArgs[1]~=nil then
 	address = startArgs[1]
 	if address == nil then
-		messageBox("Adres sterownika wrót jest nieprawidłowy",{"Zamknij"})
+		io.stderr:write("Brak pliku konfiguracyjnego. Aby go utworzyć, napisz sgcx <adres_interfejsu_wrót>")
 		return
 	end
 	sg = component.proxy(address)
 	if sg==nil then
-		messageBox("Adres sterownika wrót jest nieprawidłowy",{"Zamknij"})
+		io.stderr:write("Podany adres interfejsu jest nieprawidłowy!")
 		return
 	end
 else
-	--wczytywanie pliku
-	local plik = io.open("sgConf.cfg", "r")
+	local plik = io.open("config/sgConf.cfg", "r")
 	address, closeIrisOnIncomming, statusKanalu, numerKanalu, kodPrzeslony, czasOtwarciaPrzeslony = table.unpack(serial.unserialize(plik:read()))
 	sg = component.proxy(address)
 	plik:close()
