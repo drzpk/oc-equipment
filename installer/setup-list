@@ -1,0 +1,8 @@
+{
+	{"gml","none","https://bitbucket.org/Admox/oc_equipment/raw/master/dependencies/gml.lua","Biblioteka do obs³ugi aplikacji okienkowych","Gopher",nil,nil,nil},
+	{"gfxbuffer","none","https://bitbucket.org/Admox/oc_equipment/raw/master/dependencies/gfxbuffer.lua","Gopher",nil,nil,nil},
+	{"colorutils","none","https://bitbucket.org/Admox/oc_equipment/raw/master/dependencies/colorutils.lua","Gopher",nil,nil,nil},
+	{"default-style","none","https://bitbucket.org/Admox/oc_equipment/raw/master/dependencies/default.gss","Gopher",nil,nil,nil},
+	{"irisAuth","1.5","https://bitbucket.org/Admox/oc_equipment/raw/master/stargate/irisAuth.lua","Program do zdalnego otwierania przes³ony wrót","Admox",nil,nil,nil},
+	{"sgcx","0.3.4","https://bitbucket.org/Admox/oc_equipment/raw/master/stargate/sgcx.lua","Sterownik gwiezdnych wrót","Admox",{"gml","gfxbuffer","colorutils","default-style"},nil,nil}
+}
