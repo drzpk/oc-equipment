@@ -1,8 +1,8 @@
 {
-	{"gml","none","https://bitbucket.org/Admox/oc_equipment/raw/master/dependencies/gml.lua","Biblioteka do obs³ugi aplikacji okienkowych","Gopher",nil,true,nil,nil},
-	{"gfxbuffer","none","https://bitbucket.org/Admox/oc_equipment/raw/master/dependencies/gfxbuffer.lua","Zale¿noœæ wymagana do gml","Gopher",nil,true,nil,nil},
-	{"colorutils","none","https://bitbucket.org/Admox/oc_equipment/raw/master/dependencies/colorutils.lua","Zale¿noœæ wymagana do gml","Gopher",nil,true,nil,nil},
-	{"default-style","none","https://bitbucket.org/Admox/oc_equipment/raw/master/dependencies/default.gss","Zale¿noœæ wymagane do gml","Gopher",nil,true,nil,"default.gss"},
-	{"irisAuth","1.5","https://bitbucket.org/Admox/oc_equipment/raw/master/stargate/irisAuth.lua","Program do zdalnego otwierania przes³ony wrót","Admox",nil,nil,nil,nil},
-	{"sgcx","0.3.4","https://bitbucket.org/Admox/oc_equipment/raw/master/stargate/sgcx.lua","Sterownik gwiezdnych wrót","Admox",{"gml","gfxbuffer","colorutils","default-style"},nil,nil,nil}
+	{"gml","none","https://bitbucket.org/Admox/oc_equipment/raw/master/dependencies/gml.lua","Biblioteka do obslugi aplikacji okienkowych","Gopher",nil,true,nil,nil},
+	{"gfxbuffer","none","https://bitbucket.org/Admox/oc_equipment/raw/master/dependencies/gfxbuffer.lua","Zaleznosc wymagana do gml","Gopher",nil,true,nil,nil},
+	{"colorutils","none","https://bitbucket.org/Admox/oc_equipment/raw/master/dependencies/colorutils.lua","Zaleznosc wymagana do gml","Gopher",nil,true,nil,nil},
+	{"default-style","none","https://bitbucket.org/Admox/oc_equipment/raw/master/dependencies/default.gss","Zaleznosc wymagana do gml","Gopher",nil,true,nil,"default.gss"},
+	{"irisAuth","1.5","https://bitbucket.org/Admox/oc_equipment/raw/master/stargate/irisAuth.lua","Program do zdalnego otwierania przeslony wrot","Admox",nil,nil,nil,nil},
+	{"sgcx","0.3.4","https://bitbucket.org/Admox/oc_equipment/raw/master/stargate/sgcx.lua","Sterownik gwiezdnych wrot","Admox",{"gml","gfxbuffer","colorutils","default-style"},nil,nil,nil}
 }

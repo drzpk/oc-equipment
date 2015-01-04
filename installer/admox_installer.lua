@@ -1,9 +1,9 @@
 --[[Plik z lista aplikacji:
 	Kazda linijka bedzie zawierala tabele z nastepujacymi danymi:
-	{Nazwa aplikacji: string, wersja: string, Adres pobierania: string, opis aplikacji: string, autor: string, zależności: table, nil, nazwa pliku manual: string}
+	{Nazwa aplikacji: string, wersja: string, Adres pobierania: string, opis aplikacji: string, autor: string, zależności: table, czy aplikacja jest biblioteką: bool, nazwa pliku manual: string, zmodyfikowana nazwa aplikacji: string lub nil}
 ]]
 
-local wersja = "0.1.0"
+local wersja = "0.1.4"
 
 local component = require("component")
 
@@ -107,12 +107,23 @@ local function getApp(address)
 	end
 end
 
+local universal_appList = getAppList()
+
+local function getAppData(appName)
+	if universal_appList~=nil then
+		for _,nm in pairs(universal_appList) do
+			if nm[1] == appName then return nm end
+		end
+		return nil
+	end
+end
+
 local function packetInfo(packetName)
 	if packetName == nil then
 		io.stderr:write("Nie znaleziono pakietu o podanej nazwie")
 		return
 	end
-	apps = getAppList()
+	apps = universal_appList
 	if apps==nil then
 		io.stderr:write("Brak danych odebranych z serwera!")
 	else
@@ -120,6 +131,7 @@ local function packetInfo(packetName)
 			if type(packet)=="table" and packet[1]==packetName then
 				print("\n>> Informacje o pakiecie <<")
 				print("\nNazwa pakietu: "..packet[1])
+				if packet[9]~= nil then print("Nazwa pliku: "..packet[9]) end
 				print("Aktualna wersja: "..packet[2])
 				print("Adres pobierania: "..string.sub(packet[3],1,27).."(...)"..string.sub(packet[3],string.len(packet[3])-8, string.len(packet[3])))
 				print("Opis aplikacji: "..packet[4])
@@ -131,6 +143,10 @@ local function packetInfo(packetName)
 						term.write(name..", ")
 					end
 				end
+				term.write("Bibtioteka: ")
+				if packet[7] then print("Tak") else print("Nie") end
+				term.write("Instrukcja: ")
+				if packet[8]~=nil then print("Tak") else print("Nie") end
 				print("")
 				return
 			end
@@ -205,76 +221,96 @@ local function installApp(appName, directory,force_install)
 		term.write("OK")
 		textColor(colors.cyan)
 		term.write("\nSprawdzanie katalogu docelowego...   ")
-		dir = directory or "/usr/bin"
+		dir = nil
+		if application[7]~=nil then
+			if application[7] then dir = "lib"
+			else dir = directory or "/usr/bin" end
+		else
+			dir = directory or "/usr/bin"
+		end
 		if not fs.isDirectory(dir) then
 			textColor(colors.red)
 			term.write("Błąd: Katalog o nazwie "..dir.." nie istnieje!")
 			return
 		end
+		nam = application[9] or application[1]..".lua"
 		textColor(colors.green)
 		term.write("OK")
 		textColor(colors.cyan)
 		term.write("\nKopiowanie plików:")
 		textColor(colors.silver)
-		term.write("\n"..fs.concat(dir, application[1]..".lua"))
-		if fs.exists(shell.resolve(application[1]..".lua")) then
+		term.write("\n"..fs.concat(dir, nam))
+		if fs.exists(shell.resolve(fs.concat(dir,nam))) then
 			io.stderr:write("\nAplikacja jest już zainstalowana!")
 			textColor(colors.yellow)
 			term.write("\nInstalacja przerwana.")
 			return
 		end
-		plikApp = io.open(fs.concat(dir, application[1]..".lua"),"w")
-		table.insert(installed,application[1]..".lua")
+		plikApp = io.open(fs.concat(dir, nam),"w")
+		table.insert(installed,fs.concat(dir,nam))
 		if plikApp~=nil then
 			appCode = getApp(application[3])
 			if appCode~=nil then
 				plikApp:write(appCode)
 				plikApp:close()
 			else
-				io.stderr:write("\nNie udało się pobrać pliku "..application[1]..".lua")
+				io.stderr:write("\nNie udało się pobrać pliku "..nam)
 				if not force_install then
 					io.stderr:write("\nInstalacja nie powiodła się!")
 					plikApp:close()
-					clearAfterFail()
+					clearAfterFail(installed)
 					return
 				else
 					plikApp:close()
-					fs.remove(application[1]..".lua")
+					fs.remove(fs.concat(dir,nam))
 				end
 			end
 		else
-			io.stderr:write("\nNie można utworzyć pliku "..application[1]..".lua")
+			io.stderr:write("\nNie można utworzyć pliku "..nam)
 			if not force_install then
 				io.stderr:write("\nInstalacja nie powiodła się!")
 				plikApp:close()
-				clearAfterFail()
+				clearAfterFail(installed)
 				return
 			else
 				plikApp:close()
-				fs.remove(application[1]..".lua")
+				fs.remove(fs.concat(dir,nam))
 			end
 		end
 		if application[6]~=nil then
 			dependencies = application[6]
 			for _,dep in pairs(dependencies) do
-				term.write("\n"..fs.concat(dir,dep..".lua"))
-				depCode = getApp(dep)
+				ddata = getAppData(dep)
+				if ddata == nil then
+					clearAfterFail(installed)
+					textColor(colors.red)
+					term.write("\nNie można odnaleźć zależności o nazwie "..dep.." w bazie")
+					term.write("\nInstalacja przerwana.")
+					return
+				end
+				depDir = dir
+				if ddata[7] ~= nil then
+					if ddata[7] then depDir = "/lib" end
+				end
+				fileName = ddata[9] or ddata[1]..".lua"
+				term.write("\n"..fs.concat(depDir,fileName))
+				depCode = getApp(ddata[3])
+				plikDep = io.open(fs.concat(depDir,fileName),"w")
 				if depCode~=nil then
-					plikDep = io.open(dep..".lua","w")
-					table.insert(installed, dep..".lua")
+					table.insert(installed, fs.concat(depDir,fileName))
 					if plikDep~=nil then
 						plikDep:write(depCode)
 						plikDep:close()
 					else
-						io.stderr:write("\nNie można utworzyć pliku "..dep..".lua")
+						io.stderr:write("\nNie można utworzyć pliku "..fileName)
 						if not force_install then
 							io.stderr:write("\nInstalacja nie powiodła się!")
 							plikDep:close()
-							clearAfterFail()
+							clearAfterFail(installed)
 							return
 						else
 							plikDep:close()
-							fs.remove(dep..".lua")
+							fs.remove(fs.concat(depDir,fileName))
 						end
 					end
 				else
@@ -282,11 +318,11 @@ local function installApp(appName, directory,force_install)
 					if not force_install then
 						io.stderr:write("\nInstalacja nie powiodła się!")
 						plikDep:close()
-						clearAfterFail()
+						clearAfterFail(installed)
 						return
 					else
 						plikDep:close()
-						fs.remove(dep..".lua")
+						fs.remove(fs.concat(depDir,dep..".lua"))
 					end
 				end
 			end
@@ -330,20 +366,24 @@ local function updateApp(appName,directory)
 		if appName == "**all" then
 			term.write("\nAktualizowanie aplikacji: ")
 			for _,app in pairs(apps) do
+				if app[7] then
+					directory = "/lib"
+				end
+				appFile = app[9] or app[1]..".lua"
 				textColor(colors.silver)
-				if fs.exists(fs.concat(directory,app[1]..".lua")) then
-					sour = loadfile(fs.concat(directory,app[1]..".lua"))
-					if sour("version_check") ~= app[2] then
+				if fs.exists(fs.concat(directory,appFile)) then
+					sour = loadfile(fs.concat(directory,appFile))
+					if sour == nil or sour("version_check") ~= app[2] then
 						ccode = getApp(app[3])
 						if ccode ~= nil then
-							autoFile = io.open(fs.concat(directory,app[1]..".lua"), "w")
+							autoFile = io.open(fs.concat(directory,appFile), "w")
 							if autoFile~=nil then
-								term.write("\n"..fs.concat(directory,app[1]..".lua"))
+								term.write("\n"..fs.concat(directory,appFile))
 								autoFile:write(ccode)
 								autoFile:close()
 							else
 								autoFile:close()
-								fs.remove(fs.concat(directory,app[1]..".lua"))
+								fs.remove(fs.concat(directory,appFile))
 							end
 						end
 						if app[8]~=nil then
@@ -368,18 +408,22 @@ local function updateApp(appName,directory)
 		else
 			term.write("\nSzukanie aplikacji w repozytorium...")
 			for _,application in pairs(apps) do
-				if application[1] == appName then
+				if application[1] == appName or application[9] == appName then
+					if application[7] then
+						directory = "/lib"
+					end
+					appFile = application[9] or application[1]..".lua"
 					term.write("\nAktualizowanie aplikacji...")
 					if fs.exists(fs.concat(directory, appName..".lua")) then
 						appVersion = loadfile(fs.concat(directory, appName..".lua"))
 						if appVersion("version_check")==application[2] then
-							textColor(colors.green)
+							textColor(colors.yellow)
 							term.write("\nAplikacja jest już aktualna. Instalacja przerwana.")
 							return
 						end
 						textColor(colors.silver)
-						term.write("\n"..fs.concat(directory, appName..".lua"))
-						plikApp = io.open(fs.concat(directory, appName..".lua"), "w")
+						term.write("\n"..fs.concat(directory, appFile))
+						plikApp = io.open(fs.concat(directory, appFile), "w")
 						if plikApp~=nil then
 							appCode = getApp(application[3])
 							if appCode~=nil then
@@ -389,7 +433,7 @@ local function updateApp(appName,directory)
 								if dependencies~=nil then
 									textColor(colors.cyan)
 									term.write("\nAktualizowanie zależności...")
-									teexColor(colors.silver)
+									textColor(colors.silver)
 									for _,dep in pairs(dependencies) do
 										for _, app2 in pairs(apps) do
 											if app2[1] == dep then
@@ -424,14 +468,14 @@ local function updateApp(appName,directory)
 								end
 							else
 								plikApp:close()
-								fs.remove(fs.concat(directory, appName..".lua"))
+								fs.remove(fs.concat(directory, appFile))
 								textColor(colors.red)
 								term.write("\nNie udało się pobrać kodu aplikacji z repozytorium")
 								return
 							end
 						else
 							plikApp:close()
-							fs.remove(fs.concat(directory, appName..".lua"))
+							fs.remove(fs.concat(directory, appFile))
 							textColor(colors.red)
 							term.write("\nNie udało się otworzyć pliku aplikacji.")
 							return
