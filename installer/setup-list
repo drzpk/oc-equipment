@@ -4,5 +4,6 @@
 	{"colorutils","none","https://bitbucket.org/Admox/oc_equipment/raw/master/dependencies/colorutils.lua","Zaleznosc wymagana do gml","Gopher",nil,true,nil,nil},
 	{"default-style","none","https://bitbucket.org/Admox/oc_equipment/raw/master/dependencies/default.gss","Zaleznosc wymagana do gml","Gopher",nil,true,nil,"default.gss"},
 	{"irisAuth","1.5","https://bitbucket.org/Admox/oc_equipment/raw/master/stargate/irisAuth.lua","Program do zdalnego otwierania przeslony wrot","Admox",nil,nil,nil,nil},
-	{"sgcx","0.3.4","https://bitbucket.org/Admox/oc_equipment/raw/master/stargate/sgcx.lua","Sterownik gwiezdnych wrot","Admox",{"gml","gfxbuffer","colorutils","default-style"},nil,nil,nil}
+	{"sgcx","0.3.4","https://bitbucket.org/Admox/oc_equipment/raw/master/stargate/sgcx.lua","Sterownik gwiezdnych wrot","Admox",{"gml","gfxbuffer","colorutils","default-style"},nil,nil,nil},
+	{"data_server","0.1.0alpha","https://bitbucket.org/Admox/oc_equipment/raw/master/servers/data_server.lua","Serwer danych","Admox",nil,nil,nil,nil}
 }
