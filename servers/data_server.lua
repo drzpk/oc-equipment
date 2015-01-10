@@ -1,3 +1,4 @@
+--by: Admox
 local fs = require("filesystem")
 local component = require("component")
 local event = require("event")
@@ -9,7 +10,7 @@ local key = require("keyboard")
 local gpu = component.gpu
 local modem = component.modem
 
-local wersja = "0.1.0alpha"
+local wersja = "0.2.0beta"
 
 local argss, optionss = shell.parse(...)
 if argss[1] == "version_check" then return wersja end
@@ -21,6 +22,7 @@ local print_buffer = ""
 local log_buffer = ""
 local working = true
 local typing = false
+local debug_mode = false
 
 if modem == nil then
 	io.stderr:write("Ten program wymaga do działania modemu.")
@@ -88,39 +90,46 @@ end
 
 --[[
 	struktura pliku konfiguracyjnego:
-	{tablica z numerami UUID dysków,port:{numer:number,status:bool},wymiana danych z serwerem:bool}
+	{tablica z numerami UUID dysków,port:{numer:number,status:bool},wymiana danych z serwerem:bool,tryb debugowania: bool}
 ]]
 local function loadConfig()
-	if fs.exists(shell.resolve("config/dscfg.cfg")) then
-		local configFile = io.open("config/dscfg.cfg", "r")
-		configuration = {serial.unserialize(configFile:read())}
+	if fs.exists("/usr/config/dscfg.cfg") then
+		local configFile = io.open("/usr/config/dscfg.cfg", "r")
+		configuration = serial.unserialize(configFile:read())
 		port = configuration[2][1]
+		debug_mode = configuration[4] or debug_mode
 		if configuration[2][2] then modem.open(port) end
 		configFile:close()
 	else
 		configuration[1] = {}
 		configuration[2] = {}
 		configuration[3] = true
+		configuration[4] = debug_mode
 	end
 end
 
 local function saveConfig()
 	configuration[2][1] = port
 	configuration[2][2] = modem.isOpen(port)
-	if not fs.isDirectory(shell.resolve("config")) then fs.makeDirectory(shell.resolve("config")) end
-	local configFileS = io.open("config/dscfg.cfg", "w")
+	configuration[4] = debug_mode
+	if not fs.isDirectory("/usr/config") then fs.makeDirectory("/usr/config") end
+	local configFileS = io.open("/usr/config/dscfg.cfg", "w")
 	configFileS:write(serial.serialize(configuration))
 	configFileS:close()
 end
 
-local function logs(text)
-	log_text = os.date():sub(-8).." - "..text
+local function setColor(color)
+	if gpu.maxDepth() > 1 then return gpu.setForeground(color) end
+end
+
+local function logs(text, add)
+	log_text = os.date():sub(-8).." - "..add:sub(1, 8)..": "..text
 	log_buffer = log_buffer..log_text.."\n"
-	if not typing then
+	if typing then
+		print_buffer = print_buffer.."\n"..log_text
+	else
 		setColor(colors.gray)
 		term.write("\n"..log_text)
-	else
-		print_buffer = print_buffer.."\n"..log_text
 	end
 	if log_buffer:len() > 500 then
 		local logFile = io.open("/tmp/dslog.log","a")
@@ -130,16 +139,21 @@ local function logs(text)
 	end
 end
 
+local function debugLog(text)
+	if debug_mode then
+		setColor(colors.yellow)
+		term.write("\nDEBUG: "..os.date():sub(-8))
+		setColor(colors.gray)
+		term.write(" - "..text)
+	end
+end
+
 local function checkUUID(uuidNum, disks)
 	--nie sprawdzam plików w folderach, ponieważ zajmie to za dużo czasu a szansa powtórzenia UUID jest znikoma
 	for i = 1, #disks do
 		if fs.exists("/mnt/"..disks[i]:sub(1, 3)).."/"..uuidNum then return false end
 	end
 	return true
-end
-
-local function setColor(color)
-	if gpu.maxDepth() > 1 then return gpu.setForeground(color) end
 end
 
 local function separateCommand(comm)
@@ -169,20 +183,29 @@ local function commands()
 	printUsage("\nuninstall","Odłącza dysk od serwera")
 	printUsage("\nport [true/false lub numer portu]","Sterowanie portem serwera")
 	printUsage("\naccess [true/false]","Umożliwia lub blokuje wymianą danych z serwerem")
-	--printUsage("\nlog","Wyświetla log programu")
+	printUsage("\nlog","Wyświetla log programu")
+	printUsage("\ndebug [true/false]","Przełącza tryb debugowania")
 	printUsage("\nexit","Wychodzi z programu")
 end
 
 local function messageProc(...)
 	local em = {...}
+	debugLog(serial.serialize(em))
 	if em[1] == "modem_message" then
-		local request = {serial.unserialize(em[6])}
+		local request = serial.unserialize(em[6])
+		local port = em[7]
+		if port == nil then
+			logs("brakujący port zwrotny.", em[3])
+			return
+		end
 		if not configuration[3] then
 			modem.send(em[3], port, serial.serialize({ds_code.deined, request[1], nil}))
+			logs("dostęp zabroniony.", em[3])
 			return
 		end
 		if #configuration[1] == 0 then
 			modem.send(em[3], port, serial.serialize({ds_code.notReady, request[1], nil}))
+			logs("serwer nie jest gotowy.", em[3])
 			return
 		end
 		local disks = configuration[1]
@@ -202,19 +225,19 @@ local function messageProc(...)
 						if cfile ~= nil then
 							modem.send(em[3], port, serial.serialize({ds_code.success, request[1], cfile:read("*a")}))
 							cfile:close()
-							logs("Wysłano plik "..fileName.." na adres "..em[3]:sub(1,10).."(...)")
+							logs("Wysłano plik "..fileName, em[3])
 							return
 						end
 						cfile:close()
 					else
 						modem.send(em[3], port, serial.serialize({ds_code.badTarget, request[1], nil}))
-						logs("Błędne zapytanie od "..em[3]:sub(1, 10).."(...): badTarget")
+						logs("Błędne zapytanie: badTarget", em[3])
 						return
 					end
 				end
 			end
 			modem.send(em[3], port, serial.serialize({ds_code.notFound, request[1], nil}))
-			logs("Nie znaleziono pliku "..request[3].." dla "..em[3]:sub(1, 10).."(...)")
+			logs("Nie znaleziono pliku "..request[3], em[3])
 		elseif request[1] == ds_code.setFile then
 			--setFile, folder, treść, uuid - jeśli jest, zaktualizuj plik
 			local fEx = false
@@ -228,7 +251,7 @@ local function messageProc(...)
 			end
 			if not fEx then
 				modem.send(em[3], port, serial.serialize({ds_code.notFound, request[1], nil}))
-				logs("Błędne zapytanie od "..em[3]:sub(1, 10).."(...): nie znaleziono folderu "..request[2])
+				logs("nie znaleziono folderu "..request[2], em3[3])
 				return
 			end
 			local uuidNumber = generateUUID()
@@ -252,7 +275,7 @@ local function messageProc(...)
 						break
 					elseif not fs.exists(pat) and w == #disks then
 						modem.send(em[3], port, serial.serialize({ds_code.notFound, request[1], nil}))
-						logs("Błędne zapytanie od "..em[3]:sub(1, 10).."(...): nie znaleziono pliku "..request[4].." w folderze "..path)
+						logs("nie znaleziono pliku "..request[4].." w folderze "..path, em[3])
 						return
 					end
 				end
@@ -265,7 +288,7 @@ local function messageProc(...)
 					rFile:write(request[3])
 					rFile:close()
 					modem.send(em[3], port, serial.serialize({ds_code.success, request[1], uuidNumber}))
-					logs("Zapisano plik od "..em[3]:sub(1, 10).." jako "..path.."/"..request[4])
+					logs("Zapisano plik jako "..path.."/"..uuidNumber, em[3])
 					return		
 				end
 			end
@@ -274,7 +297,7 @@ local function messageProc(...)
 			backupFile:close()
 			backupCopy = nil
 			modem.send(em[3], port, serial.serialize({ds_code.notEnoughMemory, request[1], nil}))
-			logs("Brak miejsca, aby zapisać plik od "..em[3]:sub(1, 10).."(...)")
+			logs("Brak miejsca, aby zapisać plik", em[3])
 		elseif request[1] == ds_code.delFile then
 			--delFile, folder, uuid
 			for i = 1, #disks do
@@ -284,12 +307,12 @@ local function messageProc(...)
 				if fs.exists(path) then
 					fs.remove(path)
 					modem.send(em[3], port, serial.serialize({ds_code.success, request[1], nil}))
-					logs(em[3]:sub(1, 10).."(...): Pomyślnie usunięto plik "..request[2].."/"..request[3])
+					logs("Pomyślnie usunięto plik "..path, em[3])
 					return
 				end
 			end
 			modem.send(em[3], port, serial.serialize({ds_code.notFound, request[1], nil}))
-			logs(em[3]:sub(1, 10).."(...): Nie znaleziono pliku "..request[2].."/"..request[3])
+			logs(" Nie znaleziono pliku "..request[3], em[3])
 		elseif request[1] == ds_code.getFileSize then
 			--getFileSize, folder, uuid
 			for i = 1, #disks do
@@ -301,7 +324,7 @@ local function messageProc(...)
 					if fFile ~= nil then
 						local fSize = fFile:seek("end")
 						modem.send(em[3], port, serial.serialize({ds_code.success, request[1], fSize}))
-						logs("Wysłano rozmiar pliku "..fName.." ("..fSize..") do "..em[3]:sub(1, 10))
+						logs("Wysłano rozmiar pliku "..fName.." ("..fSize..")", em[3])
 						fFile:close()
 						return
 					end
@@ -322,24 +345,25 @@ local function messageProc(...)
 			end
 			if isfolder then
 				modem.send(em[3], port, serial.serialize({ds_code.success, request[1], tFiles}))
-				logs(em[3]:sub(1, 10).."(...): Wysłano listę plików w folderze "..request[2])
+				logs("Wysłano listę plików w folderze "..request[2], em[3])
 			else
 				modem.send(em[3], port, serial.serialize({ds_code.notFound, request[1], nil}))
-				logs(em[3]:sub(1, 10).."(...): Nie znaleziono folderu "..request[2])
+				logs("Nie znaleziono folderu "..request[2], em[3])
 			end
 		elseif request[1] == ds_code.setFolder then
 			local uuidNum = generateUUID()
-			for i = 0, #disks do
+			debugLog("wywołanie setFolder: "..uuidNum..", "..#disks)
+			for i = 1, #disks do
 				local disk = component.proxy(disks[i])
 				if disk.spaceUsed() + 1024 < disk.spaceTotal() then
 					fs.makeDirectory("/mnt/"..disks[i]:sub(1, 3).."/"..uuidNum)
 					modem.send(em[3], port, serial.serialize({ds_code.success, request[1], uuidNum}))
-					logs("Wygenerowano folder "..uuidNum.." dla "..em[3]:sub(1, 10))
+					logs("Wygenerowano folder "..uuidNum, em[3])
 					return
 				end
 			end
 			modem.send(em[3], port, serial.serialize({ds_code.notEnoughMemory, request[1], nil}))
-			logs(em[3]:sub(1, 10)..": brak miejsca na wygenerowanie folderu.")
+			logs("brak miejsca na wygenerowanie folderu.", em[3])
 		elseif request[1] == ds_code.delFolder then
 			--delFolder, uuid
 			local removed = false
@@ -348,10 +372,10 @@ local function messageProc(...)
 			end
 			if removed then
 				modem.send(em[3], port, serial.serialize({ds_code.success, request[1], nil}))
-				logs("Pomyślnie usunięto folder "..request[2].." dla "..em[3]:sub(1, 10))
+				logs("Pomyślnie usunięto folder "..request[2], em[3])
 			else
 				modem.send(em[3], port, serial.serialize({ds_code.notFound, request[1], nil}))
-				logs(em[3]:sub(1, 10)..": Nie znaleziono folderu "..request[2].." do usunięcia.")
+				logs("Nie znaleziono folderu "..request[2].." do usunięcia.", em[3])
 			end
 		elseif request[1] == ds_code.getFolderSize then
 			--getFolderSize, uuid
@@ -367,15 +391,15 @@ local function messageProc(...)
 			end
 			if isfolder then
 				modem.send(em[3], port, serial.serialize({ds_code.success, request[1], fSize}))
-				logs(em[3]:sub(1, 10).."(...): Wysłano ilość plików w folderze "..request[2])
+				logs("Wysłano ilość plików w folderze "..request[2], em[3])
 			else
 				modem.send(em[3], port, serial.serialize({ds_code.notFound, request[1], nil}))
-				logs(em[3]:sub(1, 10).."(...): Nie znaleziono folderu "..request[2])
+				logs("Nie znaleziono folderu "..request[2], em[3])
 			end
 		elseif request[1] == ds_code.checkServer then
 			--checkServer
 			modem.send(em[3], port, serial.serialize({ds_code.online, request[1], nil}))
-			logs(em[3]:sub(1, 10).."(...): Sprawdzenie, czy serwer jest online")
+			logs("Sprawdzenie, czy serwer jest online", em[3])
 		elseif request[1] == ds_code.getFreeMemory then
 			local bytes = 0
 			for i = 1, #disks do
@@ -383,12 +407,13 @@ local function messageProc(...)
 				bytes = bytes + disk.spaceTotal() - disk.spaceUsed()
 			end
 			modem.send(em[3], port, serial.serialize({ds_code.success, request[1], bytes}))
-			logs(em[3]:sub(1, 10).."(...): Wysłano ilość dostępnego miejsca: "..bytes)
+			logs("Wysłano ilość dostępnego miejsca: "..bytes, em[3])
 		elseif request[1] == ds_code.getVersion then
 			modem.send(em[3], port, serial.serialize({ds_code.version, request[1], wersja}))
-			logs(em[3]:sub(1, 10).."(...): Wysłano wersję serwera.")
+			logs("Wysłano wersję serwera: "..wersja, em[3])
 		else
 			modem.send(em[3], port, serial.serialize({ds_code.requestNotFound, request[1], nil}))
+			logs("Nie znaleziono zapytania: "..request[1], em[3])
 		end
 	end
 end
@@ -432,14 +457,15 @@ local function handleCommand(cmdName, args, options)
 			for y = 1, #available do
 				term.write("\n"..tostring(y)..".  "..available[y])
 			end
+			term.write("\n#> ")
 			local choice = term.read()
 			if choice:sub(1, 1):lower() ~= "q" then
-				nChoice = tonumber(choide:sub(1, 1))
+				nChoice = tonumber(choice:sub(1, 1))
 				if nChoice ~= nil then
 					if nChoice >= 1 and nChoice <= #available then
 						table.insert(configuration[1], available[nChoice])
 						setColor(colors.green)
-						term.write("\nPomyślnie dodano dysk "..available[nChoice]:sub(1, 3).."do bazy.")
+						term.write("\nPomyślnie dodano dysk "..available[nChoice]:sub(1, 3).." do bazy.")
 					else
 						io.stderr:write("\nWpisana liczba jest poza zakresem!")
 						setColor(colors.yellow)
@@ -539,27 +565,47 @@ local function handleCommand(cmdName, args, options)
 			io.stderr:write("\nNiepoprawna składnia komendy.")
 		end
 	elseif cmdName == "access" then
+		setColor(colors.cyan)
 		if args[1] == "true" then
 			configuration[3] = true
-			setColor(colors.cyan)
 			term.write("\nKomunikacja z serwerem została odblokowana.")
 		elseif args[1] == "false" then
 			configuration[3] = false
-			setColor(colors.cyan)
 			term.write("\nKomunikacja z serwerem została zablokowana.")
 		elseif args[1] == nil then
-			setColor(colors.cyan)
 			if configuration[3] then
 				term.write("\nKomunikacja z serwerem jest włączona.")
 			else
 				term.write("\nKomunikacja z serwerem jest wyłączona.")
 			end
 		else
-			io.stderr:write("\nNiepoprawna składnia komendy.")
+			setColor(colors.red)
+			term.write("\nNiepoprawna składnia komendy.")
+		end
+	elseif cmdName == "debug" then
+		setColor(colors.cyan)
+		if args[1] == "true" then
+			debug_mode = true
+			term.write("\nTryb debugowania został włączony.")
+		elseif args[1] == "false" then
+			debug_mode = false
+			term.write("\nTryb debugowania został wyłączony.")
+		elseif args[1] == nil then
+			local stan = "włączony"
+			if not debug_mode then stan = "wyłączony" end
+			term.write("\nTryb debugowania jest aktualnie "..stan..".")
+		else
+			setColor(colors.red)
+			term.write("\nNiepoprawna składnia komendy.")
 		end
 	elseif cmdName == "log" then
-		local uuid, tr = uuid()
-		print(uuid)
+		local lF = io.open("/tmp/dslog.log", "a")
+		lF:write(log_buffer)
+		lF:close()
+		log_buffer = ""
+		setColor(colors.gray)
+		local cat = loadfile("/bin/cat.lua")
+		cat("/tmp/dslog.log")
 	elseif cmdName == "exit" then
 		local logFile = io.open("/tmp/dslog.log","a")
 		logFile:write(log_buffer)
