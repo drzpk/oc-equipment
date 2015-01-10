@@ -8,7 +8,7 @@ local serial = require("serialization")
 local modem = component.modem
 local gpu = component.gpu
 
-local wersja = "1.5"
+local wersja = "1.6"
 
 local args, options = shell.parse(...)
 if args[1]=="version_check" then return wersja end
@@ -24,8 +24,8 @@ local kod = 0
 local changed = false
 
 local function ladujConfig()
-	if fs.exists(shell.resolve("config/iaConfig.cfg")) then
-		local confFile = io.open("config/iaConfig.cfg","r")
+	if fs.exists("/usr/config/iaConfig.cfg") then
+		local confFile = io.open("/usr/config/iaConfig.cfg","r")
 		port = tonumber(confFile:read("*l"))
 		kod = tonumber(confFile:read("*l"))
 		confFile:close()
@@ -34,8 +34,8 @@ end
 
 local function zapiszConfig()
 	if changed then
-		if not fs.isDirectory("config") then fs.makeDirectory("config") end
-		local file = io.open("config/iaConfig.cfg", "w")
+		if not fs.isDirectory("/usr/config") then fs.makeDirectory("/usr/config") end
+		local file = io.open("/usr/config/iaConfig.cfg", "w")
 		file:write(tostring(port).."\n"..(kod))
 		file:close()
 	end

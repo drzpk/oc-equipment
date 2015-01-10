@@ -1,7 +1,7 @@
 package.loaded.gml = nil
 package.loaded.gfxbuffer = nil
 
-local wersja = "0.3.4"
+local wersja = "0.3.6"
 local startArgs = {...}
 
 if startArgs[1] == "version_check" then return wersja end
@@ -116,13 +116,13 @@ if computer.totalMemory() < 1536 * 1024 then
 end
 
 local function zapiszPlik()
-	if not fs.isDirectory("config") then fs.makeDirectory("config") end
-	local plik = io.open("config/sgConf.cfg", "w")
+	if not fs.isDirectory("/usr/config") then fs.makeDirectory("/usr/config") end
+	local plik = io.open("/usr/config/sgConf.cfg", "w")
 	plik:write(serial.serialize(table.pack(address, closeIrisOnIncomming, statusKanalu, numerKanalu, kodPrzeslony, czasOtwarciaPrzeslony))..cfgInfo)
 	plik:close()
 end
 
-if not fs.exists(shell.resolve("config/sgConf.cfg")) or startArgs[1]~=nil then
+if not fs.exists("/usr/config/sgConf.cfg") or startArgs[1]~=nil then
 	address = startArgs[1]
 	if address == nil then
 		io.stderr:write("Brak pliku konfiguracyjnego. Aby go utworzyć, napisz sgcx <adres_interfejsu_wrót>")
@@ -357,7 +357,7 @@ local bAutomatyczne = gui:addButton(58, 8, 9, 1, "Zmień", zmienAZP)
 local bPrzeslona = gui:addButton(2,11, 23, 3, "Przełącz przeslonę", przelaczPrzeslone)
 local bOtworzTunel = gui:addButton(28, 11, 23, 3, "Otwórz tunel", nowyTunel)
 local bZamknijPolaczenie = gui:addButton(54, 11, 23, 3, "Zamknij tunel", zamknijTunel)
-local lKanalStatus = gui:addLabel(42, 16, 14, "Status kanału:")
+local lKanalStatus = gui:addLabel(40, 16, 18, "Status kanału:")
 lKanalStatus["text-color"] = 0x4F72FF
 local lKanalStatus2 = gui:addLabel(58, 16, 10, "<STATUS>")
 local bZmienStatus = gui:addButton(69, 16, 10, 1, "Przełącz", function()
@@ -377,7 +377,7 @@ local bZmienStatus = gui:addButton(69, 16, 10, 1, "Przełącz", function()
 		end
 	end
 end)
-local lNumerKanalu = gui:addLabel(42, 17, 14, "Numer kanału:")
+local lNumerKanalu = gui:addLabel(40, 17, 16, "Numer kanału:")
 local lNumerKanalu2 = gui:addLabel(58, 17, 6, "00000")
 local bLosujKanal = gui:addButton(69, 17, 10, 1, "Losuj", function()
 	if isModem then
@@ -390,7 +390,7 @@ local bLosujKanal = gui:addButton(69, 17, 10, 1, "Losuj", function()
 		messageBox("Co do uja?", {"Close"})
 	end
 end)
-local lKodPrzeslony = gui:addLabel(42, 18, 15, "Kod przesłony:")
+local lKodPrzeslony = gui:addLabel(40, 18, 16, "Kod przesłony:")
 local lKodPrzeslony2 = gui:addLabel(58, 18, 6, "00000")
 local bLosujKod = gui:addButton(69, 18, 10, 1, "Losuj", function()
 	kodPrzeslony = math.random(10000,99999)
