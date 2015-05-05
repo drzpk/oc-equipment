@@ -134,7 +134,7 @@ if not fs.exists("/usr/config/sgConf.cfg") or startArgs[1]~=nil then
 		return
 	end
 else
-	local plik = io.open("config/sgConf.cfg", "r")
+	local plik = io.open("/usr/config/sgConf.cfg", "r")
 	address, closeIrisOnIncomming, statusKanalu, numerKanalu, kodPrzeslony, czasOtwarciaPrzeslony = table.unpack(serial.unserialize(plik:read()))
 	sg = component.proxy(address)
 	plik:close()
