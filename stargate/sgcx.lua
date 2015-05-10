@@ -1,7 +1,7 @@
 package.loaded.gml = nil
 package.loaded.gfxbuffer = nil
 
-local wersja = "0.3.6"
+local wersja = "0.3.7"
 local startArgs = {...}
 
 if startArgs[1] == "version_check" then return wersja end
@@ -32,6 +32,7 @@ local timerID = nil
 local timerEneriga = nil
 local czasTimerPrzeslona = 0
 local timerPrzeslona = nil
+local mMsg = false
 local czasDoZamkniecia = 0
 local isModem = false
 
@@ -244,6 +245,7 @@ local function fTimerPrzeslona()
 		sg.closeIris()
 		event.cancel(timerPrzeslona)
 		timerPrzeslona = nil
+		mMsg = false
 	else
 		czasTimerPrzeslona = czasTimerPrzeslona - 1
 	end
@@ -357,7 +359,7 @@ local bAutomatyczne = gui:addButton(58, 8, 9, 1, "Zmień", zmienAZP)
 local bPrzeslona = gui:addButton(2,11, 23, 3, "Przełącz przeslonę", przelaczPrzeslone)
 local bOtworzTunel = gui:addButton(28, 11, 23, 3, "Otwórz tunel", nowyTunel)
 local bZamknijPolaczenie = gui:addButton(54, 11, 23, 3, "Zamknij tunel", zamknijTunel)
-local lKanalStatus = gui:addLabel(40, 16, 18, "Status kanału:")
+local lKanalStatus = gui:addLabel(38, 16, 20, "Status kanału:")
 lKanalStatus["text-color"] = 0x4F72FF
 local lKanalStatus2 = gui:addLabel(58, 16, 10, "<STATUS>")
 local bZmienStatus = gui:addButton(69, 16, 10, 1, "Przełącz", function()
@@ -377,7 +379,7 @@ local bZmienStatus = gui:addButton(69, 16, 10, 1, "Przełącz", function()
 		end
 	end
 end)
-local lNumerKanalu = gui:addLabel(40, 17, 16, "Numer kanału:")
+local lNumerKanalu = gui:addLabel(38, 17, 18, "Numer kanału:")
 local lNumerKanalu2 = gui:addLabel(58, 17, 6, "00000")
 local bLosujKanal = gui:addButton(69, 17, 10, 1, "Losuj", function()
 	if isModem then
@@ -386,11 +388,9 @@ local bLosujKanal = gui:addButton(69, 17, 10, 1, "Losuj", function()
 		lNumerKanalu2["text"] = tostring(numerKanalu)
 		lNumerKanalu2:draw()
 		if statusKanalu then mod.open(numerKanalu) end
-	else
-		messageBox("Co do uja?", {"Close"})
 	end
 end)
-local lKodPrzeslony = gui:addLabel(40, 18, 16, "Kod przesłony:")
+local lKodPrzeslony = gui:addLabel(38, 18, 18, "Kod przesłony:")
 local lKodPrzeslony2 = gui:addLabel(58, 18, 6, "00000")
 local bLosujKod = gui:addButton(69, 18, 10, 1, "Losuj", function()
 	kodPrzeslony = math.random(10000,99999)
@@ -421,8 +421,8 @@ else
 	lNumerKanalu2["text"] = tostring(numerKanalu)
 	lKodPrzeslony2["text"] = tostring(kodPrzeslony)
 end
-lInfo[1] = gui:addLabel(3, 17, 40, "Info1")
-lInfo[2] = gui:addLabel(3, 18, 40, "Info2")
+lInfo[1] = gui:addLabel(3, 17, 35, "Info1")
+lInfo[2] = gui:addLabel(3, 18, 35, "Info2")
 lInfo[3] = gui:addLabel(3, 19, 40, "Info3")
 for i=1, 3 do lInfo[i]:hide() end
 
@@ -493,15 +493,16 @@ local function eventListener(...)
 		lEnergia:draw()
 	elseif ev[1] == "modem_message" then
 		if ev[4] == numerKanalu then
-			if ev[6] == tostring(kodPrzeslony) then
+			if ev[7] == kodPrzeslony and not mMsg then
+				mMsg = true
 				sg.openIris()
 				os.sleep(0.1)
-				mod.broadcast(ev[4], serial.serialize({true, "Przesłona otwarta", czasOtwarciaPrzeslony}))
+				mod.send(ev[3], ev[6], serial.serialize({true, "Przesłona otwarta", czasOtwarciaPrzeslony}))
 				czasTimerPrzeslona = czasOtwarciaPrzeslony
 				timerPrzeslona = event.timer(1, fTimerPrzeslona, math.huge)
 			else
 				os.sleep(0.1)
-				mod.broadcast(ev[4], serial.serialize(table.pack(false, "Błędny kod przesłony!", czasOtwarciaPrzeslony)))
+				mod.send(ev[3], ev[6], serial.serialize({false, "Błędny kod przesłony!", czasOtwarciaPrzeslony}))
 			end
 		end
 	end

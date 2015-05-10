@@ -1,6 +1,10 @@
 --by: Aranthor
 --[[
 Przy generowaniu map wiekszych, niz 10x10 wymagane sa zewnetrzne baterie, poniewaz skanowanie terenu pochlania duze ilosci energii.
+
+Błędy:
+- nie wykrywa niektórych bloków
+- zapis obszaru 48x48 jest niemożliwy - pochłania zbyt dużo pamięci RAM. 2 kości 3.2 są niewystarczające
 ]]
 local term = require("term")
 local component = require("component")
@@ -13,7 +17,7 @@ if component.isAvailable("hologram") then
 	holo = component.hologram
 end
 
-local wersja = "1.0"
+local wersja = "1.1"
 
 local holoSize = 1.9
 local sArgs = {...}
@@ -53,10 +57,9 @@ local function chooseRadius()
 	return choice
 end
 
-local scan = {}
+local object = {}
 
 local function saveScan()
-	local object = {}
 	term.write("\nWprowadz nazwe pliku: ")
 	object.name = io.read()
 	term.write("Wprowadz wspolrzedne pomiaru: ")
@@ -84,7 +87,6 @@ local function saveScan()
 			if num > 0 and num <= #available then disknum = num end
 		end
 	end
-	object.scan = scan
 	if not fs.isDirectory("/mnt/"..available[disknum]:sub(1, 3).."/scans") then
 		fs.makeDirectory("/mnt/"..available[disknum]:sub(1, 3).."/scans")
 	end
@@ -99,19 +101,20 @@ local function main()
 	local radius = chooseRadius()
 	term.write("\nAby rozpoczac skanowanie, nacisnij dowolny klawisz...")
 	term.write("\nAnaliza rozpoczeta.")
+	object.scan = {}
 	for x = 1, radius do
 		local buffx = {}
 		for y = 1, radius do
 			--print(x-(radius/2)-1, y-(radius/2)-1)
 			local b2 = geo.scan(x-(radius/2)-1, y-(radius/2)-1)
 			for t = 1, #b2 do
-				b2[t] = math.floor(b2[t]+0,5)
+				b2[t] = math.floor(b2[t]+0.5)
 			end
 			table.insert(buffx, b2)
 		end
 		term.clearLine()
 		term.write("Postep skanowania: "..tostring(math.floor((x/radius*100)+0.5)).."%")
-		table.insert(scan, buffx)
+		table.insert(object.scan, buffx)
 	end
 	term.write("\nAnaliza zakonczona.")
 	local save = true
@@ -139,16 +142,16 @@ local function main()
 		term.write("\nKlawisz s zapisuje skan.")
 		term.write("\nKlawisz 'q' konczy projekcje.")
 		local yOffset = 15
-		local startPos = 24 - (#scan / 2)
+		local startPos = 24 - (#object.scan / 2)
 		local run = true
 		while run do
-			for x = 1, #scan do
-				for y = 1, #scan[x] do
+			for x = 1, #object.scan do
+				for y = 1, #object.scan[x] do
 					for z = 1, 32 do
 						local color
-						if scan[x][y][z+yOffset] == 0 then color = 0
-						elseif scan[x][y][z+yOffset] > 90 then color = 3
-						elseif scan[x][y][z+yOffset] > 30 then color = 1
+						if object.scan[x][y][z+yOffset] == 0 then color = 0
+						elseif object.scan[x][y][z+yOffset] > 90 then color = 3
+						elseif object.scan[x][y][z+yOffset] > 30 then color = 1
 						else color = 2
 						end
 						holo.set(x+startPos, z, y+startPos, color)

@@ -3,8 +3,10 @@
 	{"gfxbuffer","none","https://bitbucket.org/Aranthor/oc_equipment/raw/master/dependencies/gfxbuffer.lua","Zaleznosc wymagana do gml","Gopher",nil,true,nil,nil},
 	{"colorutils","none","https://bitbucket.org/Aranthor/oc_equipment/raw/master/dependencies/colorutils.lua","Zaleznosc wymagana do gml","Gopher",nil,true,nil,nil},
 	{"default-style","none","https://bitbucket.org/Aranthor/oc_equipment/raw/master/dependencies/default.gss","Zaleznosc wymagana do gml","Gopher",nil,true,nil,"default.gss"},
-	{"irisAuth","1.6","https://bitbucket.org/Aranthor/oc_equipment/raw/master/stargate/irisAuth.lua","Program do zdalnego otwierania przeslony wrot","Aranthor",nil,nil,nil,nil},
-	{"sgcx","0.3.6","https://bitbucket.org/Aranthor/oc_equipment/raw/master/stargate/sgcx.lua","Sterownik gwiezdnych wrot","Aranthor",{"gml","gfxbuffer","colorutils","default-style"},nil,nil,nil},
-	{"rtpo","1.0","https://bitbucket.org/Aranthor/oc_equipment/raw/master/lib/rtpo.lua","Protokol sieciowy","Aranthor",nil,true,nil,nil},
-	{"geo analyzer","1.0","https://bitbucket.org/Aranthor/oc_equipment/raw/master/misc/geo_analyzer.lua","Analizator terenu","Aranthor",nil,nil,nil,nil}
+	{"irisAuth","1.7","https://bitbucket.org/Aranthor/oc_equipment/raw/master/stargate/irisAuth.lua","Program do zdalnego otwierania przeslony wrot","Aranthor",nil,nil,nil,nil},
+	{"sgcx","0.3.7","https://bitbucket.org/Aranthor/oc_equipment/raw/master/stargate/sgcx.lua","Sterownik gwiezdnych wrot","Aranthor",{"gml","gfxbuffer","colorutils","default-style"},nil,nil,nil},
+	{"rtpo","1.3","https://bitbucket.org/Aranthor/oc_equipment/raw/master/lib/rtpo.lua","Protokol sieciowy","Aranthor",nil,true,nil,nil},
+	{"geo analyzer","1.1","https://bitbucket.org/Aranthor/oc_equipment/raw/master/misc/geo_analyzer.lua","Analizator terenu","Aranthor",nil,nil,nil,nil},
+	{"dataSrv2","2.0","https://bitbucket.org/Aranthor/oc_equipment/raw/master/servers/dataSrv2.lua","Serwer danych","Aranthor",{"rtpo"},nil,nil,nil},
+	{"dsapi","1.0","https://bitbucket.org/Aranthor/oc_equipment/raw/master/servers/dsapi.lua","API do serwera danych",{"rtpo"},nil,nil,nil}
 }
