@@ -57,20 +57,20 @@ label.error {
 
 label.error!1 {
   text-color:0x000000;
-  text-background: 0xffffff
+  text-background: 0xffffff;
 }
 
 button {
-  text-color: 0xffffff;
-  text-background: 0x000080;
-  fill-color-fg: 0xb4b4b4;
-  fill-color-bg: 0x000080;
+  text-color: 0xdddddd;
+  text-background: 0x0000dd;
+  fill-color-fg: 0xdddddd;
+  fill-color-bg: 0x0000dd;
   border: false;
   border-left: false;
   border-right: false;
   border-top: false;
   border-bottom: false;
-  border-color-bg: 0x000080;
+  border-color-bg: 0x0000dd;
   border-color-fg: 0xb4b4b4;
   border-ch-left: "[";
   border-ch-right: "]";  
@@ -113,9 +113,9 @@ scrollbar {
   grip-ch-h: "|";
   bar-ch:	U+2592;
   bar-color-fg: 0xffffff;
-  bar-color-bg: 0x000080;
+  bar-color-bg: 0x0000dd;
   grip-color-fg: 0xffffff;
-  grip-color-bg: 0x000080;
+  grip-color-bg: 0x0000dd;
 }
 
 listbox {
@@ -124,7 +124,7 @@ listbox {
   border-left:true;
   border-bottom:true;
   border-color-fg: 0xffffff;
-  border-color-bg: 0x000080;
+  border-color-bg: 0x0000dd;
 }
 
 listbox:focus {

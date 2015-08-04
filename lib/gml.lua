@@ -354,7 +354,7 @@ local function drawBorder(element,styles)
 
   local gpu=element.renderTarget
 
-  if border then
+  if border then 
     gpu.setBackground(borderBG)
     gpu.setForeground(borderFG)
 
@@ -491,7 +491,7 @@ end
 local function elementHide(element)
   if element.visible then
     element.visible=false
-    element.gui:redrawRect(element.posX,element.posY,element.width,1)
+    element.gui:redrawRect(element.posX,element.posY,element.width,element.height)
   end
   element.hidden=true
 end
@@ -550,6 +550,7 @@ local function drawButton(button)
       textX=bodyX+math.floor((bodyW-#text)/2)
     end
     gpu.set(textX,textY,text)
+	button.visible=true
   end
 end
 
@@ -1529,6 +1530,7 @@ local function addListBox(gui,x,y,width,height,list)
       for i=1,#lb.labels do
         lb.labels[i]:draw()
       end
+	  lb.visible=true
     end
   end
 

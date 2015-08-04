@@ -1,5 +1,5 @@
 -- ########################################################
--- ##              Data Server wersja 2.0               ##
+-- ##              Data Server wersja 2.2               ##
 -- #   Serwer służący do magazynowania danych w postaci   #
 -- #  plików na dyskach                                   #
 -- ##   05.2015                           by: Aranthor   ##
@@ -10,13 +10,13 @@
 	Serwer służy do przechowywania plików. Został stworzony na postawie swojej starszej wersji 'data_serwer'.
 	W odróżnieniu od poprzednika, nie przechowuje plików o nazwach wygenerowanych losowo - pozwala na
 	samodzielne ustawienie nazw plików i folderów.
-	Cechuje się niewielkim, wystarczającym zasobem zapytań, który jest w pełni wystarczający do jego obsługi.
+	Cechuje się niewielkim zasobem zapytań, który jest w pełni wystarczający do jego obsługi.
 	
 	## Cechy serwera ##
 	1. Foldery są automatycznie tworzone podczas zapisywania do nich plików i automatycznie usuwane,
 	gdy są puste.
 	2. Serwer zapisuje każde zdarzenie do logu znajdującego się w folderze tymczasowym.
-	3. Do przesyłu danych wykorzystuje się protokół RTPO.
+	3. Do przesyłu danych wykorzystuje się protokół HDP.
 	4. Serwer posiada jeden kod zapytania do modyfikacji plików: 'file'. Jeśli zawartość pliku będzie
 	równa 'nil', plik zostanie usunięty.
 	
@@ -48,7 +48,7 @@ local shell = require("shell")
 local term = require("term")
 local serial = require("serialization")
 local key = require("keyboard")
-local rtpo = require("rtpo")
+local hdp = require("hdp")
 
 local gpu = component.gpu
 local modem = nil
@@ -59,7 +59,7 @@ else
 	modem = component.modem
 end
 
-local wersja = "2.0"
+local wersja = "2.2"
 
 local argss, optionss = shell.parse(...)
 if argss[1] == "version_check" then return wersja end
@@ -108,8 +108,8 @@ local respCode = {
 	{tablica z numerami UUID dysków,port:{numer:number,status:bool},tryb debugowania: bool}
 ]]
 local function loadConfig()
-	if fs.exists("/usr/config/dtsrv.conf") then
-		local configFile = io.open("/usr/config/dtsrv.conf", "r")
+	if fs.exists("/etc/dtsrv.cfg") then
+		local configFile = io.open("/etc/dtsrv.cfg", "r")
 		configuration = serial.unserialize(configFile:read())
 		port = configuration[2][1]
 		debug_mode = configuration[3] or debug_mode
@@ -126,14 +126,32 @@ local function saveConfig()
 	configuration[2][1] = port
 	configuration[2][2] = modem.isOpen(port)
 	configuration[3] = debug_mode
-	if not fs.isDirectory("/usr/config") then fs.makeDirectory("/usr/config") end
-	local configFileS = io.open("/usr/config/dtsrv.conf", "w")
+	local configFileS = io.open("/etc/dtsrv.cfg", "w")
 	configFileS:write(serial.serialize(configuration))
 	configFileS:close()
 end
 
 local function setColor(color)
 	if gpu.maxDepth() > 1 then return gpu.setForeground(color) end
+end
+
+local function checkDisks()
+	local disks = configuration[1]
+	local removeList = {}
+	for i = 1, #disks do
+		if not component.proxy(disks[i]) then
+			setColor(colors.red)
+			term.write("\n".."Nie znaleziono dysku "..disks[i]:sub(1, 3).." - usuwanie wpisu")
+			table.insert(removeList, i)
+		end
+	end
+	if #removeList > 0 then
+		table.sort(removeList, function(a, b) return a > b end)
+		for i = 1, #removeList do
+			table.remove(configuration[1], i)
+		end
+		saveConfig()
+	end
 end
 
 local function logs(add, text)
@@ -197,15 +215,16 @@ local function messageProc(...)
 	os.sleep(0.2)
 	local input = {...}
 	debugLog("Wiadomosc: " .. input[1] .. ", " .. input[4] .. ", " .. input[6] .. ", " ..input[7])
-	if input[1] == "rtpo_message" and input[4] == port then
+	if input[1] == "hdp_message" and input[4] == port then
 		local msg = serial.unserialize(input[7])
 		if msg ~= nil then
 			if #msg < 2 and msg[1] ~= reqCode.echo then
-				rtpo.send(modem, input[3], input[6], port, serial.serialize({respCode.badreq}))
+				hdp.send(input[6], port, serial.serialize({respCode.badreq}))
 				logs(input[3], "Zapytanie jest niekompletne")
 				debugLog("Zapytanie: " .. serial.serialize(msg))
 			end
 			if  #msg > 1 and msg[2]:sub(1, 1) == "/" then msg[2] = msg[2]:sub(2, msg[2]:len()) end
+			checkDisks()
 			if msg[1] == reqCode.file then
 				if #msg == 3 or #msg == 2 then
 					-- (reqCode.file, ścieżka, zawartość)
@@ -233,23 +252,23 @@ local function messageProc(...)
 								local file = io.open(path, "w")
 								file:write(msg[3])
 								file:close()
-								rtpo.send(modem, input[3], input[6], port, serial.serialize({respCode.success}))
+								hdp.send(input[6], port, serial.serialize({respCode.success}))
 								logs(input[3], "Zapisano plik " .. path)
 								debugLog("Rozmiar pliku: " .. msg[3]:len())
 								break
 							end
 							if i == #disks then
-								rtpo.send(modem, input[3], input[6], port, serial.serialize({respCode.nomem}))
+								hdp.send(input[6], port, serial.serialize({respCode.nomem}))
 								logs(input[3], "Brak miejsca, by zapisac plik " .. msg[2])
 								debugLog("Rozmiar pliku: " .. msg[3]:len())
 							end
 						end
 					else
 						if removed then
-							rtpo.send(modem, input[3], input[6], port, serial.serialize({respCode.success}))
+							hdp.send(input[6], port, serial.serialize({respCode.success}))
 							logs(input[3], "Usunieto plik " .. msg[2])
 						else
-							rtpo.send(modem, input[3], input[6], port, serial.serialize({respCode.notfound}))
+							hdp.send(input[6], port, serial.serialize({respCode.notfound}))
 							logs(input[3], "Nie znaleziono pliku " .. msg[2] .. " od usuniecia")
 						end
 					end
@@ -266,7 +285,7 @@ local function messageProc(...)
 						end
 					end
 				else
-					rtpo.send(modem, input[3], input[6], port, serial.serialize({respCode.badreq}))
+					hdp.send(input[6], port, serial.serialize({respCode.badreq}))
 					logs(input[3], "Niepoprawna tresc zapytania")
 					debugLog("Zapytanie: " .. input[7])
 				end
@@ -279,16 +298,16 @@ local function messageProc(...)
 						local file = io.open(path, "r")
 						local fcont = file:read()
 						file:close()
-						local status, code = rtpo.send(modem, input[3], input[6], port, serial.serialize({respCode.success, fcont}))
+						local status, code = hdp.send(input[6], port, serial.serialize({respCode.success, fcont}))
 						if status then
 							logs(input[3], "Wyslano plik " .. msg[2])
 						else
-							logs(input[3], "Nie udalo sie wyslac pliku " .. msg[2] .. ": " .. rtpo.translateMessage(code))
+							logs(input[3], "Nie udalo sie wyslac pliku " .. msg[2] .. ": " .. hdp.translateMessage(code))
 						end
 						break
 					end
 					if i == #disks then
-						rtpo.send(modem, input[3], input[6], port, serial.serialize({respCode.notfound}))
+						hdp.send(input[6], port, serial.serialize({respCode.notfound}))
 						logs(input[3], "Nie znaleziono pliku " .. msg[2])
 					end
 				end
@@ -313,25 +332,25 @@ local function messageProc(...)
 				end
 				if #list > 0 then
 					table.sort(list, function(a, b) return a[1]:sub(1, 1) < b[1]:sub(1, 1) end)
-					local status, code = rtpo.send(modem, input[3], input[6], port, serial.serialize({respCode.success, list}))
+					local status, code = hdp.send(input[6], port, serial.serialize({respCode.success, list}))
 					if status then
 						logs(input[3], "Wyslano liste obiektow w katalogu " .. msg[2])
 					else
-						logs(input[3], "Nie udalo sie wyslac listy obiektow: " .. rtpo.translateMessage(code))
+						logs(input[3], "Nie udalo sie wyslac listy obiektow: " .. hdp.translateMessage(code))
 					end
 				else
-					rtpo.send(modem, input[3], input[6], port, serial.serialize({respCode.notfound}))
+					hdp.send(input[6], port, serial.serialize({respCode.notfound}))
 					logs(input[3], "Nie znaleziono katalogu " .. msg[2] .. " do listowania")
 				end
 			elseif msg[1] == reqCode.echo then
-				local status, code = rtpo.send(modem, input[3], input[6], port, serial.serialize({respCode.echo}))
+				local status, code = hdp.send(input[6], port, serial.serialize({respCode.echo}))
 				if status then
 					logs(input[3], "Wyslano echo")
 				else
-					logs(input[3], "Nie udalo sie wyslac echa: " .. code .. " " .. rtpo.translateMessage(code))
+					logs(input[3], "Nie udalo sie wyslac echa: " .. code .. " " .. hdp.translateMessage(code))
 				end
 			else
-				rtpo.send(modem, input[3], input[6], port, serial.serialize({respCode.badreq}))
+				hdp.send(input[6], port, serial.serialize({respCode.badreq}))
 				logs(input[3], "Nie odnaleziono zapytania: " .. msg[1])
 				debugLog("Szczegoly: " .. input[7])
 			end
@@ -349,20 +368,28 @@ local function handleCommand(cmdName, args, options)
 	elseif cmdName == "disks" then
 		setColor(colors.blue)
 		term.write("\nDysk:    Wykorzystanie:    Pojemność:")
-		setColor(colors.gray)
 		available = configuration[1]
 		for i = 1, #available do
+			setColor(colors.gray)
 			term.write("\n" .. tostring(i) .. ". " .. available[i]:sub(1, 3))
-			local device = component.proxy(available[i])
-			local used, total = math.ceil(device.spaceUsed() / 1024), math.ceil(device.spaceTotal() / 1024)
-			local pro = math.ceil(used / total)
 			ccur = {term.getCursor()}
-			term.setCursor(10, ccur[2])
-			term.write(used .. "KB / " .. pro .. "%")
-			term.setCursor(28, ccur[2])
-			term.write(total .. "KB")
+			local device = component.proxy(available[i])
+			if device then
+				local used, total = math.ceil(device.spaceUsed() / 1024), math.ceil(device.spaceTotal() / 1024)
+				local pro = math.ceil(used / total)
+				term.setCursor(10, ccur[2])
+				term.write(used .. "KB / " .. pro .. "%")
+				term.setCursor(28, ccur[2])
+				term.write(total .. "KB")
+			else
+				term.setCursor(9, ccur[2])
+				setColor(colors.red)
+				term.write(">>> NIE ZNALEZIONO <<<")
+			end
 		end
+		checkDisks()
 	elseif cmdName == "install" then
+		checkDisks()
 		local available = {}
 		for add in component.list("filesystem") do
 			device = component.proxy(add)
@@ -410,6 +437,7 @@ local function handleCommand(cmdName, args, options)
 			term.write("\nNie znaleziono żadnych dysków nadających się do instalacji.")
 		end
 	elseif cmdName == "uninstall" then
+		checkDisks()
 		local available = configuration[1]
 		if #available > 0 then
 			setColor(colors.cyan)
@@ -528,16 +556,6 @@ local function handleCommand(cmdName, args, options)
 	end
 end
 
-local function msgProcessor(...)
-	local msg = {...}
-	if msg[1] == "modem_message" and msg[7] == 0 then
-		local status, output = rtpo.receive(modem, port, maxTimeout)
-		if status then
-			computer.pushSignal(table.unpack(output))
-		end
-	end
-end
-
 local function main()
 	loadConfig()
 	term.clear()
@@ -566,9 +584,9 @@ local function main()
 end
 
 local prevColor = gpu.getForeground()
-event.listen("modem_message", msgProcessor)
-event.listen("rtpo_message", messageProc)
+event.listen("modem_message", hdp.listen)
+event.listen("hdp_message", messageProc)
 main()
-event.ignore("rtpo_message", messageProc)
-event.ignore("modem_message", msgProcessor)
+event.ignore("hdp_message", messageProc)
+event.ignore("modem_message", hdp.listen)
 gpu.setForeground(prevColor)

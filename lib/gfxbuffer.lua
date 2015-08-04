@@ -1,7 +1,7 @@
 local component=require("component")
 local unicode=require("unicode")
 
-local colorutils=require("colorutils")
+--local colorutils=require("colorutils")
 
 local buffer={VERSION="1.0"}
 local bufferMeta={}
@@ -9,22 +9,31 @@ local bufferMeta={}
 local debugPrint=function() end
 
 --copy these to file local, they're called a lot in performance-intensive loops
-local convColor_hto8=colorutils.convColor_hto8
-local convColor_8toh=colorutils.convColor_8toh
+--local convColor_hto8=colorutils.convColor_hto8
+--local convColor_8toh=colorutils.convColor_8toh
 
 
+--[[
+Kolory są konwertowane przez komputer, więc nie ma potrzeby robienia tego przez program
+]]
 local function encodeColor(fg,bg)
-  return convColor_hto8(bg)*256+convColor_hto8(fg)
+  --return convColor_hto8(bg)*256+convColor_hto8(fg)
+  local t = {bg,fg}
+  setmetatable(t,{__eq=function(t1, t2) return t1.bg==t2.bg and t1.fg==t2.fg end,
+  __lt=function(t1, t2) return (t1.bg or 0) * 256 + (t1.fg or 0) < (t2.bg or 0) * 256 + (t2.fg or 0) end})
+  return t
 end
 
 local function decodeColor(c)
-  return convColor_8toh(math.floor(c/256)),convColor_8toh(c%256)
+  --return convColor_8toh(math.floor(c/256)),convColor_8toh(c%256)
+  return c[1], c[2]
 end
 
 
 
 function bufferMeta.getBackground(buffer)
-  return convColor_8toh(buffer.colorBackground)
+  --return convColor_8toh(buffer.colorBackground)
+  return buffer.colorBackground
 end
 
 function bufferMeta.setBackground(buffer,color)
@@ -188,11 +197,11 @@ function bufferMeta.flush(buffer)
     local span=spans[i]
     local bg,fg=decodeColor(span.color)
     if fg~=cfg then
-      parent.setForeground(fg)
+      parent.setForeground(fg or 0xff00cc)
       cfg=fg
     end
     if bg~=cbg then
-      parent.setBackground(bg)
+      parent.setBackground(bg or 0xff00cc)
       cbg=bg
     end
     parent.set(span.x,span.y,span.str)

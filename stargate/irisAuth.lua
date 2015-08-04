@@ -8,7 +8,7 @@ local serial = require("serialization")
 local modem = component.modem
 local gpu = component.gpu
 
-local wersja = "1.7"
+local wersja = "1.8"
 
 local args, options = shell.parse(...)
 if args[1]=="version_check" then return wersja end
@@ -24,8 +24,8 @@ local kod = 0
 local changed = false
 
 local function ladujConfig()
-	if fs.exists(shell.resolve("config/iaConfig.cfg")) then
-		local confFile = io.open("config/iaConfig.cfg","r")
+	if fs.exists("/etc/iaConfig.cfg") then
+		local confFile = io.open("/etc/iaConfig.cfg", "r")
 		port = tonumber(confFile:read("*l"))
 		kod = tonumber(confFile:read("*l"))
 		confFile:close()
@@ -34,15 +34,14 @@ end
 
 local function zapiszConfig()
 	if changed then
-		if not fs.isDirectory("config") then fs.makeDirectory("config") end
-		local file = io.open("config/iaConfig.cfg", "w")
-		file:write(tostring(port).."\n"..(kod))
+		local file = io.open("/etc/iaConfig.cfg", "w")
+		file:write(tostring(port) .. "\n" .. (kod))
 		file:close()
 	end
 end
 
 local function wrt(x, y, str)
-	term.setCursor(x,y)
+	term.setCursor(x, y)
 	term.write(str)
 end
 
@@ -50,7 +49,7 @@ local function draw()
 	term.clear()
 	gpu.fill(1, 1, res[1], 4, "=")
 	gpu.fill(1, 2, res[1], 2, "|")
-	gpu.fill(2, 2, res[1]-2, 2, " ")
+	gpu.fill(2, 2, res[1] - 2, 2, " ")
 	term.setCursor(3, 2)
 	term.write("Iris Authenticator - program do zdalnego otwierania przesłony")
 	wrt(3, 3, "Wersja " .. wersja)
@@ -61,7 +60,7 @@ local function draw()
 	wrt(3, 12, "S - wysłanie sygnalu")
 	wrt(3, 13, "Q - wyjście z programu")
 	wrt(1, 15, "--------")
-	term.setCursor(2,16)
+	term.setCursor(2, 16)
 end
 
 local function main()
@@ -69,10 +68,10 @@ local function main()
 		draw()
 		local ev = {event.pull("key_down")}
 		if ev[4] == key.keys.p then
-			term.write("Wprowadź nowy numer portu[10 000 - 65 530]: ")
+			term.write("Wprowadź nowy numer portu[10 000 - 50 000]: ")
 			ret = tonumber(term.read())
 			if ret~=nil then
-				if ret >= 10000 and ret <= 65530 then
+				if ret >= 10000 and ret <= 50000 then
 					port = ret
 					changed = true
 				else
@@ -84,10 +83,10 @@ local function main()
 				os.sleep(2)
 			end
 		elseif ev[4] == key.keys.k then
-			term.write("Wprowadź nowy kod[10000 - 99 999]: ")
+			term.write("Wprowadź nowy kod[1000 - 9999]: ")
 			ret = tonumber(term.read())
 			if ret~=nil then
-				if ret >= 10000 and ret <= 99999 then
+				if ret >= 1000 and ret <= 9999 then
 					kod = ret
 					changed = true
 				else
