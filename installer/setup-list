@@ -5,7 +5,7 @@
 	{"ds-manager","1.1","https://bitbucket.org/Aranthor/oc_equipment/raw/master/archive/ds-manager.lua","Menedzer serwera danych","Aranthor",{"rtpo","ds-api"},nil,nil,nil,true},
 	{"gml","none","https://bitbucket.org/Aranthor/oc_equipment/raw/master/lib/gml.lua","Biblioteka do obslugi aplikacji okienkowych","Gopher",{"gfxbuffer","default-style"},true,nil,nil},
 	{"gfxbuffer","none","https://bitbucket.org/Aranthor/oc_equipment/raw/master/lib/gfxbuffer.lua","Zaleznosc wymagana do gml","Gopher",nil,true,nil,nil},
-	{"colorutils","none","https://bitbucket.org/Aranthor/oc_equipment/raw/master/lib/colorutils.lua","Narzedzia do konwersji kolorow (kiedys zaleznosc gfxbuffer, aktualnie brak zastosowania)","Gopher",nil,true,nil,nil}
+	{"colorutils","none","https://bitbucket.org/Aranthor/oc_equipment/raw/master/lib/colorutils.lua","Narzedzia do konwersji kolorow (kiedys zaleznosc gfxbuffer, aktualnie brak zastosowania)","Gopher",nil,true,nil,nil},
 	{"default-style","none","https://bitbucket.org/Aranthor/oc_equipment/raw/master/lib/default.gss","Domyslny motyw do gml","Gopher",nil,true,nil,"default.gss"},
 	{"dark-style", "none","https://bitbucket.org/Aranthor/oc_equipment/raw/master/lib/default.gss","Ciemny motyw do gml","Aranthor",nil,true,nil,"dark.gss"},
 	{"hdp","1.0",:"https://bitbucket.org/Aranthor/oc_equipment/raw/master/lib/hdp.lua","Protokół sieciowy","Aranthor",nil,true,nil,nil},
