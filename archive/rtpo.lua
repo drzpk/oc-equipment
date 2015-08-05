@@ -1,4 +1,4 @@
-﻿-- ###########################################################################
+-- ###########################################################################
 -- ###      RTPO - Reliable Transmission Protocol for OpenComputers        ###
 -- # Protokół służący do wymiany danych pomiędzy komputerami w OpenComputers #
 -- #                                                                         #

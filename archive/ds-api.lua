@@ -1,4 +1,4 @@
-﻿--by: Admox
+--by: Admox
 local event = require("event")
 local serial = require("serialization")
 local component = require("component")

@@ -1,4 +1,4 @@
-﻿--[[
+--[[
 colorutils
 
 a simple library with some useful functions for dealing with colors.

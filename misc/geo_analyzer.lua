@@ -1,4 +1,4 @@
-﻿--by: Aranthor
+--by: Aranthor
 --[[
 Przy generowaniu map wiekszych, niz 10x10 wymagane sa zewnetrzne baterie, poniewaz skanowanie terenu pochlania duze ilosci energii.
 

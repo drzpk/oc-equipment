@@ -1,4 +1,4 @@
-﻿local component=require("component")
+local component=require("component")
 local unicode=require("unicode")
 
 --local colorutils=require("colorutils")

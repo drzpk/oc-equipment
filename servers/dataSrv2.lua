@@ -1,4 +1,4 @@
-﻿-- ########################################################
+-- ########################################################
 -- ##              Data Server wersja 2.2               ##
 -- #   Serwer służący do magazynowania danych w postaci   #
 -- #  plików na dyskach                                   #
