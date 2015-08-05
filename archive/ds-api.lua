@@ -1,4 +1,4 @@
---by: Admox
+ï»¿--by: Admox
 local event = require("event")
 local serial = require("serialization")
 local component = require("component")
@@ -14,32 +14,32 @@ local ds = {}
 
 local ds_code = 
 {
-	--Lista zapywañ do serwera		>>	SKOPIOWANO Z PLIKU DATA_SERVER.LUA, WERSJA 0.1.0alpha	<<
-	getFile = 0x01, --parametry: folder, uuid   odpowiedŸ: status, plik lub nil
-	setFile = 0x02, --parametry: folder lub nil, treœæ pliku   odpowiedŸ: status, uuid lub nil
+	--Lista zapywaÅ„ do serwera		>>	SKOPIOWANO Z PLIKU DATA_SERVER.LUA, WERSJA 0.1.0alpha	<<
+	getFile = 0x01, --parametry: folder, uuid   odpowiedÅº: status, plik lub nil
+	setFile = 0x02, --parametry: folder lub nil, treÅ›Ä‡ pliku   odpowiedÅº: status, uuid lub nil
 	delFile = 0x03,  --parametry: folder, uuid pliku
 	unused_1 = 0x04,
 	getFileSize = 0x05,  --parametry: folder, uuid
-	getFolder = 0x06, --parametry: uuid, nil     odpowiedŸ: status, lista plików w folderze lub nil
-	setFolder = 0x07, --parametry: nil    odpowiedŸ: status, uuid lub nil
+	getFolder = 0x06, --parametry: uuid, nil     odpowiedÅº: status, lista plikÃ³w w folderze lub nil
+	setFolder = 0x07, --parametry: nil    odpowiedÅº: status, uuid lub nil
 	delFolder = 0x08, --parametry: uuid folderu
-	getFolderSize = 0x09,  --zwraca iloœæ plików w folderze
+	getFolderSize = 0x09,  --zwraca iloÅ›Ä‡ plikÃ³w w folderze
 	
 	checkServer = 0x1d, --sprawdzenie, czy serwer jest online
-	getFreeMemory = 0x1e, --zapytanie o iloœæ dostêpnego miejsca w bajtach
-	getVersion = 0x1f, --zapytanie o wersjê serwera danych
+	getFreeMemory = 0x1e, --zapytanie o iloÅ›Ä‡ dostÄ™pnego miejsca w bajtach
+	getVersion = 0x1f, --zapytanie o wersjÄ™ serwera danych
 	
 	--Lista odpowiedzi serwera
-	success = 0x20, --operacja zakoñczona pomyœlnie
-	deined = 0x21, --odmowa dostêpu
-	notEnoughMemory = 0x22, --brak pamiêci na serwerze
+	success = 0x20, --operacja zakoÅ„czona pomyÅ›lnie
+	deined = 0x21, --odmowa dostÄ™pu
+	notEnoughMemory = 0x22, --brak pamiÄ™ci na serwerze
 	notFound = 0x23, --nie znaleziono pliku lub folderu o podanym numerze uuid
-	failed = 0x24, --inny nieznany b³¹d
+	failed = 0x24, --inny nieznany bÅ‚Ä…d
 	requestNotFound = 0x25,  --nie odnaleziono zapytania
 	online = 0x26,  --serwer jest online
 	version = 0x27,  --wersja serwera, parametr: wersja
-	notReady = 0x28,  --serwer nie jest gotowy do pracy, np. nie ma dostêpnych dysków
-	badTarget = 0x29,  --cel jest inny ni¿ oczekiwano, np. plik jest folderem
+	notReady = 0x28,  --serwer nie jest gotowy do pracy, np. nie ma dostÄ™pnych dyskÃ³w
+	badTarget = 0x29,  --cel jest inny niÅ¼ oczekiwano, np. plik jest folderem
 	badRequest = 0x2a  --zapytanie jest niekompletne, brakuje danych
 }
 
@@ -48,13 +48,13 @@ local desc =
 	success = {true,"Operacja zakonczona pomyslnie."},
 	deined = {false,"Odmowa dostepu."},
 	notEnoughMemory = {false,"Brak pamieci na serwerze."},
-	notFound = {false,"Zadany element nie zosta³ odnaleziony."},
+	notFound = {false,"Zadany element nie zostaÅ‚ odnaleziony."},
 	failed = {false,"Nieznany blad."},
 	requestNotFound = {false,"Nie odnaleziono zapytania na serwerze."},
 	online = {true,"Serwer jest online."},
 	version = {true,"Sprawdzenie wersji serwera."},
 	notReady = {false,"Serwer nie jest gotowy."},
-	badTarget = {false,"Wskazany obiekt jest inny, ni¿ oczekiwano."},
+	badTarget = {false,"Wskazany obiekt jest inny, niÅ¼ oczekiwano."},
 	badRequest = {false,"Zapytanie jest niekompletne."}
 }
 
@@ -83,17 +83,17 @@ local function findRequest(code)
 end
 
 --[[
-Funkcja zwraca tablicê:
+Funkcja zwraca tablicÄ™:
 [1] = powodzenie zapytania (true/false)
-[2] = Opis b³êdu lub wartoœæ zwrócona przez serwer
-	Przyk³adowe u¿ycie:
+[2] = Opis bÅ‚Ä™du lub wartoÅ›Ä‡ zwrÃ³cona przez serwer
+	PrzykÅ‚adowe uÅ¼ycie:
 		ds = require("ds-api")
 		core = ds.create(10000) -- numer portu
-		response = {ds:getFile(nil, "fj3j53l0f")} --ospowiedŸ api
+		response = {ds:getFile(nil, "fj3j53l0f")} --ospowiedÅº api
 ]]
 local function request(core, msgTable)
 	local ans = sendM(core, msgTable)
-	if ans == nil then return {false,"Nie mozna po³aczyc siê z serwerem."} end
+	if ans == nil then return {false,"Nie mozna poÅ‚aczyc siÄ™ z serwerem."} end
 	local ret = translateAnwser(findRequest(ans[1]))
 	if ret[1] then
 		return ret[1], ans[3]
@@ -104,7 +104,7 @@ end
 
 local function createCore(portn)
 	if type(portn) ~= "number" or portn < 10000 or portn > 60000 then
-		io.stderr:write("\nB³êdny port.")
+		io.stderr:write("\nBÅ‚Ä™dny port.")
 		return
 	end
 	local cor = 
@@ -118,29 +118,29 @@ local function createCore(portn)
 	return cor
 end
 
---Pobiera zawartoœæ pliku.				Parametry: folder(jeœli brak - nil), uuid
+--Pobiera zawartoÅ›Ä‡ pliku.				Parametry: folder(jeÅ›li brak - nil), uuid
 local function getFile(core, folder, uuid)
-	return core:request({ds_code.getFile, folder, uuid}) --return: zawartoœæ pliku
+	return core:request({ds_code.getFile, folder, uuid}) --return: zawartoÅ›Ä‡ pliku
 end
 
---Wysy³a plik na serwer.				Parametry: folder(jeœli brak - nil), zawartoœæ pliku
+--WysyÅ‚a plik na serwer.				Parametry: folder(jeÅ›li brak - nil), zawartoÅ›Ä‡ pliku
 local function setFile(core, folder, content)
 	return core:request({ds_code.setFile, folder, content}) --return: uuid nowego pliku
 end
 
---Usuwa plik z serwera.					Parametry: folder(jeœli brak - nil), uuid
+--Usuwa plik z serwera.					Parametry: folder(jeÅ›li brak - nil), uuid
 local function delFile(core, folder, uuid)
 	return core:request({ds_code.delFile, folder, uuid}) --return: nil
 end
 
---Pobiera rozmiar pliku.				Parametry: folder(jeœli brak - nil), uuid	
+--Pobiera rozmiar pliku.				Parametry: folder(jeÅ›li brak - nil), uuid	
 local function getFileSize(core, folder, uuid)
 	return core:request({ds_code.getFileSize, folder, uuid}) --return: rozmiar pliku
 end
 
---Pobiera listê plików w folderze.		Parametry: uuid
+--Pobiera listÄ™ plikÃ³w w folderze.		Parametry: uuid
 local function getFolder(core, uuid)
-	return core:request({ds_code.getFolder, uuid, nil}) --return: tablica z list¹ plików
+	return core:request({ds_code.getFolder, uuid, nil}) --return: tablica z listÄ… plikÃ³w
 end
 
 --Tworzy nowy folder na serwerze.		Parametry: nil
@@ -153,9 +153,9 @@ local function delFolder(core, uuid)
 	return core:request({ds_code.delFolder, uuid, nil}) --return: nil
 end
 
---Zwraca iloœæ plików w folderze		Parametry: uuid
+--Zwraca iloÅ›Ä‡ plikÃ³w w folderze		Parametry: uuid
 local function getFolderSize(code, uuid)
-	return core:request({ds_code.getFolderSize, uuid, nil}) --return: iloœæ plików
+	return core:request({ds_code.getFolderSize, uuid, nil}) --return: iloÅ›Ä‡ plikÃ³w
 end
 
 --Sprawdza, czy serwer jest online		Parametry: nil
@@ -163,12 +163,12 @@ local function checkServer(core)
 	return core:request({ds_code.checkServer, nil, nil}) --return: kod odpowiedzi 'online'
 end
 
---Zwraca iloœæ dostêpnego miejsca		Parametry: nil
+--Zwraca iloÅ›Ä‡ dostÄ™pnego miejsca		Parametry: nil
 local function getFreeMemory(core)
-	return core:request({ds_code.getFreeMemory, nil, nil}) --return: iloœæ dostêpnego miejsca w bajtach
+	return core:request({ds_code.getFreeMemory, nil, nil}) --return: iloÅ›Ä‡ dostÄ™pnego miejsca w bajtach
 end
 
---Zaraca aktualn¹ wersjê serwera		Parametry: nil
+--Zaraca aktualnÄ… wersjÄ™ serwera		Parametry: nil
 local function getVersion(core)
 	return core:request({ds_code.getVersion, nil, nil}) --return: wersja serwera danych
 end

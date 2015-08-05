@@ -1,4 +1,4 @@
-/* default style for gml gui library */
+﻿/* default style for gml gui library */
 
 * {
   fill-ch: " ";

@@ -1,4 +1,4 @@
--- ########################################################
+﻿-- ########################################################
 -- ##              Data Server wersja 2.2               ##
 -- #   Serwer służący do magazynowania danych w postaci   #
 -- #  plików na dyskach                                   #
@@ -37,8 +37,6 @@
 	* {reqCode.echo}
 		sprawdzenie, czy serwer jest dostępny
 ]]
-
---TODO: wywalenie repeatów i wstawienie filtracji (patrz dokumentacja event.pull)
 
 local computer = require("computer")
 local fs = require("filesystem")

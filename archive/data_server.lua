@@ -1,4 +1,4 @@
---by: Admox
+﻿--by: Admox
 local fs = require("filesystem")
 local component = require("component")
 local event = require("event")

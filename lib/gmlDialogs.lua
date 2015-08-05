@@ -1,4 +1,4 @@
---[[
+﻿--[[
 Basic & Common Forms and Dialogs
 a collection of common dialogs and forms for use in programs.
 These dialogs can be used even whether or not your program otherwise

@@ -1,4 +1,4 @@
-local dataSrv2Address = 1
+﻿local dataSrv2Address = 1
 local version = "1"
 local broadcastPort = 65533
 local messages = {

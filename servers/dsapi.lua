@@ -1,5 +1,5 @@
--- #################################################
--- ##   API do obs³ugi serwera danych dataSrv2    ##
+ï»¿-- #################################################
+-- ##   API do obsÅ‚ugi serwera danych dataSrv2    ##
 -- #                                               #
 -- ##  05.2015                     by: Aranthor   ##
 -- #################################################
@@ -7,47 +7,47 @@
 --[[
 	## Opis funkcji ##
 	dsapi.write(modem, port, path, content)
-	Funkcja wysy³a nowy plik na serwer. Gdy plik ju¿ istnieje, jego
-	zawartoœæ jest nadpisywana
-		@param modem - modem, z którego zostanie wys³ana wiadomoœæ
+	Funkcja wysyÅ‚a nowy plik na serwer. Gdy plik juÅ¼ istnieje, jego
+	zawartoÅ›Ä‡ jest nadpisywana
+		@param modem - modem, z ktÃ³rego zostanie wysÅ‚ana wiadomoÅ›Ä‡
 		@param port - port serwera
-		@param path - œcie¿ka do pliku
-		@param content - zawartoœæ pliku
+		@param path - Å›cieÅ¼ka do pliku
+		@param content - zawartoÅ›Ä‡ pliku
 		
 		@return
-		true - gdy zapis siê powiód³
-		false, kod - gdy nie uda siê zapisaæ pliku
+		true - gdy zapis siÄ™ powiÃ³dÅ‚
+		false, kod - gdy nie uda siÄ™ zapisaÄ‡ pliku
 		
 	dsapi.remove(modem, port, path)
 	Funkcja usuwa plik z serwera
-		@param modem - modem, z którego zostanie wys³ana wiadomoœæ
+		@param modem - modem, z ktÃ³rego zostanie wysÅ‚ana wiadomoÅ›Ä‡
 		@param port - port serwera
-		@param path - œcie¿ka do pliku
+		@param path - Å›cieÅ¼ka do pliku
 		
 		@return
-		true - gdy usuwanie siê powiod³o
-		false, kod - gdy usuwanie siê nie powiod³o
+		true - gdy usuwanie siÄ™ powiodÅ‚o
+		false, kod - gdy usuwanie siÄ™ nie powiodÅ‚o
 		
 	dsapi.get(modem, port, path)
-	Funkcja pobiera zawartoœæ pliku z serwera
-		@param modem - modem, z którego zostanie wys³ana wiadomoœæ
+	Funkcja pobiera zawartoÅ›Ä‡ pliku z serwera
+		@param modem - modem, z ktÃ³rego zostanie wysÅ‚ana wiadomoÅ›Ä‡
 		@param port - port serwera
-		@param path - œcie¿ka do pliku
+		@param path - Å›cieÅ¼ka do pliku
 		
 		@return
-		true, <zawartoœæ> - gdy pobieranie siê powiod³o
-		false, kod - gdy wyst¹pi³ b³¹d
+		true, <zawartoÅ›Ä‡> - gdy pobieranie siÄ™ powiodÅ‚o
+		false, kod - gdy wystÄ…piÅ‚ bÅ‚Ä…d
 		
 	dsapi.list(modem, port, path)
-	Funkcja zwraca iterator do elementów podanego katalogu
-		@param modem - modem, z którego zostanie wys³ana wiadomoœæ
+	Funkcja zwraca iterator do elementÃ³w podanego katalogu
+		@param modem - modem, z ktÃ³rego zostanie wysÅ‚ana wiadomoÅ›Ä‡
 		@param port - port serwera
-		@param path - œcie¿ka do pliku
+		@param path - Å›cieÅ¼ka do pliku
 		
 		@return
-		true, iterator - gdy otrzymano listê
-		false, kod - gdy wyst¹pi³ b³¹d
-		Przyk³ad:
+		true, iterator - gdy otrzymano listÄ™
+		false, kod - gdy wystÄ…piÅ‚ bÅ‚Ä…d
+		PrzykÅ‚ad:
 			a, b = dsapi.list(modem, port, path)
 			if a then
 				for name, size in b do
@@ -57,16 +57,16 @@
 			else
 				print(dsapi.translateCode(b))
 			end
-		Jeœli rozmiar jest równy -1, obiekt jest folderem
+		JeÅ›li rozmiar jest rÃ³wny -1, obiekt jest folderem
 	
 	dsapi.echo(modem, port)
-	Funkcja sprawdza, czy serwer jest dostêpny
-		@param modem - modem, z którego zostanie wys³ana wiadomoœæ
+	Funkcja sprawdza, czy serwer jest dostÄ™pny
+		@param modem - modem, z ktÃ³rego zostanie wysÅ‚ana wiadomoÅ›Ä‡
 		@param port - port serwera
 		
 		@return
-		true - jeœli serwer jest dostêpny
-		false - jeœli nie mo¿na nawi¹zaæ po³¹czenia z serwerem
+		true - jeÅ›li serwer jest dostÄ™pny
+		false - jeÅ›li nie moÅ¼na nawiÄ…zaÄ‡ poÅ‚Ä…czenia z serwerem
 ]]
 
 local rtpo = require("rtpo")
@@ -77,22 +77,22 @@ local wersja = "1.0"
 local aa, bb = require("shell").parse(...)
 if aa[1] == "version_check" then return wersja end
 
--- Czas, po którym po³¹czenie jest zrywane
+-- Czas, po ktÃ³rym poÅ‚Ä…czenie jest zrywane
 local timeout = 2
 
 -- Zapytania do serwera
 local reqCode = {
-	file = 0x01, --@param:(œcie¿ka, zawartoœæ)
-	get  = 0x02, --@param:(œcie¿ka)
-	list = 0x03, --@param:(œcie¿ka)
+	file = 0x01, --@param:(Å›cieÅ¼ka, zawartoÅ›Ä‡)
+	get  = 0x02, --@param:(Å›cieÅ¼ka)
+	list = 0x03, --@param:(Å›cieÅ¼ka)
 	echo = 0x04
 }
 
 -- Kody odpowiedzi serwera wraz z opisem
 local respCode = {
-	success = {0x00, "czynnosc powiodla sie"}, -- zadana czynnoœæ powiod³a siê
-	failed = {0x01, "wystapil nieznany blad"}, -- nieznany b³¹d
-	nomem = {0x02, "za malo pamieci na serwerze"}, -- za ma³o miejsca na serwerze
+	success = {0x00, "czynnosc powiodla sie"}, -- zadana czynnoÅ›Ä‡ powiodÅ‚a siÄ™
+	failed = {0x01, "wystapil nieznany blad"}, -- nieznany bÅ‚Ä…d
+	nomem = {0x02, "za malo pamieci na serwerze"}, -- za maÅ‚o miejsca na serwerze
 	notfound = {0x03, "element nie zostal odnaleziony"}, -- nie znaleziono pliku lub folderu
 	badreq = {0x04, "bledne zapytanie"}, -- zapytanie jest niekompletne lub nie istnieje
 	echo = {0x10, "echo"},

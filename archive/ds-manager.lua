@@ -1,4 +1,4 @@
---by: Admox
+﻿--by: Admox
 local fs = require("filesystem")
 local component = require("component")
 local term = require("term")
@@ -9,7 +9,7 @@ local modem = component.modem
 local gpu = component.gpu
 
 if modem == nil then
-	io.stderr:write("Program wymaga do dzia�ania modemu.")
+	io.stderr:write("Program wymaga do działania modemu.")
 	return
 end
 
@@ -39,7 +39,7 @@ local function printUsage()
 	term.write("\nKlient serwera danych, wersja "..wersja)
 	term.write("\nDostepne komendy:")
 	term.write("\nds-manager getFile <uuid> [<nazwa pliku>] - pobiera klucz z serwera")
-	term.write("\nds-manager setFile <nazwa pliku> [-s] - zapisuje klucz na serwerze. Opcja 's' pobiera ciag znak�w zamiast pliku")
+	term.write("\nds-manager setFile <nazwa pliku> [-s] - zapisuje klucz na serwerze. Opcja 's' pobiera ciag znaków zamiast pliku")
 	term.write("\nds-manager delFile <uuid> - usuwa klucz z serwera")
 	term.write("\nds-manager getFileSize <nazwa pliku> - pobiera rozmiar klucza")
 end
@@ -74,7 +74,7 @@ local function getFile(uuid, name)
 		if name ~= nil then
 			if fs.exists(shell.resolve(name)) then
 				setColor(colors.red)
-				term.write("\nPlik o takiej nazwie ju� instnieje.")
+				term.write("\nPlik o takiej nazwie już instnieje.")
 				return
 			end
 			local file = io.open(name, "w")
@@ -84,7 +84,7 @@ local function getFile(uuid, name)
 			term.write("\nPomyslnie zapisano klucz do pliku.")
 		else
 			setColor(colors.blue)
-			term.write("\nOdpowiedź serwera: ")
+			term.write("\nOdpowiedĹş serwera: ")
 			setColor(colors.gray)
 			term.write(resp[2])
 		end
