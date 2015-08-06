@@ -25,5 +25,5 @@
 	{"switchRemote","1.0","https://bitbucket.org/Aranthor/oc_equipment/raw/master/servers/switchRemote.lua","Zdalna kontrola serwera przelaczników","Aranthor",nil,nil,nil,nil},
 	{"the_guard","1.0","https://bitbucket.org/Aranthor/oc_equipment/raw/master/servers/the_guard.lua","Strażnik","Aranthor",{"gml","gfxbuffer","default-style","hdp"},nil,nil,nil},
 	{"micro","1","https://bitbucket.org/Aranthor/oc_equipment/raw/master/servers/micro.lua","Mikrokontroler strażnika","Aranthor",{"hdp","dsapi"},nil,nil,nil},
-	{"OpenReactor","1.0","https://bitbucket.org/Aranthor/oc_equipment/raw/master/misc/OpenReactor.lua","Kontroler reaktorów z moda Big Reactors","2016mfransen",nil,nil,nil,nil},
+	{"OpenReactor","1.0","https://bitbucket.org/Aranthor/oc_equipment/raw/master/misc/OpenReactor.lua","Kontroler reaktorów z moda Big Reactors","2016mfransen",nil,nil,nil,nil}
 }
