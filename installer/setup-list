@@ -1,4 +1,5 @@
 {
+	{"admox_installer","0.1.4","https://bitbucket.org/Aranthor/oc_equipment/raw/master/archive/admox_installer.lua","Archiwalny instalator","Aranthor",nil,nil,nil,nil,true},
 	{"rtpo","2.0","https://bitbucket.org/Aranthor/oc_equipment/raw/master/archive/rtpo.lua","Protokół sieciowy","Aranthor",nil,true,nil,nil,true},
 	{"data_server","0.2.0beta","https://bitbucket.org/Aranthor/oc_equipment/raw/master/archive/data_server.lua","Serwer danych","Aranthor",{"rtpo"},nil,nil,nil,true},
 	{"ds-api","1.3","https://bitbucket.org/Aranthor/oc_equipment/raw/master/archive/ds-api.lua","API serwera danych","Aranthor",{"rtpo"},nil,nil,nil,true},
