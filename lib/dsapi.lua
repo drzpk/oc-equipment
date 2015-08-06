@@ -1,5 +1,5 @@
 -- #################################################
--- ##   API do obsÅ‚ugi serwera danych dataSrv2    ##
+-- ##   API do obs³ugi serwera danych dataSrv2    ##
 -- #                                               #
 -- ##  05.2015                     by: Aranthor   ##
 -- #################################################
@@ -7,43 +7,43 @@
 --[[
 	## Opis funkcji ##
 	dsapi.write(port, path, content)
-	Funkcja wysyÅ‚a nowy plik na serwer. Gdy plik juÅ¼ istnieje, jego
-	zawartoÅ›Ä‡ jest nadpisywana
+	Funkcja wysy³a nowy plik na serwer. Gdy plik ju¿ istnieje, jego
+	zawartoœæ jest nadpisywana
 		@param port - port serwera
-		@param path - Å›cieÅ¼ka do pliku
-		@param content - zawartoÅ›Ä‡ pliku
+		@param path - œcie¿ka do pliku
+		@param content - zawartoœæ pliku
 		
 		@return
-		true - gdy zapis siÄ™ powiÃ³dÅ‚
-		false, kod - gdy nie uda siÄ™ zapisaÄ‡ pliku
+		true - gdy zapis siê powiód³
+		false, kod - gdy nie uda siê zapisaæ pliku
 		
 	dsapi.remove(port, path)
 	Funkcja usuwa plik z serwera
 		@param port - port serwera
-		@param path - Å›cieÅ¼ka do pliku
+		@param path - œcie¿ka do pliku
 		
 		@return
-		true - gdy usuwanie siÄ™ powiodÅ‚o
-		false, kod - gdy usuwanie siÄ™ nie powiodÅ‚o
+		true - gdy usuwanie siê powiod³o
+		false, kod - gdy usuwanie siê nie powiod³o
 		
 	dsapi.get(port, path)
-	Funkcja pobiera zawartoÅ›Ä‡ pliku z serwera
+	Funkcja pobiera zawartoœæ pliku z serwera
 		@param port - port serwera
-		@param path - Å›cieÅ¼ka do pliku
+		@param path - œcie¿ka do pliku
 		
 		@return
-		true, <zawartoÅ›Ä‡> - gdy pobieranie siÄ™ powiodÅ‚o
-		false, kod - gdy wystÄ…piÅ‚ bÅ‚Ä…d
+		true, <zawartoœæ> - gdy pobieranie siê powiod³o
+		false, kod - gdy wyst¹pi³ b³¹d
 		
 	dsapi.list(port, path)
-	Funkcja zwraca iterator do elementÃ³w podanego katalogu
+	Funkcja zwraca iterator do elementów podanego katalogu
 		@param port - port serwera
-		@param path - Å›cieÅ¼ka do pliku
+		@param path - œcie¿ka do pliku
 		
 		@return
-		true, iterator - gdy otrzymano listÄ™
-		false, kod - gdy wystÄ…piÅ‚ bÅ‚Ä…d
-		PrzykÅ‚ad:
+		true, iterator - gdy otrzymano listê
+		false, kod - gdy wyst¹pi³ b³¹d
+		Przyk³ad:
 			a, b = dsapi.list(modem, port, path)
 			if a then
 				for name, size in b do
@@ -53,41 +53,41 @@
 			else
 				print(dsapi.translateCode(b))
 			end
-		JeÅ›li rozmiar jest rÃ³wny -1, obiekt jest folderem
+		Jeœli rozmiar jest równy -1, obiekt jest folderem
 	
 	dsapi.echo(port)
-	Funkcja sprawdza, czy serwer jest dostÄ™pny
+	Funkcja sprawdza, czy serwer jest dostêpny
 		@param port - port serwera
 		
 		@return
-		true - jeÅ›li serwer jest dostÄ™pny
-		false - jeÅ›li nie moÅ¼na nawiÄ…zaÄ‡ poÅ‚Ä…czenia z serwerem
+		true - jeœli serwer jest dostêpny
+		false - jeœli nie mo¿na nawi¹zaæ po³¹czenia z serwerem
 ]]
 
 local hdp = require("hdp")
 local serial = require("serialization")
 
-local wersja = "1.1"
+local wersja = "2.0"
 
 local aa, bb = require("shell").parse(...)
 if aa[1] == "version_check" then return wersja end
 
--- Czas, po ktÃ³rym poÅ‚Ä…czenie jest zrywane
+-- Czas, po którym po³¹czenie jest zrywane
 local timeout = 2
 
 -- Zapytania do serwera
 local reqCode = {
-	file = 0x01, --@param:(Å›cieÅ¼ka, zawartoÅ›Ä‡)
-	get  = 0x02, --@param:(Å›cieÅ¼ka)
-	list = 0x03, --@param:(Å›cieÅ¼ka)
+	file = 0x01, --@param:(œcie¿ka, zawartoœæ)
+	get  = 0x02, --@param:(œcie¿ka)
+	list = 0x03, --@param:(œcie¿ka)
 	echo = 0x04
 }
 
 -- Kody odpowiedzi serwera wraz z opisem
 local respCode = {
-	success = {0x00, "czynnosc powiodla sie"}, -- zadana czynnoÅ›Ä‡ powiodÅ‚a siÄ™
-	failed = {0x01, "wystapil nieznany blad"}, -- nieznany bÅ‚Ä…d
-	nomem = {0x02, "za malo pamieci na serwerze"}, -- za maÅ‚o miejsca na serwerze
+	success = {0x00, "czynnosc powiodla sie"}, -- zadana czynnoœæ powiod³a siê
+	failed = {0x01, "wystapil nieznany blad"}, -- nieznany b³¹d
+	nomem = {0x02, "za malo pamieci na serwerze"}, -- za ma³o miejsca na serwerze
 	notfound = {0x03, "element nie zostal odnaleziony"}, -- nie znaleziono pliku lub folderu
 	badreq = {0x04, "bledne zapytanie"}, -- zapytanie jest niekompletne lub nie istnieje
 	echo = {0x10, "echo"},
@@ -101,58 +101,6 @@ function getPort()
 		localPort = math.random(10000, 65000)
 	until localPort ~= port and not require("component").modem.isOpen(localPort)
 	return localPort
-end
-
-function dsapi.write(port, path, content)
-	local localPort = getPort()
-	local status, code = hdp.send(port, localPort, serial.serialize({reqCode.file, path, content}))
-	if status then
-		local ok, input = hdp.receive(localPort, timeout) 
-		if ok then 
-			local tab = serial.unserialize(input[7])
-			if tab ~= nil then
-				if tab[1] == respCode.success[1] then
-					return true
-				else
-					return false, tab[1]
-				end
-			else 
-				return false, respCode.failed[1]
-			end
-		else
-			return false, input
-		end
-	else
-		return false, code
-	end
-end
-
-function dsapi.remove(port, path)
-	return dsapi.write(port, path, nil)
-end
-
-function dsapi.get(port, path)
-	local localPort = getPort()
-	local status, code = hdp.send(port, localPort, serial.serialize({reqCode.get, path}))
-	if status then
-		local ok, input = hdp.receive(localPort, timeout)
-		if ok then
-			local tab = serial.unserialize(input[7])
-			if tab ~= nil then
-				if tab[1] == respCode.success[1] then
-					return true, tab[2]
-				else
-					return false, tab[1]
-				end
-			else
-				return false, respCode.failed[1]
-			end
-		else
-			return false, input
-		end
-	else
-		return false, code
-	end
 end
 
 function dsapi.list(port, path)
@@ -180,6 +128,122 @@ function dsapi.list(port, path)
 		end
 	else
 		return false, code
+	end
+end
+
+local function doWrite(port, path, content)
+	local localPort = getPort()
+	local status, code = hdp.send(port, localPort, serial.serialize({reqCode.file, path, content}))
+	if status then
+		local ok, input = hdp.receive(localPort, timeout + 3) 
+		if ok then 
+			local tab = serial.unserialize(input[7])
+			if tab then
+				if tab[1] == respCode.success[1] then
+					return true
+				else
+					return false, tab[1]
+				end
+			else 
+				return false, respCode.failed[1]
+			end
+		else
+			return false, input
+		end
+	else
+		return false, code
+	end
+end
+
+function dsapi.write(port, path, content)
+	if content:len() > 10240 then
+		local parts = math.ceil(content:len() / 10240)
+		for part = 1, parts do
+			local suffix = "." .. (part < 10 and ("0" .. tostring(part)) or tostring(part))
+			local s, c = doWrite(port, path .. suffix, content:sub(1 + (part - 1) * 10240, part * 10240))
+			if not s then return false, c end
+			os.sleep(0.5)
+		end
+		return true
+	else
+		return doWrite(port, path, content)
+	end
+end
+
+local function getSegments(port, path)
+	local subpath = "/"
+	local segments = require("filesystem").segments(path)
+	for i = 1, #segments - 1 do
+		subpath = subpath .. "/" .. segments[i]
+	end
+	local s, i = dsapi.list(port, subpath)
+	if s then
+		local list = {}
+		for name, size in i do
+			if name == segments[#segments] then return true, {subpath .. "/" .. name} end
+			if name:match("^" .. segments[#segments] .. ".%d%d$") then
+				table.insert(list, subpath .. "/" .. name)
+			end
+		end
+		return true, list
+	else
+		return false, i
+	end
+end
+
+function dsapi.remove(port, path)
+	local r, l = getSegments(port, path)
+	if r then
+		for i = 1, #list do
+			os.sleep(0.5)
+			local s, c = doWrite(port, subpath .. "/" .. list[i], nil)
+			if not s then return false, c end
+		end
+		return true
+	else
+		return false, l
+	end
+end
+
+local function doGet(port, path)
+	local localPort = getPort()
+	local status, code = hdp.send(port, localPort, serial.serialize({reqCode.get, path}))
+	if status then
+		local ok, input = hdp.receive(localPort, timeout + 3)
+		if ok then
+			local tab = serial.unserialize(input[7])
+			if tab ~= nil then
+				if tab[1] == respCode.success[1] then
+					return true, tab[2]
+				else
+					return false, tab[1]
+				end
+			else
+				return false, respCode.failed[1]
+			end
+		else
+			return false, input
+		end
+	else
+		return false, code
+	end
+end
+
+function dsapi.get(port, path)
+	local r, s = getSegments(port, path)
+	if r then
+		local data = ""
+		for i = 1, #s do
+			local r, c = doGet(port, s[i])
+			if r then
+				data = data .. c
+			else
+				return false, c
+			end			
+		end
+		return true, data
+	else
+		return false, s
 	end
 end
 

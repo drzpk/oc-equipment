@@ -1,25 +1,5 @@
 --by: Aranthor
---[[
-Przy generowaniu map wiekszych, niz 10x10 wymagane sa zewnetrzne baterie, poniewaz skanowanie terenu pochlania duze ilosci energii.
-
-Błędy:
-- nie wykrywa niektórych bloków
-- zapis obszaru 48x48 jest niemożliwy - pochłania zbyt dużo pamięci RAM. 2 kości 3.2 są niewystarczające
-]]
-local term = require("term")
-local component = require("component")
-local event = require("event")
-local keyboard = require("keyboard")
-local serial = require("serialization")
-local fs = require("filesystem")
-
-if component.isAvailable("hologram") then
-	holo = component.hologram
-end
-
-local wersja = "1.1"
-
-local holoSize = 1.9
+local wersja = "1.3"
 local sArgs = {...}
 if sArgs[1] == "version_check" then return wersja
 else
@@ -29,12 +9,28 @@ else
 	end
 end
 
+local term = require("term")
+local component = require("component")
+local event = require("event")
+local keyboard = require("keyboard")
+local serial = require("serialization")
+local fs = require("filesystem")
+
+if not component.isAvailable("data") and not component.isAvailable("os_datablock") then
+	io.stderr:write("Program wymaga do działania karty lub bloku danych")
+end
+if component.isAvailable("hologram") then
+	holo = component.hologram
+end
 if not component.isAvailable("geolyzer") then
 	io.stderr:write("Nie wykryto komponentu geolyzer!")
 	return
 end
 
+local holoSize = 1.9
 local geo = component.geolyzer
+local data = component.data or component.os_datablock
+local object = {}
 
 local function chooseRadius()
 	term.write("\nWybierz obszar skanowania: ")
@@ -57,18 +53,16 @@ local function chooseRadius()
 	return choice
 end
 
-local object = {}
-
 local function saveScan()
-	term.write("\nWprowadz nazwe pliku: ")
+	term.write("\nWprowadź nazwę pliku: ")
 	object.name = io.read()
-	term.write("Wprowadz wspolrzedne pomiaru: ")
+	term.write("Wprowadź współrzędne pomiaru: ")
 	object.coords = io.read()
-	term.write("Wprowadz nazwe swiata: ")
+	term.write("Wprowadź nazwę świata: ")
 	object.world = io.read()
-	term.write("Wprowadz opis pliku: ")
+	term.write("Wprowadź opis pliku: ")
 	object.desc = io.read()
-	term.write("\nWybierz dysk zapisu:")
+	term.write("\nWybierz dysk do zapisu:")
 	local available = {}
 	for add in component.list("filesystem") do
 		device = component.proxy(add)
@@ -77,49 +71,49 @@ local function saveScan()
 		end
 	end
 	for i = 1, #available do
-		term.write("\n"..tostring(i)..". "..available[i])
+		term.write("\n" .. tostring(i) .. ". " .. available[i])
 	end
 	local disknum = 0
 	while disknum == 0 do
 		local ev = {event.pull("key_down")}
 		local num = tonumber(string.char(ev[3]))
-		if num ~= nil then
+		if num then
 			if num > 0 and num <= #available then disknum = num end
 		end
 	end
-	if not fs.isDirectory("/mnt/"..available[disknum]:sub(1, 3).."/scans") then
-		fs.makeDirectory("/mnt/"..available[disknum]:sub(1, 3).."/scans")
+	if not fs.isDirectory("/mnt/" .. available[disknum]:sub(1, 3) .. "/scans") then
+		fs.makeDirectory("/mnt/" .. available[disknum]:sub(1, 3) .. "/scans")
 	end
-	local file = io.open("/mnt/"..available[disknum]:sub(1, 3).."/scans/"..object.name..".scan", "w")
+	local file = io.open("/mnt/" .. available[disknum]:sub(1, 3) .. "/scans/" .. object.name .. ".scan", "w")
 	file:write(serial.serialize(object))
 	file:close()
-	term.write("\n\nPlik zostal zapisany na dysku: ".."/mnt/"..available[disknum]:sub(1, 3).."/scans/"..object.name..".scan")
+	term.write("\n\nPlik zostal zapisany na dysku: " .. "/mnt/" .. available[disknum]:sub(1, 3) .. "/scans/" .. object.name .. ".scan")
 end
 
 local function main()
-	term.write("\ngeo_analyzer     wersja "..wersja)
+	term.write("\ngeo_analyzer     wersja " .. wersja)
 	local radius = chooseRadius()
 	term.write("\nAby rozpoczac skanowanie, nacisnij dowolny klawisz...")
+	event.pull("key_down")
 	term.write("\nAnaliza rozpoczeta.")
 	object.scan = {}
 	for x = 1, radius do
 		local buffx = {}
 		for y = 1, radius do
-			--print(x-(radius/2)-1, y-(radius/2)-1)
-			local b2 = geo.scan(x-(radius/2)-1, y-(radius/2)-1)
+			local b2 = geo.scan(x - (radius / 2) - 1, y - (radius / 2) - 1)
 			for t = 1, #b2 do
-				b2[t] = math.floor(b2[t]+0.5)
+				b2[t] = math.floor(b2[t] + 0.5)
 			end
 			table.insert(buffx, b2)
 		end
 		term.clearLine()
-		term.write("Postep skanowania: "..tostring(math.floor((x/radius*100)+0.5)).."%")
-		table.insert(object.scan, buffx)
+		term.write("Postep skanowania: " .. tostring(math.floor((x / radius * 100) + 0.5)) .. "%")
+		table.insert(object.scan, data.deflate(serial.serialize(buffx)))
 	end
 	term.write("\nAnaliza zakonczona.")
 	local save = true
 	local saved = false
-	if holo ~= nil then
+	if holo then
 		term.write("\nWykryto podlaczony projektor. Wybierz akcje: ")
 		term.write("\n1. Zapisz skan")
 		term.write("\n2. Wyswietl skan")
@@ -134,6 +128,7 @@ local function main()
 	end
 	if save then
 		saveScan()
+		saved = true
 	else
 		holo.clear()
 		holo.setScale(holoSize)
@@ -146,15 +141,16 @@ local function main()
 		local run = true
 		while run do
 			for x = 1, #object.scan do
-				for y = 1, #object.scan[x] do
+				local osd = serial.unserialize(data.inflate(object.scan[x]))
+				for y = 1, #osd do
 					for z = 1, 32 do
 						local color
-						if object.scan[x][y][z+yOffset] == 0 then color = 0
-						elseif object.scan[x][y][z+yOffset] > 90 then color = 3
-						elseif object.scan[x][y][z+yOffset] > 30 then color = 1
+						if osd[y][z + yOffset] == 0 then color = 0
+						elseif osd[y][z + yOffset] > 90 then color = 3
+						elseif osd[y][z + yOffset] > 30 then color = 1
 						else color = 2
 						end
-						holo.set(x+startPos, z, y+startPos, color)
+						holo.set(x + startPos, z, y + startPos, color)
 					end
 				end
 			end

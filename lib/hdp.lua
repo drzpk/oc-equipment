@@ -33,7 +33,7 @@
 	4. Zakończenie lub ponowienie wysyłania w przypadku niedostarczenia wiadomości	
 ]]
 
-local version = "1.0"
+local version = "1.1"
 local args = {...}
 if args[1] == "version_check" then return version end
 
@@ -42,7 +42,7 @@ local component = require("component")
 local event = require("event")
 local serial = require("serialization")
 
-local MTU = 1024 -- wielkość segmentu danych
+local MTU = 6144 -- wielkość segmentu danych
 local delay = 0.1 -- opóźnienie pomiędzy segmentami
 local maxTimeout = 2 -- maksymalny czas oczekiwania
 local maxAttempts = 2 -- ilość ponowień wysłania wiadomości
@@ -100,8 +100,9 @@ function send(localPort, port, ...)
 		if resp and resp[7] and checkPort(resp[6]) then
 			if resp[7] == code.ok then
 				for attempt = 1, maxAttempts do
-					local segment = 1
+					local segment = 0
 					repeat
+						segment = segment + 1
 						os.sleep(delay)
 						modem.send(resp[3], resp[6], localPort, code.segment, message:sub(((segment - 1) * MTU) + 1, segment * MTU))
 					until segment == amount

@@ -38,6 +38,8 @@
 		sprawdzenie, czy serwer jest dostępny
 ]]
 
+--TODO: wywalenie repeatów i wstawienie filtracji (patrz dokumentacja event.pull)
+
 local computer = require("computer")
 local fs = require("filesystem")
 local component = require("component")
@@ -57,7 +59,7 @@ else
 	modem = component.modem
 end
 
-local wersja = "2.2"
+local wersja = "2.3"
 
 local argss, optionss = shell.parse(...)
 if argss[1] == "version_check" then return wersja end
@@ -294,7 +296,7 @@ local function messageProc(...)
 					local path = "/mnt/" .. disks[i]:sub(1, 3) .. "/" .. msg[2]
 					if fs.exists(path) then
 						local file = io.open(path, "r")
-						local fcont = file:read()
+						local fcont = file:read("*a")
 						file:close()
 						local status, code = hdp.send(input[6], port, serial.serialize({respCode.success, fcont}))
 						if status then
@@ -326,9 +328,11 @@ local function messageProc(...)
 							table.insert(l2, size)
 							table.insert(list, l2)
 						end
+					else
+						list = nil
 					end
 				end
-				if #list > 0 then
+				if list then
 					table.sort(list, function(a, b) return a[1]:sub(1, 1) < b[1]:sub(1, 1) end)
 					local status, code = hdp.send(input[6], port, serial.serialize({respCode.success, list}))
 					if status then
