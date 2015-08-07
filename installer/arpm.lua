@@ -83,7 +83,7 @@ local function usage()
 	textColor(colors.orange)
 	term.write("  arpm update <pakiet> [-f]")
 	textColor(colors.silver)
-	print("  - Aktualizuje wybrany pakiet lub wszystkie zainstalowane, gdy nie został wybrany żaden. Użycie opcji -f wymusza uaktualnienie.")
+	print("  - Aktualizuje wybrany pakiet. Użycie opcji -f wymusza uaktualnienie.")
 	textColor(colors.orange)
 	term.write("  arpm uninstall <pakiet> [-d]")
 	textColor(colors.silver)
@@ -104,14 +104,14 @@ local function getContent(url)
 end
 
 local function getAppList()
-	local f = io.open("/usr/bin/setup-list", "r")
+	--[[local f = io.open("/usr/bin/setup-list", "r")
 	local ss, ee = serial.unserialize(f:read("*a"))
 	f:close()
 	if not ss then
 		error(tostring(ss) .. "   " .. ee)
 	end
-	appList = ss
-	--[[if not appList then
+	appList = ss]]
+	if not appList then
 		local resp = getContent("https://bitbucket.org/Aranthor/oc_equipment/raw/master/installer/setup-list")
 		if resp then
 			local ss, ee = serial.unserialize(resp)
@@ -122,7 +122,7 @@ local function getAppList()
 		else
 			io.stderr:write("Nie można polączyć się z Internetem")
 		end
-	end]]
+	end
 end
 
 local function getApp(url)
@@ -499,11 +499,8 @@ local function updateApp(appName, force)
 	term.write("\nPobieranie listy aplikacji...   ")
 	getAppList()
 	if appList then
-		if appName == "**all" then
-			term.write("\nAktualizowanie aplikacji: ")
-			for _, app in pairs(appList) do
-				doUpdate(app, force)
-			end
+		if not appName then
+			io.stderr:write("Nie podano nazwy aplikacji")
 		else
 			term.write("\nSzukanie aplikacji w repozytorium...")
 			for _, application in pairs(appList) do
@@ -579,7 +576,7 @@ local function main()
 	elseif args[1] == "list" then
 		printAppList(options.r)
 	elseif args[1] == "update" then
-		updateApp(args[2] or "**all", options.f)
+		updateApp(args[2], options.f)
 	elseif args[1] == "install" then
 		installApp(args[2], options.f)
 	elseif args[1] == "uninstall" then
