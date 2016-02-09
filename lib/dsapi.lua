@@ -95,7 +95,7 @@ local respCode = {
 
 local dsapi = {}
 
-function getPort()
+function getPort(port)
 	local localPort = 0
 	repeat
 		localPort = math.random(10000, 65000)
@@ -104,7 +104,7 @@ function getPort()
 end
 
 function dsapi.list(port, path)
-	local localPort = getPort()
+	local localPort = getPort(port)
 	local status, code = hdp.send(port, localPort, serial.serialize({reqCode.list, path}))
 	if status then
 		local ok, input = hdp.receive(localPort, timeout)
@@ -132,7 +132,7 @@ function dsapi.list(port, path)
 end
 
 local function doWrite(port, path, content)
-	local localPort = getPort()
+	local localPort = getPort(port)
 	local status, code = hdp.send(port, localPort, serial.serialize({reqCode.file, path, content}))
 	if status then
 		local ok, input = hdp.receive(localPort, timeout + 3) 
@@ -206,7 +206,7 @@ function dsapi.remove(port, path)
 end
 
 local function doGet(port, path)
-	local localPort = getPort()
+	local localPort = getPort(port)
 	local status, code = hdp.send(port, localPort, serial.serialize({reqCode.get, path}))
 	if status then
 		local ok, input = hdp.receive(localPort, timeout + 3)
@@ -248,7 +248,7 @@ function dsapi.get(port, path)
 end
 
 function dsapi.echo(port)
-	local localPort = getPort()
+	local localPort = getPort(port)
 	local status, code = hdp.send(port, localPort, serial.serialize({reqCode.echo}))
 	if status then
 		local ok, input = hdp.receive(localPort, 4)
