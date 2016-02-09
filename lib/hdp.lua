@@ -43,7 +43,7 @@ local event = require("event")
 local serial = require("serialization")
 
 local MTU = 6144 -- wielkość segmentu danych
-local delay = 0.1 -- opóźnienie pomiędzy segmentami
+local delay = 0.3 -- opóźnienie pomiędzy segmentami
 local maxTimeout = 2 -- maksymalny czas oczekiwania
 local maxAttempts = 2 -- ilość ponowień wysłania wiadomości
 
