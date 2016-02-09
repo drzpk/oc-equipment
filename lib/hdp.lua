@@ -249,4 +249,5 @@ hdp.listen = function(...)
 	end
 end
 
-return modem and hdp or nil
+ret = modem and hdp or nil
+return ret
