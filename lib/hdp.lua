@@ -182,7 +182,7 @@ end
 
 function translateMessage(msgCode)
 	if msgCode then
-		for _, obj in ipairs(errors) do
+		for _, obj in pairs(errors) do
 			if obj[1] == msgCode then return obj[2] end
 		end
 	end
