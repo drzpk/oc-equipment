@@ -33,7 +33,7 @@
 	4. Zakończenie lub ponowienie wysyłania w przypadku niedostarczenia wiadomości	
 ]]
 
-local version = "1.1"
+local version = "1.5"
 local args = {...}
 if args[1] == "version_check" then return version end
 
@@ -70,6 +70,15 @@ local errors = {
 	memory = {0x133, "Za malo pamieci RAM"}
 }
 
+-- tryb debugowania
+local debugMode = false
+
+local function debugPrint(...)
+	if debugMode then
+		print(os.date():sub(-8) .. " - ", ...)
+	end
+end
+
 local function checkPort(port)
 	return type(port) == "number" and port > 0 and port < 65535
 end
@@ -87,28 +96,40 @@ function setModem(newModem)
 	end
 end
 
+function setDebug(deb)
+	debugMode = deb
+end
+
 function send(localPort, port, ...)
+	debugPrint("1. wysylanie wiadomosci (hdp): ", serial.serialize(...))
 	os.sleep(delay)
 	modem.broadcast(port, localPort, code.hdp)
 	local resp = receiveMessage(localPort)
+	debugPrint("1. odpowiedz: ", serial.serialize(resp))
 	if resp and resp[7] and resp[7] == code.echo and checkPort(resp[6]) then
 		os.sleep(delay)
 		local message = serial.serialize(table.pack(...))
 		local amount = math.ceil(message:len() / MTU)
+		debugPrint("2. wysylanie wiadomosci (length)")
 		modem.send(resp[3], resp[6], localPort, code.length, message:len())
 		resp = receiveMessage(localPort)
+		debugPrint("2. odpowiedz: ", serial.serialize(resp))
 		if resp and resp[7] and checkPort(resp[6]) then
 			if resp[7] == code.ok then
 				for attempt = 1, maxAttempts do
+					debugPrint("3. attempt: ", attempt)
 					local segment = 0
 					repeat
 						segment = segment + 1
 						os.sleep(delay)
+						debugPrint("wyslano segment: ", segment, "/" .. tostring(amount))
 						modem.send(resp[3], resp[6], localPort, code.segment, message:sub(((segment - 1) * MTU) + 1, segment * MTU))
 					until segment == amount
 					os.sleep(delay)
+					debugPrint("4. wysylanie wiadomosci (finish)")
 					modem.send(resp[3], resp[6], localPort, code.finish)
 					resp = receiveMessage(localPort)
+					debugPrint("4. odpowiedz: ", serial.serialize(resp))
 					if resp and resp[7] and checkPort(resp[6]) then
 						if resp[7] == code["end"] then
 							return true
@@ -141,16 +162,20 @@ end
 
 function receive(port)
 	local msg = receiveMessage(port)
+	debugPrint("2. odebrano wiadomosc: ", serial.serialize(msg))
 	if msg and msg[7] and checkPort(msg[6]) and type(msg[8]) == "number" then
 		if msg[7] == code.length then
 			os.sleep(delay)
 			if msg[8] < computer.freeMemory() + 1024 * 10 then
+				debugPrint("2. wysylanie wiadomosci (ok)")
 				modem.send(msg[3], msg[6], port, code.ok)
 				local length = msg[8]
 				for attempt = 1, maxAttempts do
+					debugPrint("3. attempt: ", attempt)
 					local data = ""
 					repeat
 						msg = receiveMessage(port)
+						debugPrint("4. odebrano segment: ", serial.serialize(msg))
 						if msg and msg[7] and checkPort(msg[6]) and msg[7] == code.segment then
 							data = data .. msg[8] or ""
 						elseif not msg then
@@ -161,9 +186,11 @@ function receive(port)
 					until msg[7] == code.finish
 					os.sleep(delay)
 					if data:len() == length then
+						debugPrint("4. wysylanie wiadomosci (end)")
 						modem.send(msg[3], msg[6], port, code["end"])
-						return true, {"hdp_message", msg[2], msg[3], msg[4], msg[5] , table.unpack(serial.unserialize(data) or {})}
+						return true, {"hdp_message", msg[2], msg[3], msg[4], msg[5], table.unpack(serial.unserialize(data) or {})}
 					else
+						debugPrint("4. wysylanie wiadomosci (reply)")
 						modem.send(msg[3], msg[6], port, code.reply)
 					end
 				end
@@ -190,6 +217,11 @@ function translateMessage(msgCode)
 end
 
 --[[
+Przełącza tryb debugowania
+	@deb: true/false
+]]
+hdp.setDebug = setDebug
+--[[
 Ustawia modem, z którego będą wysyłane wiadomości
 	@newModem: modem
 ]]
@@ -207,7 +239,7 @@ hdp.send = function(port, ...)
 	local localPort = 0
 	repeat
 		localPort = math.random(10000, 60000)
-	until localPort ~= port and not modem.isOpen(port)
+	until localPort ~= port and not modem.isOpen(localPort)
 	modem.open(localPort)
 	local status, code = send(localPort, port, ...)
 	modem.close(localPort)
@@ -226,8 +258,10 @@ hdp.receive = function(port, timeout)
 	local isOpen = modem.isOpen(port)
 	if not isOpen then modem.open(port) end
 	local e = {event.pull(timeout, "modem_message", modem.address, nil, port)}
+	debugPrint("1. odebrano wiadomosc: ", serial.serialize(e))
 	if #e > 0 and e[7] and e[7] == code.hdp then
 		os.sleep(delay)
+		debugPrint("1. wyslano odpowiedz (echo)")
 		modem.send(e[3], e[6], port, code.echo)
 		status, content = receive(port)
 	end
@@ -236,11 +270,15 @@ hdp.receive = function(port, timeout)
 end
 --[[
 Nasłuchuje wiadomości w tle. Użyj jako drugi parametr w funkcji event.listen.
+Funkcja przyjmuje wiadomości typu "modem_message"; po zakończonym przetwarzaniu
+generuje wiadomość typu "hdp_message".
 ]]
 hdp.listen = function(...)
 	local e = {...}
 	if e[7] and e[7] == code.hdp then
+		debugPrint("1. odebrano wiadomosc: ", serial.serialize(e))
 		os.sleep(delay)
+		debugPrint("1. wyslano odpowiedz (echo)")
 		modem.send(e[3], e[6], e[4], code.echo)
 		status, content = receive(e[4])
 		if status then
