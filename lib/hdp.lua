@@ -33,7 +33,7 @@
 	4. Zakończenie lub ponowienie wysyłania w przypadku niedostarczenia wiadomości	
 ]]
 
-local version = "1.5"
+local version = "1.6"
 local args = {...}
 if args[1] == "version_check" then return version end
 
@@ -43,7 +43,7 @@ local event = require("event")
 local serial = require("serialization")
 
 local MTU = 6144 -- wielkość segmentu danych
-local delay = 0.3 -- opóźnienie pomiędzy segmentami
+local delay = 0.1 -- opóźnienie pomiędzy segmentami
 local maxTimeout = 2 -- maksymalny czas oczekiwania
 local maxAttempts = 2 -- ilość ponowień wysłania wiadomości
 
@@ -102,12 +102,10 @@ end
 
 function send(localPort, port, ...)
 	debugPrint("1. wysylanie wiadomosci (hdp): ", serial.serialize(...))
-	os.sleep(delay)
 	modem.broadcast(port, localPort, code.hdp)
 	local resp = receiveMessage(localPort)
 	debugPrint("1. odpowiedz: ", serial.serialize(resp))
 	if resp and resp[7] and resp[7] == code.echo and checkPort(resp[6]) then
-		os.sleep(delay)
 		local message = serial.serialize(table.pack(...))
 		local amount = math.ceil(message:len() / MTU)
 		debugPrint("2. wysylanie wiadomosci (length)")
@@ -125,7 +123,6 @@ function send(localPort, port, ...)
 						debugPrint("wyslano segment: ", segment, "/" .. tostring(amount))
 						modem.send(resp[3], resp[6], localPort, code.segment, message:sub(((segment - 1) * MTU) + 1, segment * MTU))
 					until segment == amount
-					os.sleep(delay)
 					debugPrint("4. wysylanie wiadomosci (finish)")
 					modem.send(resp[3], resp[6], localPort, code.finish)
 					resp = receiveMessage(localPort)
@@ -165,7 +162,6 @@ function receive(port)
 	debugPrint("2. odebrano wiadomosc: ", serial.serialize(msg))
 	if msg and msg[7] and checkPort(msg[6]) and type(msg[8]) == "number" then
 		if msg[7] == code.length then
-			os.sleep(delay)
 			if msg[8] < computer.freeMemory() + 1024 * 10 then
 				debugPrint("2. wysylanie wiadomosci (ok)")
 				modem.send(msg[3], msg[6], port, code.ok)
@@ -184,7 +180,6 @@ function receive(port)
 							return false, errors.incorrect[1]
 						end
 					until msg[7] == code.finish
-					os.sleep(delay)
 					if data:len() == length then
 						debugPrint("4. wysylanie wiadomosci (end)")
 						modem.send(msg[3], msg[6], port, code["end"])
@@ -260,7 +255,6 @@ hdp.receive = function(port, timeout)
 	local e = {event.pull(timeout, "modem_message", modem.address, nil, port)}
 	debugPrint("1. odebrano wiadomosc: ", serial.serialize(e))
 	if #e > 0 and e[7] and e[7] == code.hdp then
-		os.sleep(delay)
 		debugPrint("1. wyslano odpowiedz (echo)")
 		modem.send(e[3], e[6], port, code.echo)
 		status, content = receive(port)
