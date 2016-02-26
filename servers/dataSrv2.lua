@@ -59,7 +59,7 @@ else
 	modem = component.modem
 end
 
-local wersja = "2.3"
+local wersja = "2.4"
 
 local argss, optionss = shell.parse(...)
 if argss[1] == "version_check" then return wersja end
@@ -81,7 +81,8 @@ local colors =
 	gray = 0xbebebe,
 	black = 0x000000,
 	white = 0xffffff,
-	cyan = 0x66ccff
+	cyan = 0x66ccff,
+	orange = 0xffa500
 }
 
 -- Zapytania do serwera
@@ -137,6 +138,11 @@ end
 
 local function checkDisks()
 	local disks = configuration[1]
+	if #disks < 1 then
+		setColor(colors.orange)
+		term.write("\n >>> BRAK ZAINSTALOWANYCH DYSKÓW! <<<")
+		return false
+	end	
 	local removeList = {}
 	for i = 1, #disks do
 		if not component.proxy(disks[i]) then
@@ -152,6 +158,7 @@ local function checkDisks()
 		end
 		saveConfig()
 	end
+	return true
 end
 
 local function logs(add, text)
@@ -224,11 +231,16 @@ local function messageProc(...)
 				debugLog("Zapytanie: " .. serial.serialize(msg))
 			end
 			if  #msg > 1 and msg[2]:sub(1, 1) == "/" then msg[2] = msg[2]:sub(2, msg[2]:len()) end
-			checkDisks()
+			if not checkDisks() then
+				hdp.send(input[6], port, serial.serialize({respCode.failed}))
+				logs(input[3], "Obsłużenie zapytania jest niemożliwe")
+				return
+			end
 			if msg[1] == reqCode.file then
 				if #msg == 3 or #msg == 2 then
 					-- (reqCode.file, ścieżka, zawartość)
 					local disks = configuration[1]
+
 					local removed = false
 					for i = 1, #disks do
 						local path = "/mnt/" .. disks[i]:sub(1, 3) .. "/"..msg[2]
@@ -566,6 +578,10 @@ local function main()
 	term.write("Serwer danych    wersja " .. wersja)
 	setColor(colors.gray)
 	term.write("\n\nAby rozpocząć wpisywanie komendy, naciśnij przycisk [Enter]")
+	if #configuration[1] < 1 then
+		setColor(colors.orange)
+		term.write("\n\n >>> UWAGA: nie dodano żadnych dysków, serwer nie będzie działał właściwie! <<<")
+	end
 	while working do
 		if print_buffer:len() > 1 then
 			setColor(colors.gray)
