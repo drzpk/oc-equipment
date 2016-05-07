@@ -68,7 +68,7 @@ local hdp = require("hdp")
 local serial = require("serialization")
 local fs = require("filesystem")
 
-local wersja = "2.1"
+local wersja = "2.2"
 
 local aa, bb = require("shell").parse(...)
 if aa[1] == "version_check" then return wersja end
@@ -225,9 +225,9 @@ end
 function dsapi.remove(port, path)
 	local r, l = getSegments(port, path)
 	if r then
-		for i = 1, #list do
+		for i = 1, #l do
 			os.sleep(0.5)
-			local s, c = doWrite(port, subpath .. "/" .. list[i], nil)
+			local s, c = doWrite(port, subpath .. "/" .. l[i], nil)
 			if not s then return false, c end
 		end
 		return true
