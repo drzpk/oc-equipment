@@ -9,7 +9,7 @@
 	{"colorutils","none","https://bitbucket.org/Aranthor/oc_equipment/raw/master/lib/colorutils.lua","Narzędzia do konwersji kolorow (dawniej zalezność gfxbuffer, aktualnie brak zastosowania)","Gopher",nil,true,nil,nil},
 	{"default-style","none","https://bitbucket.org/Aranthor/oc_equipment/raw/master/lib/default.gss","Domyślny motyw do gml","Gopher",nil,true,nil,"default.gss"},
 	{"dark-style","none","https://bitbucket.org/Aranthor/oc_equipment/raw/master/lib/dark.gss","Ciemny motyw do gml","Aranthor",nil,true,nil,"dark.gss"},
-	{"hdp","2.0","https://bitbucket.org/Aranthor/oc_equipment/raw/master/lib/hdp.lua","Protokół sieciowy","Aranthor",nil,true,nil,nil},
+	{"hdp","2.1","https://bitbucket.org/Aranthor/oc_equipment/raw/master/lib/hdp.lua","Protokół sieciowy","Aranthor",nil,true,nil,nil},
 	{"sgcx-legacy","0.3.7","https://bitbucket.org/Aranthor/oc_equipment/raw/ae1a46c7676b5ef0c3aa028bdad0ef908acc7b1e/stargate/sgcx.lua","Stara wersja sterownika wrót (dla ekranow 2 poziomu)","Aranthor",{"gml","gfxbuffer","default-style"},nil,nil,nil,true},
 	{"irisAuth-legacy","1.7","https://bitbucket.org/Aranthor/oc_equipment/raw/ae1a46c7676b5ef0c3aa028bdad0ef908acc7b1e/stargate/irisAuth.lua","Stara wersja programu do zdalnego otwierania przesłony wrót (obsługująca sgcx-legacy)","Aranthor",nil,nil,nil,nil,true},
 	{"sgcx","0.4.0","https://bitbucket.org/Aranthor/oc_equipment/raw/master/stargate/sgcx.lua","Sterownik gwiezdnych wrót","Aranthor",{"gml","gfxbuffer","default-style","dark-style"},nil,nil,nil},

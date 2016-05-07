@@ -56,7 +56,7 @@
 	}
 ]]
 
-local version = "2.0"
+local version = "2.1"
 local major_version = 2
 local args = {...}
 if args[1] == "version_check" then return version end
@@ -94,7 +94,7 @@ local errors = {
 	incorrect = {0x132, "Niepoprawna skladnia wiadomosci"},
 	memory = {0x133, "Za malo pamieci RAM"},
 	incompatibleH = {0x134, "Używana wersja protokołu przestarzała"},
-	incompatibleL = {0x134, "Host docelowy używa przestarzałej wersji protokołu"}
+	incompatibleL = {0x135, "Host docelowy używa przestarzałej wersji protokołu"}
 }
 
 -- tryb debugowania
@@ -222,6 +222,63 @@ function send(localPort, port, ...)
 	return false, errors.incorrect[1]
 end
 
+function send2(localPort, port, ...)
+	debugPrint("1. wysylanie wiadomosci (hdp): ", serial.serialize(...))
+	modem.broadcast(port, localPort, code.hdp)
+	local resp = receiveMessage(localPort)
+	debugPrint("1. odpowiedz: ", serial.serialize(resp))
+	if resp and resp[7] and resp[7] == code.echo and checkPort(resp[6]) then
+		local message = serial.serialize(table.pack(...))
+		local amount = math.ceil(message:len() / MTU)
+		debugPrint("2. wysylanie wiadomosci (length)")
+		modem.send(resp[3], resp[6], localPort, code.length, message:len())
+		resp = receiveMessage(localPort)
+		debugPrint("2. odpowiedz: ", serial.serialize(resp))
+		if resp and resp[7] and checkPort(resp[6]) then
+			if resp[7] == code.ok then
+				for attempt = 1, maxAttempts do
+					debugPrint("3. attempt: ", attempt)
+					local segment = 0
+					repeat
+						segment = segment + 1
+						os.sleep(delay)
+						debugPrint("wyslano segment: ", segment, "/" .. tostring(amount))
+						modem.send(resp[3], resp[6], localPort, code.segment, message:sub(((segment - 1) * MTU) + 1, segment * MTU))
+					until segment == amount
+					debugPrint("4. wysylanie wiadomosci (finish)")
+					modem.send(resp[3], resp[6], localPort, code.finish)
+					resp = receiveMessage(localPort)
+					debugPrint("4. odpowiedz: ", serial.serialize(resp))
+					if resp and resp[7] and checkPort(resp[6]) then
+						if resp[7] == code["end"] then
+							return true
+						elseif resp[7] ~= code.reply then
+							return false, errors.incorrect[1]
+						end
+					elseif not resp then
+						return false, errors.timeout[1]
+					elseif not checkPort(resp[6]) or not resp[7] then	
+						return false, errors.incorrect[1]
+					else
+						return false, errors.incorrect[1]
+					end
+				end
+				return false, errors.maxAttempts[1]
+			elseif resp[7] == code.memory then
+				return false, errors.memory[1]
+			else
+				return false, errors.incorrect[1]
+			end
+		elseif not resp then
+			return false, errors.timeout[1]
+		end
+		return false, errors.incorrect[1]
+	elseif not resp then
+		return false, errors.timeout[1]
+	end
+	return false, errors.incorrect[1]
+end
+
 function receive(port)
 	local msg = receiveMessage(port, maxTimeout * 2)
 	debugPrint("2. odebrano wiadomosc: ", serial.serialize(msg))
@@ -283,6 +340,51 @@ function receive(port)
 		end
 		
 		return false, errors.incorrect[1]
+	end
+	return false, errors.incorrect[1]
+end
+
+function receive2(port)
+	local msg = receiveMessage(port)
+	debugPrint("2. odebrano wiadomosc: ", serial.serialize(msg))
+	if msg and msg[7] and checkPort(msg[6]) and type(msg[8]) == "number" then
+		if msg[7] == code.length then
+			if msg[8] < computer.freeMemory() + 1024 * 10 then
+				debugPrint("2. wysylanie wiadomosci (ok)")
+				modem.send(msg[3], msg[6], port, code.ok)
+				local length = msg[8]
+				for attempt = 1, maxAttempts do
+					debugPrint("3. attempt: ", attempt)
+					local data = ""
+					repeat
+						msg = receiveMessage(port)
+						debugPrint("4. odebrano segment: ", serial.serialize(msg))
+						if msg and msg[7] and checkPort(msg[6]) and msg[7] == code.segment then
+							data = data .. msg[8] or ""
+						elseif not msg then
+							return false, errors.timeout[1]
+						elseif msg[7] ~= code.segment and msg[7] ~= code.finish then
+							return false, errors.incorrect[1]
+						end
+					until msg[7] == code.finish
+					if data:len() == length then
+						debugPrint("4. wysylanie wiadomosci (end)")
+						modem.send(msg[3], msg[6], port, code["end"])
+						return true, {"hdp_message", msg[2], msg[3], msg[4], msg[5], table.unpack(serial.unserialize(data) or {})}
+					else
+						debugPrint("4. wysylanie wiadomosci (reply)")
+						modem.send(msg[3], msg[6], port, code.reply)
+					end
+				end
+				return false, errors.maxAttempts[1]
+			else
+				modem.send(msg[3], msg[6], port, code.memory)
+				return false, errors.memory[1]
+			end
+		end
+		return false, error.incorrect[1]
+	elseif not msg then
+		return false, errors.timeout[1]
 	end
 	return false, errors.incorrect[1]
 end
