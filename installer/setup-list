@@ -19,7 +19,7 @@
 	{"hologram-editor","0.60 Beta","https://bitbucket.org/Aranthor/oc_equipment/raw/master/misc/hologram-editor.lua","Edytor hologramów","MoonlightOwl",nil,nil,nil,nil},
 	{"hologram-viewer","0.60 Beta","https://bitbucket.org/Aranthor/oc_equipment/raw/master/misc/hologram-viewer.lua","Wyświetlacz hologramów","MoonlightOwl",nil,nil,nil,nil},
 	{"dataSrv2","2.4","https://bitbucket.org/Aranthor/oc_equipment/raw/master/servers/dataSrv2.lua","Serwer danych","Aranthor",{"hdp"},nil,nil,nil},
-	{"dsapi","2.2","https://bitbucket.org/Aranthor/oc_equipment/raw/master/lib/dsapi.lua","API do serwera danych","Aranthor",{"hdp"},true,nil,nil},
+	{"dsapi","2.3","https://bitbucket.org/Aranthor/oc_equipment/raw/master/lib/dsapi.lua","API do serwera danych","Aranthor",{"hdp"},true,nil,nil},
 	{"dsman","1.0","https://bitbucket.org/Aranthor/oc_equipment/raw/master/servers/dsman.lua","Menedżer serwera danych","Aranthor",{"hdp","dsapi"},nil,nil,nil},
 	{"the_switch","1.0","https://bitbucket.org/Aranthor/oc_equipment/raw/master/servers/the_switch.lua","Serwer przełączników","Aranthor",{"gml","gfxbuffer","default-style","hdp","dsapi"},nil,nil,nil},
 	{"switchRemote","1.0","https://bitbucket.org/Aranthor/oc_equipment/raw/master/servers/switchRemote.lua","Zdalna kontrola serwera przelaczników","Aranthor",nil,nil,nil,nil},
