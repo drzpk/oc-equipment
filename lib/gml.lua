@@ -611,6 +611,7 @@ local function drawTextField(tf)
       term.setCursor(screenX+tf.cursorIndex-tf.scrollIndex,screenY)
       term.setCursorBlink(true)
     end
+	tf.visible=true
   end
 end
 
@@ -1412,6 +1413,7 @@ local function clickListBox(lb,tx,ty,button)
       --but is it valid?
       if ty<=#lb.list then
         lb:select(ty+lb.scrollBar.scrollPos-1)
+	  else
       end
     end
   end
