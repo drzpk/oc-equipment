@@ -1,315 +1,1050 @@
 -- ################################################
--- #                The Guard                     #
+-- #                The Guard  2.0                #
 -- #                                              #
--- #  07.2015                      by: Aranthor   #
+-- #  03.2016                      by: Aranthor   #
 -- ################################################
 
 --[[
-	## Opis programu
+	## Opis programu ##
 		Program służy jako centrum sterowania systemem zabezpieczeń.
-		Pozwala na sterowanie:
-		- alarmem
-		- osłoną
-		- cewkami Tesli
-		- zabezpieczeniami z wykorzystaniem kart magnetycznych (OpenSecurity)
-	## Opis techniczny
-		Działanie programu opiera się na mikrokontrolerach. Programowanie 
-		EEPROM wykonuje się z poziomu guard_ee. Każdy mikrokontroler po 
-		włączeniu wysyła do serwera sygnał informujący o jego dostępności (tak samo jest z serwerem)
-	## Schematy komunikacji (lewa strona - mikrokontroler, prawa strona - serwer)
-	  *Mikrokontroler jest online
-		messages.echo, version --->
-		<--- messages.ok/messages.disable
-	  *Serwer jest online
-		<--- messages.echo
-		messages.echo, version --->
-		<--- messages.ok/messages.disable
-	  *Ustaw kolor
-	    <--- messages.color, strona, kolor, sila, [czas]
-		messages.ok --->
-	  *Czujnik ruchu
-		messages.move, {zdarzenie} --->
-	  *Zdarzenie karty magnetycznej
-	    messages.mag, {zdarzenie} --->
-	  *Alarm
-	    <--- messages.alarm, true/false
-		messages.ok --->
-	  *Adres
-		<--- messages.address, adres
-		messages.address, liczba, pełny adres --->
+		Większość funkcji programu jest realizowana za pomocą moda OpenSecurity.
+		
+		Nowa architektura zakłada podział programu na moduły, które mogą być rozwijane
+		niezależnie. Powoduje to zwiększenie bezpieczeństwa - awaria jednego z
+		modułów nie powoduje przerwania pracy całego systemu.
+		
+	## Opis techniczny ##
+		Poprzednia wersja serwera (1.0) du komunikacji z urządzeniami peryferyjnymi
+		używała innych komputerów z uruchomionymi na nich programami 'micro'.
+		W wersjach wyższych zrezygnowano z tego na rzecz kablowego podłaczenia
+		komponentów. Rozwiązanie takie ma jednak wady: przy domyślnej konfiguracji
+		do najlepszego serwera mogą zostać podłączone maksymalnie 64 moduły, wliczając
+		te na płycie głównej.
+		
+		Jak zostało to już wcześniej wspomniane, program sam w sobie nie będzie
+		posiadał żadnej funkcjonalności. 
+		Wyjątkiem od tej reguły będzie katalog komponentów. Komponenty wpisane do
+		katalogu będą mogły być łatwiej zarządzane, otrzymają również dodatkowe
+		parametry, takie, jak współrzędne czy status.
+		Moduły korzystające z katalogu komponentów będą odporne na nieautoryzowane
+		podłączenie nieznanego komponentu.
+		
+	## Lista dostępnych modułów ##
+		- levels (mod_tg_levels) - obsługa poziomów bezpieczeństwa
+		- logs (mod_tg_logs) - menedżer logów systemowych
+		- io (mod_tg_io) - obsługa wejścia/wyjścia (redstone/project red/network)
+		- auth (mot_tg_auth) - autoryzacja użytkownika za pomocą kart i terminali
+		- motion (mod_tg_turrets) - obsługa detektorów ruchu i wieżyczek
+		
+	## Architektura modułów ##
+		Aby moduł został zaakceptowany przez serwer, musi zwracać tablicę
+		asocjacyjną zawierającą następujące elementy:
+		- name:string - nazwa modułu
+		- version:string - wersja modułu
+		- id: number - unikalny identyfikator modułu
+		- apiLevel:number - wersja serwera
+		- shape:string - kształt okna modułu ("normal", "landscape")
+		- actions:table - tablica zawierająca dostępne akcje
+		- setUI(window) - tworzy gotowy interfejs użytkownika, funkcja wywoływana po start()
+		- start(server:table):function - funkcja wywoływana w momencie startu
+		  modułu, jako parametr podaje się interfejs serwera
+		- stop(server_table):function - funkcja wywoływana w momencie wyłączania modułu
+		- pullEvent(...):function - obsługa zarejestrowanych wydarzeń
+		
+		Akcje to zadania, które może wykonać dany moduł. Akcje udostępnione
+		przez jeden moduł są globalne, czyli może je zobaczyć oraz wykonać
+		każdy inny moduł. Każda akcja to tablica składająca się z następujących
+		elementów:
+		[id:number - identyfikator akcji, unikalny w skali modułu]
+		{
+			name:string - nazwa akcji
+			type:string - typ akcji
+			desc:string - opis akcji
+			p1type:string - typ pierwszego parametru
+			p2type:string - typ drugiego parametru
+			p1desc:sting - opis pierwszego parametru
+			p2desc:string - opis drugiego parametru
+			exec:function - funkcja wykonująca akcję
+			hidden:boolean - czy akcja ma być ukryta
+		}
+		Typy akcji używane są dla ułatwienia obsługi (np. dany moduł może
+		potrzebować tylko akcji jednego typu). Funkcja akcji może przyjąć do
+		2 parametrów dowolnego typu.
+		
+		Kategorie akcji są dowolne. Należy jednak wziąć pod uwagę, że inny moduł
+		może chcieć wykonywać akcje tylko jednego typu, dlatego zaleca się,
+		aby każda akcja była przypisana do jednej z następujących kategorii:
+		* CORE - akcje udostępniane przez serwer
+		* LOG - akcje związane z logami
+		* IO - akcje związane z obsługą obwodów elektrycznych
+		* LEVEL - akcje związane z poziomami bezpieczeństwa
+		* AUTH - akcje związane z autoryzacją
+		* TURRET - akcje związane z wieżyczkami i detektorami ruchu
+		
+		Moduł samodzielnie dba o tworzenie i przechowywanie akcji!
+		
+		Oprócz akcji moduł może również obsługiwać event listener. Serwer
+		generuje następujące wydarzenia:
+		* {"components_changed"} - gdy komponent został dodany, usunięty lub zmodyfikowany
+		
+	## Struktura zmiennych konfiguracyjnych ##
+		settings: { - globalne ustawienia programu (plik /etc/the_guard/config.conf)
+			port: number - port używany przez moduły do wykonywania połączeń, moduły mogą zignorować to ustawienie,
+			backupPort: number - port serwera danych, używany do kopii zapasowych i przywracania danych,
+			debugMode:bool - stan trybu debugowania,
+			dark:bool - czy używany jest ciemny motyw,
+			saveOnExit:bool - czy konfiguracja ma być zapisywana ponownie przy zamknięciu
+		}
+		
+		modules: { - informacje o modułach (plik /etc/the_guard/modules.conf)
+			[zone:number] { - zajmowana strefa
+				name:string - nazwa modułu*
+				file:string - nazwa pliku
+				version:string - wersja modułu*
+				shape:string - wymiary modułu*
+			}
+			...
+		}
+		
+		components: { - lista zainstalowanych komponentów (plik /etc/the_guard/components.conf)
+			{
+				address:string - adres komponentu
+				type: string - typ komponentu
+				name:string - nazwa
+				state:bool - status komponentu (włączony/wyłączony)
+				x: number - współrzędna X komponentu (opcjonalnie)
+				y: number - współrzędna Y komponentu (opcjonalnie)
+				z: number - współrzędna Z komponentu (opcjonalnie)
+			}
+			...
+		}
+		
+		passwd:string - przechowuje hasło główne programu zakodowane w SHA-256
+		(plik /etc/the_guard/passwd.bin)
+		
+		Pozostałe moduły przechowują swoje pliki konfiguracyjne w folderze
+		'/etc/the_guard/modules'. Każdy moduł posiada domyślnie 1 plik
+		konfiguracyjny w formacie <nazwa_modułu>.conf.
+		
+		*Pozycje oznaczone gwiazdką nie są zapisywane do plików konfiguracyjnych
+		
+	## Interfejs ##
+		Program udostępnia interfejs umożliwiający modułom działanie.
+		Wszystkie funkcje interfejsu są opisane niżej w kodzie.
+			
+		Okno serwera jest podzielone na 5 stref. 4 pierwsze strefy mają
+		takie same wymiary. Piąta strefa jest zwykle przeznaczona na moduł
+		logów. Współrzędne elementów GUI modułów są względne do początku
+		strefy. Moduł wychodzący poza strefę zostanie wyłączony.
 ]]
 
-local version = "1.0"
-local microVersion = "1"
+local version = "2.0"
+local apiLevel = 2
 local args = {...}
 
 if args[1] == "version_check" then return version end
 
+local computer = require("computer")
 local component = require("component")
 local event = require("event")
 local serial = require("serialization")
+local uni = require("unicode")
 local fs = require("filesystem")
+local term = require("term")
 local gml = require("gml")
-local sides = require("sides")
-local colors = require("colors")
 local dsapi = require("dsapi")
+local colors = require("colors")
 if not component.isAvailable("modem") then
 	io.stderr:write("Program wymaga do dzialania karty sieciowej")
 	return
 end
 local modem = component.modem
-if not (component.isAvailable("data") or component.isAvailable("os_datablock")) then
-	io.stderr:write("Program wymaga do dzialania karty lub bloku danych (data card, data block)")
+
+local data = nil
+if component.isAvailable("data") then
+	data = component.data
+end
+if not data then
+	io.stderr:write("Serwer wymaga do dzialania karty danych 2 poziomu")
+	return
+elseif not data.encrypt then
+	io.stderr:write("Zamontowana karta danych musi być przynajmniej 2 poziomu")
 	return
 end
-local datacard = component.data or component.os_datablock
 
-local resolution = {160, 50}
-local screen = nil
-local screen2 = component.screen
-local gpu = component.gpu
-local GMLbgcolor = nil
-local logstr = ""
-local logtab = {}
-local tid = nil
-local ctid = nil
-local resplist = {}
-local counter = 0
-local silent = false
-local readers = {}
+local resolution = {component.gpu.getResolution()}
+if not resolution[1] == 160 or not resolution[2] == 50 then
+	io.stderr:write("Serwer wymaga rozdzielczości ekranu 160x50 (obecna to " .. tostring(resolution[1]) .. "x" .. tostring(resolution[2]))
+	return
+end
 
-local data = {}
-local cards = {}
-local micros = {}
-local creatures = {}
+-- # Konfiguracja
+local passwd = nil -- hasło główne
+local settings = {} -- ustawienia
+local components = {} -- zainstalowane komponenty
+local modules = {} -- dostępne moduły
+local bmodules = {} -- uszkodzone moduły
+local pmodules = {} -- moduły oczekujące na instalację
+local token = nil -- identyfikator urządzenia
 
-local gui = nil
-local logList = nil
-local detector = {}
-local magnetic = {}
-local switch = {}
+local configDir = "/etc/the_guard"
+local modulesDir = "/usr/bin/mod_tg"
 
-local messages = {
-	echo = 0x50f,
-	ok = 0x5ea,
-	color = 0x9bc,
-	move = 0x19a6,
-	mag = 0xb33d,
-	alarm = 0x79ae,
-	address = 0x812d,
-	disable = 0x1a92
+-- # Deklaracje funkcji
+local silentLog = nil
+local GMLmessageBox = nil
+local GMLcontains = nil
+local GMLgetAppliedStyles = nil
+local GMLextractProperty = nil
+local GMLextractProperties = nil
+local GMLfindStyleProperties = nil
+local GMLcalcBody = nil
+
+-- # Strefy
+local zones = {
+	[1] = {1, 1},
+	[2] = {70, 1},
+	[3] = {1, 21},
+	[4] = {70, 21},
+	[5] = {1, 41},
+	normal = {68, 19},
+	landscape = {158, 10}
 }
 
-local function beep()
-	component.computer.beep(1500, 0.05)
-	os.sleep(0.05)
-	component.computer.beep(1500, 0.05)
-	os.sleep(0.05)
-	component.computer.beep(1500, 0.05)
-end
+-- # Zmienne
+local gui = nil
+local mod = {}
+local intlog = ""
+local lastlog = {}
+local loglines = 0
 
-local function loadConfig()
-	if fs.exists("/etc/the_guard/config.cfg") then
-		local f = io.open("/etc/the_guard/config.cfg", "r")
-		data = serial.unserialize(datacard.decode64(f:read())) or {}
-		f:close()
-		local f2 = io.open("/etc/the_guard/cards", "r")
-		cards = serial.unserialize(datacard.decode64(f2:read())) or {}
-		f2:close()
-	end
-	screen = component.proxy(data.screen or "") or screen2
-	gpu.bind(screen.address)
-	if data.port == nil then data.port = math.random(60000, 65533) end
-	if data.password == nil then
-		local g = gml.create("center", "center", 46, 7, gpu)
-		g:addLabel(2, 1, 43, "Brak hasła głównego, podaj nowe hasło:")
-		local field = g:addTextField("center", 3, 28)
-		g:addButton(30, 5, 8, 1, "OK", function()
-			if field["text"] ~= "" then
-				data.password = datacard.md5(field["text"])
-				g:close()
+-- # Interfejs dla modułów
+local interface = {}
+local actions = {}
+local events = {}
+local eventsready = false
+local revents = {}
+local backgroundListener = nil
+
+--[[
+Ładuje plik konfiguracyjny modułu
+	@mod - moduł wywołujący
+	RET: tablica asocjacyjna z konfiguracją
+]]
+interface.loadConfig = function(mod)
+	local path = fs.concat("/etc/the_guard/modules", mod.name .. ".conf")
+	if fs.isDirectory(path) then
+		fs.remove(path)
+	elseif fs.exists(path) then
+		local f = io.open(path, "r")
+		if f then
+			local s, r = pcall(serial.unserialize, f:read("*a"))
+			if s then
+				f:close()
+				return r
 			else
-				beep()
+				f:close()
+				return {}
 			end
-		end)
-		g:run()
+		else
+			return {}
+		end
+	else
+		return {}
 	end
-	data.detector = data.detector or {}
-	data.detector.list = data.detector.list or {}
-	data.magnetic = data.magnetic or {}
-	data.magnetic.list = data.magnetic.list or {}
 end
 
-local function saveConfig()
-	if not fs.isDirectory("/etc/the_guard") then fs.makeDirectory("/etc/the_guard") end
-	local f = io.open("/etc/the_guard/config.cfg", "w")
-	data.modemAddress = modem.address
-	f:write(datacard.encode64(serial.serialize(data)))
-	f:close()
-	f = io.open("/etc/the_guard/cards", "w")
-	f:write(datacard.encode64(serial.serialize(cards)))
-	f:close()
+--[[
+Zapisuje konfigurację do pliku
+	@mod - moduł wywołujący
+	@tab - tablica z konfiguracją
+]]
+interface.saveConfig = function(mod, tab)
+	if not fs.isDirectory("/etc/the_guard/modules") then
+		fs.makeDirectory("/etc/the_guard/modules")
+	end
+	if type(tab) == "table" then
+		local path = fs.concat("/etc/the_guard/modules", mod.name .. ".conf")
+		if fs.isDirectory(path) then
+			fs.remove(path)
+		else
+			local t = serial.serialize(tab)
+			if t then
+				local f = io.open(path, "w")
+				if f then
+					f:write(t)
+					f:close()
+				end
+			end
+		end
+	end
 end
 
-local function GMLcontains(element,x,y)
-  local ex, ey, ew, eh = element.posX, element.posY, element.width, element.height
-  return x >= ex and x <= ex + ew - 1 and y >= ey and y <= ey + eh - 1
+--[[
+Zwraca moduł
+	@mod - moduł wywołujący
+	@name - nazwa żądanego modułu
+	RET: moduł
+]]
+interface.getModule = function(mod, name)
+	for _, t in pairs(modules) do
+		if t.name == name then return t end
+	end
+	return nil
 end
 
-function GMLgetAppliedStyles(element)
-  local styleRoot=element.style
-  assert(styleRoot)
-
-  local depth, state, class, elementType = element.renderTarget.getDepth(), element.state or "*", element.class or "*", element.type
-
-  local nodes = {styleRoot}
-  local function filterDown(nodes, key)
-    local newNodes = {}
-    for i = 1, #nodes do
-      if key ~= "*" and nodes[i][key] then
-        newNodes[#newNodes + 1] = nodes[i][key]
-      end
-      if nodes[i]["*"] then
-        newNodes[#newNodes + 1] = nodes[i]["*"]
-      end
-    end
-    return newNodes
-  end
-  nodes = filterDown(nodes, depth)
-  nodes = filterDown(nodes, state)
-  nodes = filterDown(nodes, class)
-  nodes = filterDown(nodes, elementType)
-  return nodes
+--[[
+Rejestruje nowe wydarzenie
+	@mod - moduł wywołujący
+	@name - nazwa wydarzenia
+]]
+interface.registerEvent = function(mod, name)
+	if not events[mod.name] then events[mod.name] = {} end
+	for _, n in pairs(events[mod.name]) do
+		if n == name then return end
+	end
+	table.insert(events[mod.name], name)
+	local registered = false
+	for _, s in pairs(revents) do
+		if s == name then
+			registered = true
+			break
+		end
+	end
+	if not registered then
+		table.insert(revents, name)
+		if eventsready then
+			event.listen(name, backgroundListener)
+		end
+	end
 end
 
-function GMLextractProperty(element, styles, property)
-  if element[property] then
-    return element[property]
-  end
-  for j = 1, #styles do
-    local v = styles[j][property]
-    if v ~= nil then
-      return v
-    end
-  end
+--[[
+Wyrejestrowuje wydarzenie
+	@mod - moduł wywołujący
+	@name - nazwa wydarzenia
+]]
+interface.unregisterEvent = function(mod, name)
+	if events[mod.name] then
+		for i, s in pairs(events[mod.name]) do
+			if s == name then
+				table.remove(events[mod.name], i)
+				break
+			end
+		end
+		local left = false
+		for _, t in pairs(events) do
+			for _, t2 in pairs(t) do
+				if t2 == name then
+					left = true
+					break
+				end
+			end
+		end
+		if not left then
+			for i, s in pairs(revents) do
+				if s == name then
+					table.remove(revents, i)
+					event.ignore(name, backgroundListener)
+					break
+				end
+			end
+		end
+	end
 end
 
-function GMLmessageBox(message, buttons)
-  local buttons = buttons or {"cancel", "ok"}
-  local choice
-  local lines = {}
-  message:gsub("([^\n]+)", function(line) lines[#lines+1] = line end)
-  local i = 1
-  while i <= #lines do
-    if #lines[i] > 26 then
-      local s, rs = lines[i], lines[i]:reverse()
-      local pos =- 26
-      local prev = 1
-      while #s > prev + 25 do
-        local space = rs:find(" ", pos)
-        if space then
-          table.insert(lines, i, s:sub(prev, #s-space))
-          prev = #s - space + 2
-          pos =- (#s - space + 28)
-        else
-          table.insert(lines, i, s:sub(prev, prev+25))
-          prev = prev + 26
-          pos = pos - 26
-        end
-        i = i + 1
-      end
-      lines[i] = s:sub(prev)
-    end
-    i = i + 1
-  end
-
-  local gui = gml.create("center", "center", 30, 6 + #lines, gpu)
-  local labels = {}
-  for i = 1, #lines do
-    labels[i] = gui:addLabel(2, 1 + i, 26, lines[i])
-  end
-  local buttonObjs = {}
-  local xpos = 2
-  for i = 1, #buttons do
-    if i == #buttons then xpos =- 2 end
-    buttonObjs[i]=gui:addButton(xpos, -2, #buttons[i] + 2, 1, buttons[i], function() choice = buttons[i] gui.close() end)
-    xpos = xpos + #buttons[i] + 3
-  end
-
-  gui:changeFocusTo(buttonObjs[#buttonObjs])
-  gui:run()
-  return choice
+--[[
+Zwraca listę akcji
+	@mod - moduł wywołujący
+	@type:string or nil - filtr typu akcji
+	@target:string or nil - filtr modułu
+	@name:string or nil - filtr nazwy
+	RET: <lista akcji, liczba akcji>
+]]
+interface.getActions = function(mod, type, target, name)
+	local ac = {}
+	local amount = 0
+	for m, t in pairs(actions) do
+		if (target and m == target) or (not target) then
+			for id, at in pairs(t) do
+				if (type and (at.type == type or at.type == "")) or (not type) then
+					if (name and at.name:find(name)) or (not name) then
+						ac[id] = at
+						amount = amount + 1
+					end
+				end
+			end
+		end
+	end
+	return ac, amount
 end
 
-local function addTitle()
-	local title = {
+--[[
+Zwraca tablicę z zarejestrowanymi komponentami
+	@mod - moduł wywołujący
+	@name - nazwa kategorii komponentu
+	RET: <tablica z komponentami>
+]]
+interface.getComponentList = function(mod, name)
+	local ret = {}
+	for _, t in pairs(components) do
+		if t.state then
+			if name then
+				if name:lower() == t.type:lower() then
+					table.insert(ret, t)
+				end
+			else
+				table.insert(ret, t)
+			end
+		end
+	end
+	return ret
+end
+
+--[[
+Wyszukuje zarejestrowany komponent na podstawie podanej części adresu
+	@mod - moduł wywołujący
+	@pattern - część adresu
+	RET: <znalezione komponenty:table>
+]]
+interface.findComponents = function(mod, pattern)
+	local ret = {}
+	local pat = pattern and string.gsub(pattern, "-", "%%-") or ""
+	for _, t in pairs(components) do
+		if t.address:find(pat) then
+			table.insert(ret, t)
+		end
+	end
+	return ret
+end
+
+--[[
+Wywołuje daną akcję
+	@mod - moduł wywołujący
+	@id - identyfikator akcji
+	@p1 - parametr 1. lub nil
+	@p2 - parametr 2. lub nil
+	@silent:boolean - nie wyświetlanie komunikatów o błędach
+	RET: <wartość zwracana przez akcję> or nil
+]]
+interface.call = function(mod, id, p1, p2, silent)
+	local a = interface.actionDetails(mod, id)
+	if a then
+		local et = ""
+		if a.p1type and type(p1) ~= a.p1type then
+			et = type(p1) .. " ~= " .. a.p1type
+		elseif a.p2type and type(p2) ~= a.p2type then
+			if et:len() > 0 then
+				et = et .. ", " 
+			end
+			et = et .. type(p2) .. " ~= " .. a.p2type
+		else
+			local s, r = pcall(a.exec, p1, p2)
+			if s then
+				return r
+			else
+				silentLog("interface.call", "nie udało się wywołać akcji " .. tostring(id) .. ": " .. r)
+				if not silent then
+					GMLmessageBox(gui, "Nie udało się wywołać akcji " .. tostring(id), {"OK"})
+				end
+				return nil
+			end
+		end
+		if et:len() > 0 then
+			local m = "Do akcji podano nieprawidłowe parametry. ("
+			silentLog("interface.call", m .. et .. ")")
+			if not silent then
+				GMLmessageBox(gui, m .. et .. ")", {"OK"})
+			end
+		end
+	else
+		silentLog("interface.call", "akcja " .. tostring(id) .. " nie została odneleziona")
+		if not silent then
+			GMLmessageBox(gui, "Nie odnalziono akcji " .. tostring(id) .. "!", {"OK"})
+		end
+	end
+	return nil
+end
+
+--[[
+Zwraca tablicę danej akcji
+	@mod - moduł wywołujący
+	@id - identyfikator akcji
+	RET: <tablica akcji> or nil
+]]
+interface.actionDetails = function(mod, id)
+	for _, t in pairs(actions) do
+		for i, a in pairs(t) do
+			if i == id then
+				return a
+			end
+		end
+	end
+	return nil
+end
+
+--[[
+Dodaje nowy log
+	@mod - moduł wywołujący
+	@msg - wiadomość do wyświetlenia
+]]
+interface.log = function(mod, msg)
+	silentLog(mod.name, msg)
+end
+
+--[[
+Wyświetla okno wiadomości
+	@mod - moduł wywołujący
+	@message - wiadomość do wyświetlenia
+	@buttons - tablica z przyciskami
+	RET: <wybrany przycisk>
+]]
+interface.messageBox = function(mod, message, buttons)
+	local r, e = pcall(GMLmessageBox, gui, message, buttons)
+	if r then
+		return e
+	else
+		silentLog("interface.messageBox", "nie udało się wyświetlić wiadomości: " .. e)
+		return nil
+	end
+end
+
+--[[
+Wyświetla okno dialogowe wyboru akcji
+	@mod - moduł wywołujący
+	@type:string or nil - kategoria akcji
+	@target:string or nil - moduł udostępniający akcje
+	@fill:table or nil - tablica asocjacyjne z gotowym wypełnieniem ({[id:number],[p1],[p2]})
+	@hidden:boolean - czy ukryte akcje mają być wyświetlane
+	RET:<wybór użytkownika (patrz parametr fill)> or nil
+]]
+interface.actionDialog = function(mod, typee, target, fill, hidden)
+	local ac = interface.getActions(mod, typee, target)
+	local sublist = nil
+	local ll = {}
+	local box = nil
+	local rs = {}
+	local ret = {}
+	
+	local function rebuild(l)
+		ll = {}
+		for _, t in pairs(l) do
+			if (hidden and t.hidden) or not t.hidden then
+				table.insert(ll, t.name .. " (" .. t.type:upper() .. ")")
+			end
+		end
+		table.sort(ll)
+		box:updateList(ll)
+	end
+	local function update(id, t)
+		if not id or not t then
+			ret.id = nil
+			for i = 1, 7 do rs[i]:hide() end
+			return
+		end
+		ret.id = id
+		rs[1].text = t.desc:sub(1, 39)
+		rs[1]:show()
+		rs[1]:draw()
+		rs[2]:show()
+		rs[3].text = tostring(id)
+		rs[3]:show()
+		rs[3]:draw()
+		if t.p1type then
+			rs[4].text = string.sub(t.p1desc .. "(" .. t.p1type .. ")", 1, 39)
+			rs[4]:show()
+			rs[4]:draw()
+			rs[5]:show()
+			rs[5]:draw()
+		else
+			rs[4]:hide()
+			rs[5]:hide()
+		end
+		if t.p2type then
+			rs[6].text = string.sub(t.p2desc .. "(" .. t.p2type .. ")", 1, 39)
+			rs[6]:show()
+			rs[6]:draw()
+			rs[7]:show()
+			rs[7]:draw()
+		else
+			rs[6]:hide()
+			rs[7]:hide()
+		end
+	end
+	local function doRefresh(l)
+		local selected = box:getSelected():match("^(.*) %(")
+		if selected then
+			for i, t in pairs(l) do
+				if t.name == selected then
+					update(i, t)
+					return
+				end
+			end
+		end
+		for i = 1, 7 do rs[i]:hide() end
+	end
+	local function refresh()
+		doRefresh(sublist or ac)
+	end
+	
+	local agui = gml.create("center", "center", 80, 24)
+	agui.style = interface.getStyle(mod)
+	agui:addLabel("center", 1, 18, "Okno wyboru akcji")
+	rs[1] = agui:addLabel(35, 6, 40, "")
+	rs[2] = agui:addLabel(35, 8, 15, "Identyfikator:")
+	rs[4] = agui:addLabel(35, 11, 40, "")
+	rs[6] = agui:addLabel(35, 14, 40, "")
+	local search = agui:addTextField(2, 4, 14)
+	agui:addButton(17, 4, 12, 1, "Szukaj", function()
+		if search.text:len() > 0 then
+			sublist = {}
+			for i, t in pairs(ac) do
+				if t.name:find(search.text) then
+					sublist[i] = t
+				end
+			end
+		else
+			sublist = nil
+		end
+		rebuild(sublist or ac)
+		refresh()
+	end)
+	box = agui:addListBox(2, 6, 28, 14, {})
+	box.onChange = refresh
+	rs[3] = agui:addLabel(51, 8, 10, "")
+	rs[5] = agui:addTextField(38, 12, 20)
+	rs[5].visible = false
+	rs[7] = agui:addTextField(38, 15, 20)
+	rs[7].visible = false
+	agui:addButton(3, 22, 14, 1, "Wyczyść", function()
+		ret.id = nil
+		update()
+	end)
+	agui:addButton(63, 22, 14, 1, "Anuluj", function()
+		agui:close()
+		ret = fill
+	end)
+	agui:addButton(47, 22, 14, 1, "Zatwierdź", function()
+		if not ret.id then
+			agui:close()
+			return
+		end
+		local a = interface.actionDetails(nil, tonumber(rs[3].text))
+		if a then
+			if a.p1type then
+				if a.p1type == "number" then
+					local n = tonumber(rs[5].text)
+					if not n then
+						GMLmessageBox(gui, "Pierwszy parametr musi być liczbą", {"OK"})
+						return
+					end
+					ret.p1 = n
+				elseif rs[5].text:len() == 0 then
+					GMLmessageBox(gui, "Pierwszy parametr nie może być pusty.", {"OK"})
+					return
+				else
+					ret.p1 = rs[5].text
+				end
+			end
+			if a.p2type then 
+				if a.p2type == "number" then
+					local n = tonumber(rs[7].text)
+					if not n then
+						GMLmessageBox(gui, "Drugi parametr musi być liczbą", {"OK"})
+						return
+					end
+					ret.p2 = n
+				elseif rs[7].text:len() == 0 then
+					GMLmessageBox(gui, "Drugi parametr nie może być pusty.", {"OK"})
+					return
+				else
+					ret.p2 = rs[7].text
+				end
+			end
+			agui:close()
+		end
+	end)
+	local function firstFill(id, t)
+		if not id or not t then
+			ret.id = nil
+			for i = 1, 7 do rs[i].hidden = true end
+			return
+		end
+		ret.id = id
+		rs[1].text = t.desc:sub(1, 39)
+		rs[3].text = tostring(id)
+		if t.p1type then
+			rs[4].text = string.sub(t.p1desc .. "(" .. t.p1type .. ")", 1, 39)
+		else
+			rs[4].hidden = true
+			rs[5].hidden = true
+		end
+		if t.p2type then
+			rs[6].text = string.sub(t.p2desc .. "(" .. t.p2type .. ")", 1, 39)
+		else
+			rs[6].hidden = true
+			rs[7].hidden = true
+		end
+	end
+	if fill and fill.id then
+		local a = interface.actionDetails(nil, fill.id)
+		if a then
+			if fill.p1 and type(fill.p1) == "number" then
+				rs[5].text = tostring(fill.p1)
+			else
+				rs[5].text = fill.p1 or ""
+			end
+			if fill.p2 and type(fill.p2) == "number" then
+				rs[7].text = tostring(fill.p2)
+			else
+				rs[7].text = fill.p2 or ""
+			end
+			firstFill(fill.id, a)
+		else
+			firstFill()
+			GMLmessageBox(gui, "Nie znaleziono akcji o podanym identyfikatorze.", {"OK"})
+		end
+	else
+		firstFill()
+	end
+	rebuild(ac)
+	agui:run()
+	return (ret and ret.id) and ret or nil
+end
+
+--[[
+Wyświetla okno dialogowe wyboru komponentu
+	@mod - moduł wywołujący
+	@typee - typ komponentu
+	RET: <adres komponentu> or nil
+]]
+interface.componentDialog = function(mod, typee)
+	local cl = interface.getComponentList(mod, typee)
+	local box, list, chosen = {}, {}, nil
+	local ret = nil
+	
+	local function refreshList()
+		list = {}
+		for _, t in pairs(cl) do
+			local s = string.format("[%s]  %s  %s  (%s, %s, %s)", t.type:upper(), t.address, t.name and t.name:sub(1, 20) or "", t.x and tostring(t.x) or "", t.y and tostring(t.y) or "", t.z and tostring(t.z) or "")
+			table.insert(list, s)
+		end
+		box:updateList(list)
+	end
+	local function update()
+		local sel = box:getSelected()
+		if sel then
+			local found = sel:match("%x+%-%x+%-%x+%-%x+%-%x+")
+			if found then
+				local amount = #interface.findComponents(mod, found)
+				if amount == 1 then
+					chosen.text = found
+					ret = found
+				elseif amount > 1 then
+					chosen.text = "<niejednoznaczny>"
+					ret = nil
+				else
+					chosen.text = "<nie znaleziono>"
+					ret = nil
+				end
+				chosen:draw()
+			end
+		end
+	end
+	local dgui = gml.create("center", "center", 110, 27)
+	dgui.style = gui.style
+	dgui:addLabel("center", 1, 23, "Okno wyboru komponentu")
+	box = dgui:addListBox(2, 3, 104, 15, {})
+	local old = box.onClick
+	box.onClick = function(...)
+		old(...)
+		update()
+	end
+	dgui:addLabel(5, 20, 15, "Wybrany adres:")
+	chosen = dgui:addLabel(21, 20, 40, "")
+	dgui:addButton(90, 24, 14, 1, "Anuluj", function()
+		ret = nil
+		dgui:close()
+	end)
+	dgui:addButton(74, 24, 14, 1, "Zatwierdź", function()
+		dgui:close()
+	end)
+	refreshList()
+	dgui:run()
+	return ret
+end
+
+--[[
+Wyświetla okno dialogowe wyboru koloru
+	@mod - moduł wywołujący
+	@hex:boolean - czy zwrócić wybrany kolor w formacie hexadecymalnym
+	@api:boolean - czy zwrócić wybrany kolor w formacie api colors
+	@name:boolean - czy zwrócić wybrany kolor w formie tekstu
+	RET:{[hex], [colors]} or nil
+]]
+interface.colorDialog = function(mod, hex, api, name)
+	local color = nil
+	local rettab = {}
+	local bar = nil
+	local eqs = {
+		[0] = 0xFFFFFF,
+		[1] = 0xFFA500,
+		[2] = 0xFF00FF,
+		[3] = 0xADD8E6,
+		[4] = 0xFFFF00,
+		[5] = 0x00FF00,
+		[6] = 0xFFC0CB,
+		[7] = 0x808080,
+		[8] = 0xC0C0C0,
+		[9] = 0x00FFFF,
+		[10] = 0x800080,
+		[11] = 0x0000FF,
+		[12] = 0xA52A2A,
+		[13] = 0x008000,
+		[14] = 0xFF0000,
+		[15] = 0x000000
+	}
+	local function updateBar(new)
+		color = new
+		bar.color = eqs[new]
+		bar:draw()
+	end
+	local cgui = gml.create("center", "center", 32, 25)
+	cgui.style = gui.style
+	cgui:addLabel("center", 1, 14, "Wybierz kolor")
+	for i = 0, 15 do
+		local tmp = cgui:addLabel(3, 4 + i, 12, colors[i])
+		tmp.onClick = function() updateBar(i) end
+	end
+	bar = interface.template(mod, cgui, 20, 4, 3, 16)
+	bar.draw = function(t)
+		if t.color then
+			t.renderTarget.setBackground(t.color)
+			t.renderTarget.fill(t.gui.posX + t.posX - 1, t.gui.posY + t.posY - 1, t.width, t.height, " ")
+		end
+	end
+	cgui:addButton(1, 23, 14, 1, "Zatwierdź", function()
+		if hex then table.insert(rettab, eqs[color]) end
+		if api then table.insert(rettab, color) end
+		if name then table.insert(rettab, colors[i]) end
+		cgui:close()
+	end)
+	cgui:addButton(16, 23, 14, 1, "Anuluj", function()
+		rettab = nil
+		cgui:close()
+	end)
+	cgui:run()
+	return rettab
+end
+
+--[[
+Tworzy szablon dla nowego komponentu
+	@mod - moduł wywołujący
+	@target - gui docelowe
+	@x - pozycja X
+	@y - pozycja Y
+	@w - szerokość elementu
+	@h - wysokość elementu
+	RET: <szablon>
+]]
+interface.template = function(mod, target, x, y, w, h)
+	local temp = {
 		visible = false,
 		hidden = false,
-		gui = gui,
-		style = gui.style,
+		gui = target,
+		style = target.style,
 		focusable = false,
 		type = "label",
-		renderTarget = gui.renderTarget
+		renderTarget = target.renderTarget,
+		horizontal = isHorizontal,
+		bgcolor = GMLextractProperty(target, GMLgetAppliedStyles(target), "fill-color-bg")
 	}
-	title.posX = 3
-	title.posY = 3
-	title.width = 62
-	title.height = 5
-	title.contains = GMLcontains
-	title.isHidden = function() return false end
-	title.draw = function(t)
-		t.renderTarget.setBackground(0x0000ff)
-		t.renderTarget.fill(3, 3, 5, 1, ' ')--t
-		t.renderTarget.fill(5, 4, 1, 4, ' ')
-		t.renderTarget.fill(10, 3, 1, 5, ' ')--h
-		t.renderTarget.fill(13, 3, 1, 5, ' ')
-		t.renderTarget.fill(11, 5, 2, 1, ' ')
-		t.renderTarget.fill(16, 3, 1, 5, ' ')--e
-		t.renderTarget.fill(17, 3, 3, 1, ' ')
-		t.renderTarget.fill(17, 5, 3, 1, ' ')
-		t.renderTarget.fill(17, 7, 3, 1, ' ')
-		t.renderTarget.fill(30, 3, 4, 1, ' ')--g
-		t.renderTarget.fill(30, 7, 4, 1, ' ')
-		t.renderTarget.fill(31, 5, 3, 1, ' ')
-		t.renderTarget.set(29, 4, ' ')
-		t.renderTarget.set(28, 5, ' ')
-		t.renderTarget.set(29, 6, ' ')
-		t.renderTarget.set(34, 6, ' ')
-		t.renderTarget.fill(37, 3, 1, 4, ' ')--u
-		t.renderTarget.fill(38, 6, 1, 2, ' ')
-		t.renderTarget.fill(39, 7, 2, 1, ' ')
-		t.renderTarget.fill(40, 6, 1, 2, ' ')
-		t.renderTarget.fill(41, 3, 1, 4, ' ')
-		t.renderTarget.fill(44, 6, 1, 2, ' ')--a
-		t.renderTarget.fill(45, 4, 1, 3, ' ')
-		t.renderTarget.fill(46, 3, 3, 1, ' ')
-		t.renderTarget.fill(46, 6, 3, 1, ' ')
-		t.renderTarget.fill(49, 4, 1, 3, ' ')
-		t.renderTarget.fill(50, 6, 1, 2, ' ')
-		t.renderTarget.fill(53, 3, 1, 5, ' ')--r
-		t.renderTarget.fill(54, 3, 3, 1, ' ')
-		t.renderTarget.fill(54, 5, 3, 1, ' ')
-		t.renderTarget.fill(57, 6, 1, 2, ' ')
-		t.renderTarget.set(57, 4, ' ')
-		t.renderTarget.fill(60, 3, 1, 5, ' ')--d
-		t.renderTarget.fill(61, 3, 3, 1, ' ')
-		t.renderTarget.fill(61, 7, 3, 1, ' ')
-		t.renderTarget.fill(64, 4, 1, 3, ' ')
-	end
-	gui:addComponent(title)
-	return title
+	temp.posX = x + 1
+	temp.posY = y + 1
+	temp.width = w
+	temp.height = h
+	temp.contains = GMLcontains
+	temp.isHidden = function() return false end
+	temp.draw = function() end
+	target:addComponent(temp)
+	return temp
 end
 
-local function addBar(x, y, length, isHorizontal)
+--[[
+Zwraca domyślny katalog modułu
+	@mod - moduł wywołujący
+	RET: ścieżka absolutna do katalogu
+]]
+interface.getConfigDirectory = function(mod)
+	local dir = fs.concat(configDir .. "/modules", mod.name)
+	if not fs.isDirectory(dir) then fs.makeDirectory(dir) end
+	return dir
+end
+
+--[[
+Zwraca klucz szyfrujący
+	@mod - moduł wywołujący
+	RET: klucz w formacie binarnym
+]]
+interface.secretKey = function(mod)
+	return token
+end
+
+--[[
+Zwraca styl używany przez okno głowne
+	@mod - moduł wywołujący
+	RET: tablica ze stylem
+]]
+interface.getStyle = function(mod)
+	return gui.style
+end
+
+-- # Funkcje pomocnicze Gui
+GMLmessageBox = function(target, message, buttons)
+	local buttons = buttons or {"cancel", "ok"}
+	local choice
+	local lines = {}
+	message:gsub("([^\n]+)", function(line) lines[#lines+1] = line end)
+	local i = 1
+	while i <= #lines do
+		if #lines[i] > 46 then
+			local s, rs = lines[i], lines[i]:reverse()
+			local pos =- 26
+			local prev = 1
+			while #s > prev + 45 do
+				local space = rs:find(" ", pos)
+				if space then
+					table.insert(lines, i, s:sub(prev, #s - space))
+					prev = #s - space + 2
+					pos =- (#s - space + 48)
+				else
+					table.insert(lines, i, s:sub(prev, prev + 45))
+					prev = prev + 46
+					pos = pos - 46
+				end
+				i = i + 1
+			end
+			lines[i] = s:sub(prev)
+		end
+		i = i + 1
+	end
+
+	local gui = gml.create("center", "center", 50, 6 + #lines, gpu)
+	gui.style = target.style
+	local labels = {}
+	for i = 1, #lines do
+		labels[i] = gui:addLabel(2, 1 + i, 46, lines[i])
+	end
+	local buttonObjs = {}
+	local xpos = 2
+	for i = 1, #buttons do
+		if i == #buttons then xpos =- 2 end
+		buttonObjs[i]=gui:addButton(xpos, -2, #buttons[i] + 2, 1, buttons[i], function() choice = buttons[i] gui.close() end)
+		xpos = xpos + #buttons[i] + 3
+	end
+
+	gui:changeFocusTo(buttonObjs[#buttonObjs])
+	gui:run()
+	return choice
+end
+
+GMLcontains = function(element,x,y)
+	local ex, ey, ew, eh = element.posX, element.posY, element.width, element.height
+	return x >= ex and x <= ex + ew - 1 and y >= ey and y <= ey + eh - 1
+end
+
+GMLgetAppliedStyles = function(element)
+	local styleRoot = element.style
+	assert(styleRoot)
+
+	local depth, state, class, elementType = element.renderTarget.getDepth(), element.state or "*", element.class or "*", element.type
+
+	local nodes = {styleRoot}
+	local function filterDown(nodes, key)
+		local newNodes = {}
+		for i = 1, #nodes do
+			if key ~= "*" and nodes[i][key] then
+				newNodes[#newNodes + 1] = nodes[i][key]
+			end
+			if nodes[i]["*"] then
+				newNodes[#newNodes + 1] = nodes[i]["*"]
+			end
+		end
+		return newNodes
+	end
+	nodes = filterDown(nodes, depth)
+	nodes = filterDown(nodes, state)
+	nodes = filterDown(nodes, class)
+	nodes = filterDown(nodes, elementType)
+	return nodes
+end
+
+GMLextractProperty = function(element, styles, property)
+	if element[property] then
+		return element[property]
+	end
+	for j = 1, #styles do
+		local v = styles[j][property]
+		if v ~= nil then
+			return v
+		end
+	end
+end
+
+GMLextractProperties = function(element, styles, ...)
+	local props = {...}
+	local vals = {}
+	for i = 1, #props do
+		vals[#vals + 1] = extractProperty(element, styles, props[i])
+		if #vals ~= i then
+			for k, v in pairs(styles[1]) do print('"' .. k .. '"', v, k == props[i] and "<-----!!!" or "") end
+			error("Could not locate value for style property " .. props[i] .. "!")
+		end
+	end
+	return table.unpack(vals)
+end
+
+GMLfindStyleProperties = function(element,...)
+	local props = {...}
+	local nodes = GMLgetAppliedStyles(element)
+	return GMLextractProperties(element, nodes, ...)
+end
+
+GMLcalcBody = function(element)
+	local x, y, w, h = element.posX, element.posY, element.width, element.height
+	local border, borderTop, borderBottom, borderLeft, borderRight =
+     GMLfindStyleProperties(element, "border", "border-top", "border-bottom", "border-left", "border-right")
+
+	if border then
+		if borderTop then
+			y = y + 1
+			h = h - 1
+		end
+		if borderBottom then
+			h = h - 1
+		end
+		if borderLeft then
+			x = x + 1
+			w = w - 1
+		end
+		if borderRight then
+			w = w - 1
+		end
+	end
+	return x, y, w, h
+end
+
+local function addBar(target, x, y, length, isHorizontal)
 	local bar = {
 		visible = false,
 		hidden = false,
-		gui = gui,
-		style = gui.style,
+		gui = target,
+		style = target.style,
 		focusable = false,
 		type = "label",
-		renderTarget = gui.renderTarget,
-		horizontal = isHorizontal
+		renderTarget = target.renderTarget,
+		horizontal = isHorizontal,
+		bgcolor = GMLextractProperty(target, GMLgetAppliedStyles(target), "fill-color-bg")
 	}
 	bar.posX = x
 	bar.posY = y
@@ -318,1121 +1053,1885 @@ local function addBar(x, y, length, isHorizontal)
 	bar.contains = GMLcontains
 	bar.isHidden = function() return false end
 	bar.draw = function(t)
-		t.renderTarget.setBackground(GMLbgcolor)
+		t.renderTarget.setBackground(t.bgcolor)
 		t.renderTarget.setForeground(0xffffff)
 		if t.horizontal then
-			t.renderTarget.set(t.posX + 1, t.posY + 1, string.rep(require("unicode").char(0x2550), t.width))
+			t.renderTarget.set(t.posX + 1, t.posY + 1, string.rep(uni.char(0x2550), t.width))
 		else
-			local uni = require("unicode")
 			for i = 1, t.height do
 				t.renderTarget.set(t.posX + 1, t.posY + i, uni.char(0x2551))
 			end
 		end
 	end
-	gui:addComponent(bar)
+	target:addComponent(bar)
 	return bar
 end
 
-local function updateCounter()
-	counter = counter + 1
-	if counter >= 5 then
-		counter = 0
-		saveConfig()
+local function addSymbol(target, x, y, code)
+	local symbol = {
+		visible = false,
+		hidden = false,
+		gui = target,
+		style = target.style,
+		focusable = false,
+		type = "label",
+		renderTarget = target.renderTarget,
+		bgcolor = GMLextractProperty(target, GMLgetAppliedStyles(target), "fill-color-bg"),
+		code = code,
+		posX = x,
+		posY = y,
+		width = 1,
+		height = 1,
+		contains = GMLcontains,
+		isHidden = function() return false end
+	}
+	symbol.draw = function(t)
+		t.renderTarget.setBackground(t.bgcolor)
+		t.renderTarget.setForeground(0xffffff)
+		t.renderTarget.set(t.posX, t.posY, uni.char(t.code))
+	end
+	target:addComponent(symbol)
+	return symbol
+end
+
+local function addTitle(target, posX, posY)
+	local title = {
+		visible = false,
+		hidden = false,
+		gui = target,
+		style = target.style,
+		focusable = false,
+		type = "label",
+		renderTarget = target.renderTarget,
+		posX = posX,
+		posY = posY,
+		width = 15,
+		height = 5,
+		contains = GMLcontains,
+		isHidden = function() return false end
+	}
+	title.draw = function(t)
+		t.renderTarget.setBackground(0x00a6ff)
+		t.renderTarget.fill(t.posX, t.posY, 5, 1, ' ') --t
+		t.renderTarget.fill(t.posX + 2, t.posY + 1, 1, 4, ' ')
+		t.renderTarget.fill(t.posX + 9, t.posY, 4, 1, ' ') --g
+		t.renderTarget.fill(t.posX + 9, t.posY + 4, 4, 1, ' ')
+		t.renderTarget.fill(t.posX + 10, t.posY + 2, 3, 1, ' ')
+		t.renderTarget.set(t.posX + 8, t.posY + 1, ' ')
+		t.renderTarget.set(t.posX + 8, t.posY + 3, ' ')
+		t.renderTarget.set(t.posX + 7, t.posY + 2, ' ')
+		t.renderTarget.set(t.posX + 12, t.posY + 3, ' ')
+	end
+	target:addComponent(title)
+	return title
+end
+
+-- # Inne funkcje
+local function flushLog()
+	local file = io.open("/tmp/tg.log", "a")
+	if file then
+		file:write(intlog)
+		file:close()
+		intlog = ""
 	end
 end
 
-local function logs(msg)
-	logstr = logstr .. "\n" .. os.date() .. "  " .. msg
-	if logstr:len() > 200 then
-		local f = io.open("/tmp/guard.log", "a")
-		f:write(logstr)
-		f:close()
-		logstr = ""
+silentLog = function(source, description, disableTimer, color)
+	local timer = disableTimer and "" or (os.date():sub(-8) .. " - ")
+	local text = timer .. source .. ": " .. description
+	intlog = intlog .. text .. "\n"
+	loglines = loglines + 1
+	if loglines > 20 then
+		flushLog()
+		loglines = 0
 	end
-	table.insert(logtab, msg)
-	if #logtab > 10 then table.remove(logtab, 1) end
-	logList:updateList(logtab)
-	logList:select(#logtab)
+	table.insert(lastlog, text)
+	if #lastlog > 10 then table.remove(lastlog, 1) end
+	return text
 end
 
-local function getServerAddress()
-	local value = -1
-	local ggui = gml.create("center", "center", 46, 5, gpu)
-	ggui:addLabel(2, 1, 28, "Podaj port serwera danych:")
-	local field = ggui:addTextField(32, 1, 8)
-	ggui:addButton(34, 3, 10, 1, "Anuluj", function() ggui:close() end)
-	ggui:addButton(23, 3, 10, 1, "OK", function()
-		if field["text"] == "" or tonumber(field["text"]) == nil then
-			GMLmessageBox("Wprowadź poprawny port", {"OK"})
-		elseif not dsapi.echo(tonumber(field["text"])) then
-			GMLmessageBox("Brak serwera pod podanym portem", {"OK"})
-		else
-			value = tonumber(field["text"])
-			ggui:close()
-		end
-	end)
-	ggui:run()
-	return value
-end
-
-local function backup()
-	local serverPort = getServerAddress()
-	if serverPort ~= -1 then
-		local status1, code1 = dsapi.write(serverPort, "the_guard/config.backup", datacard.encode64(serial.serialize(data)))
-		os.sleep(0.2)
-		local status2, code2 = dsapi.write(serverPort, "the_guard/cards", datacard.encode64(serial.serialize(cards)))
-		if status1 and status2 then
-			GMLmessageBox("Kopia została wykonana pomyślnie", {"OK"})
-			logs("Wykonano kopię zapasową")
-		else
-			GMLmessageBox("Błąd: " .. dsapi.translateCode(status1 and code1 or code2), {"OK"})
-			logs("Nie udało się wykonać kopii zapasowej: " .. dsapi.translateCode(status1 and code1 or code2))
-		end
+local function internalLog(source, description, disableTimer, color)
+	local prev = nil
+	if color then
+		prev = component.gpu.setForeground(color)
+	end
+	print(silentLog(source, description, disableTimer, color))
+	if color then
+		component.gpu.setForeground(prev)
 	end
 end
 
-local function restore()
-	local serverPort = getServerAddress()
-	if serverPort ~= -1 then
-		local status1, code1 = dsapi.get(serverPort, "the_guard/config.backup")
-		local status2, code2 = dsapi.get(serverPort, "the_guard/cards")
-		if status1 and status2 then
-			local f = io.open("/etc/the_guard/config.cfg", "w")
-			f:write(code1)
+local function isPasswordValid(plain)
+	return data.sha256(plain) == passwd
+end
+
+
+
+-- # Konfiguracja
+local save = {}
+
+function save.log(silent, ...)
+	if silent then
+		silentLog(...)
+		save.err()
+	else
+		internalLog(...)
+	end
+end
+
+function save.err()
+	GMLmessageBox(gui, "Wystąpił błąd podczas zapisu ustawień, sprawdź logi", {"OK"})
+end
+
+function save.settings(silent)
+	local r, s = pcall(serial.serialize, settings)
+	if r then
+		local f, e = io.open("/etc/the_guard/config.conf", "w")
+		if f then
+			f:write(s)
 			f:close()
-			f = io.open("/etc/the_guard/cards", "w")
-			f:write(code2)
-			f:close()
-			GMLmessageBox("Przywracanie zostało wykonane pomyślnie. Komputer zostanie uruchomiony ponownie", {"OK"})
-			require("computer").shutdown(true)
 		else
-			GMLmessageBox("Błąd: " .. dsapi.translateCode(status1 and code1 or code2), {"OK"})
-			logs("Nie udało się przywrócić danych: " .. dsapi.translateCode(status1 and code1 or code2))
+			save.log(silent, "save", "nie można otworzyć settings: " .. e)
+			return false
 		end
-	end
-end
-
-local function searchAddress(name, address)
-	local l = component.list(name)
-	local amount, fullAddress = 0, nil
-	for k, _ in pairs(l) do
-		if k:find(address, 1) ~= nil or k == address then
-			amount = amount + 1
-			fullAddress = k
-		end
-	end
-	return amount, fullAddress
-end
-
-local function checkConnections()
-	if resplist == nil then return end
-	for k, _ in pairs(micros) do
-		if resplist[k] == nil then
-			logs("Mikrokontroler (" .. k:sub(1,5) .. ") nie odpowiada")
-			micros[k] = nil
-			break
-		end
-	end
-end
-
-local function sendCommand(...)
-	event.cancel(tid or 0)
-	for k, v in pairs(micros) do
-		modem.send(k, v, data.port, ...)
-	end
-	if resplist ~= nil then
-		resplist = {}
-		tid = event.timer(2, checkConnections)
-	end
-end
-
-local function checkBlockade()
-	if data.blockade then
-		if not silent then
-			GMLmessageBox("Nie można zmienić tego ustawienia podczas całkowitej blokady!", {"OK"})
-		end
+	else
+		save.log(silent, "save", "błąd serializacji settings: " .. s)
 		return false
 	end
 	return true
 end
 
-local function tesla()
-	if checkBlockade() then
-		if not data.tesla then
-			sendCommand(messages.color, sides.back, colors.red, 250)
-			data.tesla = true
-			switch.tesla["text-color"] = 0x00ff00
-			logs("Cewka Tesli została włączona")
-		else
-			sendCommand(messages.color, sides.back, colors.red, 0)
-			data.tesla = false
-			switch.tesla["text-color"] = 0xff0000
-			logs("Cewka Tesli została wyłączona")
-		end
-		switch.tesla:draw()
-		updateCounter()
+function save.modules(silent)
+	local out = {}
+	for z, t in pairs(modules) do
+		out[z] = {file = t.file}
 	end
-end
-
-local function shield()
-	if checkBlockade() then
-		if not data.shield then
-			sendCommand(messages.color, sides.back, colors.lightblue, 250)
-			data.shield = true
-			switch.shield["text-color"] = 0x00ff00
-			logs("Osłona została włączona")
+	local r, s = pcall(serial.serialize, out)
+	if r then
+		local f, e = io.open("/etc/the_guard/modules.conf", "w")
+		if f then
+			f:write(s)
+			f:close()
 		else
-			sendCommand(messages.color, sides.back, colors.lightblue, 0)
-			data.shield = false
-			switch.shield["text-color"] = 0xff0000
-			logs("Osłona została wyłączona")
-		end
-		switch.shield:draw()
-		updateCounter()
-	end
-end
-
-local function alarm()
-	if checkBlockade() then
-		if not data.alarm then
-			sendCommand(messages.alarm, true)
-			data.alarm = true
-			switch.alarm["text-color"] = 0x00ff00
-			logs("Alarm został włączony")
-		else
-			sendCommand(messages.alarm, false)
-			data.alarm = false
-			switch.alarm["text-color"] = 0xff0000
-			logs("Alarm został wyłączony")
-		end
-		switch.alarm:draw()
-		updateCounter()
-	end
-end
-
-local function blockade()
-	resplist = nil
-	if not data.blockade then
-		local ans = true
-		if not silent then
-			ans = GMLmessageBox("Czy na pewno chcesz włączyć całkowitą blokadę?", {"Tak", "Nie"}) == "Tak"
-		end
-		if ans then
-			data.alarm = false
-			data.shield = false
-			data.tesla = false
-			alarm()
-			if data.switchPort ~= nil then
-				os.sleep(0.5)
-				modem.broadcast(data.switchPort, data.port, serial.serialize({0x51}))
-				os.sleep(0.1)
-				modem.broadcast(data.switchPort, data.port, serial.serialize({0x52}))
-				os.sleep(0.1)
-				modem.broadcast(data.switchPort, data.port, serial.serialize({0x55}))
-			end
-			os.sleep(0.5)
-			shield()
-			os.sleep(0.5)
-			resplist = {}
-			tesla()
-			data.blockade = true
-			switch.blockade["text-color"] = 0x00ff00
-			switch.blockade:draw()
-			updateCounter()
-			logs("Całkowita blokada została właczona")
+			save.log(silent, "save", "nie można otworzyć modules: " .. e)
+			return false
 		end
 	else
-		if GMLmessageBox("Czy na pewno chcesz wyłączyć całkowitą blokadę?", {"Tak", "Nie"}) == "Tak" then
-			data.blockade = false
-			data.alarm = true
-			data.tesla = true
-			tesla()
-			if data.switchPort ~= nil then
-				os.sleep(0.5)
-				modem.broadcast(data.switchPort, data.port, serial.serialize({0x50}))
-				os.sleep(0.1)
-				modem.broadcast(data.switchPort, data.port, serial.serialize({0x53}))
-				os.sleep(0.1)
-				modem.broadcast(data.switchPort, data.port, serial.serialize({0x54}))
-			end
-			os.sleep(0.5)
-			resplist = {}
-			alarm()
-			os.sleep(0.5)
-			switch.blockade["text-color"] = 0xff0000
-			switch.blockade:draw()
-			updateCounter()
-			logs("Całkowita blokada została wyłączona")
+		save.log(silent, "save", "błąd serializacji modules: " .. s)
+		return false
+	end
+	return true
+end
+
+function save.components(silent)
+	local r, s = pcall(serial.serialize, components)
+	if r then
+		local f, e = io.open("/etc/the_guard/components.conf", "w")
+		if f then
+			f:write(s)
+			f:close()
+		else
+			save.log(silent, "save", "nie można otworzyć components: " .. e)
+			return false
 		end
+	else
+		save.log(silent, "save", "błąd serializacji components: " .. s)
+		return false
+	end
+	return true
+end
+
+function save.passwd(silent)
+	local output = data.encode64(passwd)
+	local f, e = io.open("/etc/the_guard/passwd.bin", "wb")
+	if f then
+		f:write(output)
+		f:close()
+	else
+		save.log(silent, "save", "nie można otworzyć passwd: " .. e)
+		return false
+	end
+	return true
+end
+
+local function saveConfig()
+	if not save.settings() then
+		internalLog("save", "zapis settings nieudany", false, 0xff0000)
+	end
+	if not save.modules() then
+		internalLog("save", "zapis modules nieudany", false, 0xff0000)
+	end
+	if not save.components() then
+		internalLog("save", "zapis components nieudany", false, 0xff0000)
+	end
+	if not save.passwd() then
+		internalLog("save", "zapis passwd nieudany", false, 0xff0000)
 	end
 end
 
-local function lockScreen()
-	local lgui = gml.create(1, 1, resolution[1], resolution[2], gpu)
-	lgui:addLabel("center", 21, 40, "Wprowadź hasło, aby odblokować ekran:")
-	local field = lgui:addTextField("center", 23, 30)
-	lgui:changeFocusTo(lgui:addButton(84, 25, 10, 1, "OK", function()
-		if datacard.md5(field["text"]) ~= data.password then
-			field["text"] = ""
-			field:draw()
-			beep()
-		else
-			lgui:close()
+local function loadConfig()
+	local function checkSettings()
+		local dirty = false
+		if not settings.port then
+			settings.port = math.random(1000, 50000)
+			dirty = true
 		end
-	end))
-	lgui:run()
-end
-
-local function settings()
-	local sgui = gml.create("center", "center", 55, 10, gpu)
-	sgui:addLabel(20, 1, 11, "Ustawienia")
-	sgui:addLabel(2, 3, 21, "Port [60000-65533]:")
-	sgui:addLabel(2, 4, 30, "Port the_switch [100-65533]:")
-	sgui:addLabel(2, 5, 30, "Port dataSrv2 [10000-60000]:")
-	sgui:addLabel(2, 6, 17, "Adres monitora:")
-	local port = sgui:addTextField(34, 3, 8)
-	port["text"] = tostring(data.port)
-	local tsPortf = sgui:addTextField(34, 4, 8)
-	tsPortf["text"] = tostring(data.switchPort or "")
-	local dsPort = sgui:addTextField(34, 5, 8)
-	dsPort["text"] = tostring(data.dsPort or "")
-	local madd = sgui:addTextField(21, 6, 21)
-	madd["text"] = data.screen or ""
-	sgui:addButton(3, 8, 10, 1, "Kopia", backup)
-	sgui:addButton(14, 8, 14, 1, "Przywracanie", restore)
-	sgui:addButton(42, 8, 10, 1, "Anuluj", function() sgui:close() end)
-	sgui:addButton(31, 8, 10, 1, "OK", function()
-		local amount, faddress = nil, nil
-		local sPort = tonumber(port["text"])
-		local tsPort = tonumber(tsPortf["text"])
-		local dsnPort = tonumber(dsPort["text"])
-		if madd["text"] ~= "" then
-			amount, faddress = searchAddress("screen", madd["text"])
+		if not settings.backupPort then
+			settings.backupPort = math.random(1000, 50000)
+			dirty = true
 		end
-		if not sPort or not tsPort then
-			GMLmessageBox("Wprowadzony port jest niepoprawny", {"OK"})
-			if sPort == nil then port["text"] = ""
-			elseif tsPort == nil then tsPortf["text"] = "" end
-		elseif sPort < 60000 or sPort > 65533 then
-			GMLmessageBox("Wprowadzony port wykracza poza zakres", {"OK"})
-			sPort["text"] = ""
-		elseif tsPort < 100 or tsPort > 65533 then
-			GMLmessageBox("Wprowadzony port wykracza poza zakres", {"OK"})
-			tsPortf["text"] = ""
-		elseif dsnPort and (dsnPort < 10000 or dsnPort > 60000) then
-			GMLmessageBox("Wprowadzony port wykracza poza zakres", {"OK"})
-			dsPort["text"] = ""
-		elseif dsnPort and not dsapi.echo(dsnPort) then
-			GMLmessageBox("Brak serwera danych pod podanym portem", {"OK"})
-		elseif amount ~= nil and amount == 0 then
-			GMLmessageBox("Nie znaleziono monitora o podanym adresie", {"OK"})
-			madd["text"] = ""
-		elseif amount ~= nil and amount > 1 then
-			GMLmessageBox("Podany adres jest niejednoznaczny. Podaj więcej znaków", {"OK"})
-		else
-			if dsnPort then
-				local s, c = dsapi.write(dsnPort, "the_guard/micro", serial.serialize({data.port, modem.address}))
-				if s then
-					logs("Zaktualizowano dane na serwerze")
+		if not settings.debugMode then
+			settings.debugMode = false
+			dirty = true
+		end
+		if not settings.dark then
+			settings.dark = false
+			dirty = true
+		end
+		if dirty then
+			save.settings(true)
+		end
+	end
+	
+	local function checkModules()
+		local counter = 0
+		for i, m in pairs(modules) do
+			local added = true
+			if type(i) ~= "number" then
+				internalLog("checkModules", "niepoprawny identyfikator strefy")
+				modules[i] = nil
+				added = false
+			else
+				if type(m.file) == "string" then
+					local path = m.file
+					if not (fs.exists(path) and not fs.isDirectory(path)) then
+						internalLog("checkModules", "plik nie istnieje")
+						modules[i] = nil
+						added = false
+					end
 				else
-					logs("Nie można połączyć się z serwerem: " .. dsapi.translateCode(c))
+					internalLog("checkModules", "brak nazwy pliku")
+					modules[i] = nil
+					added = false
 				end
 			end
-			--[[if tostring(data.port) ~= port["text"] then
-				if GMLmessageBox("Zmiana portu serwera spowoduje, że wszystkie mikrokontrolery przestaną działać.\
-				Czy na pewno chcesz kontynuować?", {"Tak", "Nie"}) == "Nie" then return end
-			end]]
-			modem.close(data.port)
-			data.port = sPort
-			modem.open(data.port)
-			data.switchPort = tsPort
-			data.dsPort = dsnPort
-			data.screen = faddress
-			saveConfig()
-			sgui:close()
+			if added then counter = counter + 1 end
 		end
-	end)
-	sgui:addButton(34, 1, 15, 1, "Zmień hasło", function()
-		local pgui = gml.create("center", "center", 50, 8, gpu)
-		pgui:addLabel("center", 1, 16, "Zmiania hasła")
-		pgui:addLabel(2, 3, 15, "Stare hasło:")
-		pgui:addLabel(2, 4, 14, "Nowe hasło:")
-		local op = pgui:addTextField(18, 3, 25)
-		local np = pgui:addTextField(18, 4, 25)
-		pgui:addButton(37, 6, 10, 1, "Anuluj", function() pgui:close() end)
-		pgui:addButton(26, 6, 10, 1, "OK", function()
-			if op["text"] == "" or np["text"] == "" then
-				GMLmessageBox("Pola nie mogą być puste", {"OK"})
-			elseif datacard.md5(op["text"]) ~= data.password then
-				GMLmessageBox("Stare hasło jest niepoprawne", {"OK"})
+		internalLog("Sprawdzono " .. tostring(counter) .. " moduły/ów", "", true)
+	end
+	
+	local function checkComponents()
+		local counter = 0 
+		for i, c in pairs(components) do
+			if type(c["address"]) == "string" then
+				if component.proxy(c["address"]) then
+					if type(c["type"]) ~= "string" then
+						internalLog("checkComponents", "niepoprawny typ")
+						components[i]["type"] = ""
+					end
+					if type(c["state"]) ~= "boolean" then
+						internalLog("checkComponents", "niepoprawny stan")
+						components[i]["state"] = false
+					end
+					if not (type(c["x"]) == "number" or type(c["x"]) == "nil") then
+						internalLog("checkComponents", "niepoprawny x")
+						components[i]["x"] = nil
+					end
+					if not (type(c["y"]) == "number" or type(c["y"]) == "nil") then
+						internalLog("checkComponents", "niepoprawny y")
+						components[i]["y"] = nil
+					end
+					if not (type(c["z"]) == "number" or type(c["z"]) == "nil") then
+						internalLog("checkComponents", "niepoprawny z")
+						components[i]["z"] = nil
+					end
+				else
+					internalLog("checkComponents", "urządzenie " .. c["address"] .. " jest offline")
+					components[i].state = false
+				end
 			else
-				data.password = datacard.md5(np["text"])
-				saveConfig()
-				pgui:close()
-			end
-		end)
-		pgui:run()
-	end)
-	sgui:run()
-end
-
-local function sync()
-	local oldMicros = micros
-	local oldAmount = 0
-	for k, _ in pairs(micros) do oldAmount = oldAmount + 1 end
-	resplist = {}
-	modem.broadcast(65533, data.port, messages.echo)
-	event.timer(3, function()
-		local newAmount = 0
-		for k, _ in pairs(micros) do newAmount = newAmount + 1 end
-		local added, removed = 0, 0
-		for k, _ in pairs(micros) do
-			local lap = 0
-			for k2, _ in pairs(oldMicros) do
-				lap = lap + 1
-				if k ~= k2 and lap == oldAmount then
-					added = added + 1
+				internalLog("checkComponents", "niepoprawny format adresu")
+				if type(i) == "number" then
+					table.remove(components, i)
+				else
+					components[i] = nil
 				end
 			end
+			counter = counter + 1
 		end
-		for k, _ in pairs(oldMicros) do
-			local lap = 0
-			for k2, _ in pairs(micros) do
-				lap = lap + 1
-				if k ~= k2 and lap == newAmount then
-					removed = removed + 1
+		internalLog("Sprawdzono " .. tostring(counter) .. " komponenty/ów", "", true)
+	end
+	
+	local function checkPassword()
+		if not passwd or passwd:len() == 0 then
+			local prev = component.gpu.setForeground(0xff0000)
+			print("Brak hasła głównego, podaj nowe hasło")
+			component.gpu.setForeground(prev)
+			local i1, i2 = "", ""
+			local text = require("text")
+			repeat
+				io.write("#> ")
+				i1 = term.read(nil, nil, nil, "*")
+				i1 = text.trim(i1)
+				print("Powtórz hasło:")
+				io.write("#> ")
+				i2 = term.read(nil, nil, nil, "*")
+				i2 = text.trim(i2)
+				if i1 ~= i2 then
+					local prev = component.gpu.setForeground(0xffff00)
+					print("Wprowadzono różne hasła, wprowadź hasło ponownie:")
+					component.gpu.setForeground(prev)
 				end
+			until i1 == i2
+			passwd = data.sha256(i1)
+			local f, e = io.open("/etc/the_guard/passwd.bin", "wb")
+			if f then
+				f:write(data.encode64(passwd))
+				f:close()
+			else
+				internalLog("passwd", "Nie udało się zapisać hasła: " .. e)
+				return false
 			end
 		end
-		saveConfig()
-		local igui = gml.create("center", "center", 35, 9, gpu)
-		igui:addLabel("center", 1, 25, "ODŚWIEŻANIE ZAKOŃCZONE")
-		igui:addLabel(2, 3, 30, "Liczba mikrokontrolerów: " .. newAmount)
-		igui:addLabel(12, 4, 15, "Dodano: " .. tostring(added))
-		igui:addLabel(12, 5, 15, "Usunięto: " .. tostring(removed))
-		igui:addButton("center", 7, 10, 1, "OK", function() igui:close() end)
-		igui:run()
-	end)
-end
+		
+		return true
+	end
 
-local function performExit()
-	local egui = gml.create("center", "center", 46, 7, gpu)
-	egui:addLabel("center", 1, 30, "Aby wyjść, wprowadź hasło:")
-	local field = egui:addTextField("center", 3, 28)
-	egui:addButton(22, 5, 10, 1, "OK", function()
-		if datacard.md5(field["text"]) ~= data.password then
-			field["text"] = ""
-			field:draw()
-			beep()
+	local dir = "/etc/the_guard/"
+	internalLog("Wczytywanie ustawień", "", true)
+	local path = fs.concat(dir, "/config.conf")
+	if fs.exists(path) and not fs.isDirectory(path) then
+		local f, e = io.open(path, "r")
+		if f then
+			local s = serial.unserialize(f:read("*a"))
+			if s then
+				settings = s
+			else
+				internalLog("loadConfig", "plik settings uszkodzony lub pusty", false, 0xffff00)
+			end
+			f:close()
 		else
-			egui:close()
-			gui:close()
-		end
-	end)
-	egui:addButton(33, 5, 10, 1, "Anuluj", function()
-		egui:close()
-	end)
-	egui:run()
-end
-
-local function raiseAlert(level)
-	silent = true
-	if level == 4 and not data.blockade then
-		blockade()
-		if data.detector.cooldown then
-			event.timer(data.detector.cooldown, function()
-				if data.blockade then
-					blockade()
-				end
-			end)
+			internalLog("loadConfig", "błąd pliku settings: " .. e, false, 0xff0000)
+			return false
 		end
 	else
-		resplist = nil
-		if level > 0 and not data.alarm then
-			alarm()
-			if data.detector.cooldown then
-				event.timer(data.detector.cooldown, function()
-					resplist = nil
-					if data.alarm then alarm() end
-					resplist = {}
-				end)
-			end
-		end
-		os.sleep(0.5)
-		if level == 2 and not data.shield then
-			shield()
-		elseif level == 3 and not data.tesla then
-			tesla()
-			if data.detector.cooldown then
-				event.timer(data.detector.cooldown, function()
-					if data.tesla then
-						resplist = nil
-						tesla()
-					end
-					sleep(0.5)
-					resplist = {}
-				end)
-			end
-		end
-		resplist = {}
+		internalLog("loadConfig", "brak pliku settings, tworzenie ustawień")
 	end
-	silent = false
-end
-
-local function modifyDetector(action)
-	if action == "add" then
-		local agui = gml.create("center", "center", 35, 6, gpu)
-		agui:addLabel(2, 1, 25, "Podaj nazwę celu:")
-		local field = agui:addTextField("center", 2, 25)
-		agui:addButton(23, 4, 10, 1, "Anuluj", function() agui:close() end)
-		agui:addButton(12, 4, 10, 1, "OK", function()
-			if field["text"] == "" then
-				beep()
-				return
-			end
-			for _, v in ipairs(data.detector.list ) do
-				if v == field["text"] then
-					GMLmessageBox("Cel o takiej nazwie jest już na liście", {"OK"})
-					return
-				end
-			end
-			table.insert(data.detector.list, field["text"])
-			detector.list:updateList(data.detector.list)
-			updateCounter()
-			agui:close()
-		end)
-		agui:run()
-	elseif action == "remove" then
-		local s = detector.list:getSelected()
-		for i, v in ipairs(data.detector.list) do
-			if v == s then
-				table.remove(data.detector.list, i)
-				detector.list:updateList(data.detector.list)
-				updateCounter()
-			end
-		end
-	elseif action == "mode" then
-		data.detector.mode = not data.detector.mode
-		detector.listMode["text"] = data.detector.mode and "whitelist" or "blacklist"
-		detector.listMode:draw()
-		updateCounter()
-	elseif action == "level" then
-		if not data.detector.level or data.detector.level > 3 then
-			data.detector.level = 0
-		else
-			data.detector.level = data.detector.level + 1
-		end
-		detector.level["text"] = tostring(data.detector.level)
-		detector.level:draw()
-		updateCounter()
-	elseif action == "cooldown" then
-		if not data.detector.cooldown then
-			data.detector.cooldown = 10
-		elseif data.detector.cooldown < 30 then
-			data.detector.cooldown = data.detector.cooldown + 10
-		elseif data.detector.cooldown == 30 then
-			data.detector.cooldown = 60
-		elseif data.detector.cooldown == 60 then
-			data.detector.cooldown = 120
-		else
-			data.detector.cooldown = nil
-		end
-		detector.cooldown["text"] = tostring(data.detector.cooldown or 0)
-		detector.cooldown:draw()
-		updateCounter()
-	end
-end
-
-local function createMagneticCreator(oldName, oldObject)
-	local retValue = nil
-	local usedColors = {}
-	local availableColors = {}
-	availableColors.index = oldObject and oldObject.color or 1
-	for i = 0, 15 do table.insert(availableColors, i) end
-	for _, v in pairs(data.magnetic.list) do
-		table.insert(usedColors, v.color)
-	end
-	table.sort(usedColors, function(a, b) return a > b end)
-	for i = 1, #usedColors do
-		table.remove(availableColors, usedColors[i])
-	end
-	local agui = gml.create("center", "center", 40, 11, gpu)
-	agui:addLabel("center", 1, 16, oldObject and "Edytuj czytnik" or "Nowy czytnik")
-	agui:addLabel(2, 3, 8, "Nazwa:")
-	agui:addLabel(2, 4, 8, "Adres:")
-	agui:addLabel(2, 5, 9, "Poziom:")
-	agui:addLabel(2, 6, 8, "Kolor:")
-	agui:addLabel(2, 7, 16, "Czas otwarcia:")
-	local name = agui:addTextField(13, 3, 20)
-	name["text"] = oldName or ""
-	local address = agui:addTextField(13, 4, 20)
-	address["text"] = oldObject and oldObject.address or ""
-	local level = agui:addButton(13, 5, 6, 1, "1", function(self)
-		if self["text"] == "1" then
-			self["text"] = "2"
-		else
-			self["text"] = "1"
-		end
-		self:draw()
-	end)
-	level["text"] = oldObject and tostring(oldObject.level) or "1"
-	local color = agui:addButton(13, 6, 12, 1, "", function(self)
-		if availableColors.index < #availableColors then
-			availableColors.index = availableColors.index + 1
-		else
-			availableColors.index = 1
-		end
-		self["text"] = colors[availableColors[availableColors.index]]
-		self:draw()
-	end)
-	color["text"] = colors[oldObject and oldObject.color or availableColors[1]]
-	local timeout = agui:addButton(20, 7, 6, 1, "5", function(self)
-		local number = tonumber(self["text"])
-		if number == 1 then number = 2
-		elseif number == 2 then number = 3
-		elseif number == 3 then number = 5
-		elseif number == 5 then number = 10
-		elseif number == 10 then number = 15
-		else number = 1 end
-		self["text"] = tostring(number)
-		self:draw()
-	end)
-	timeout["text"] = oldObject and tostring(oldObject.timeout) or "5"
-	agui:addButton(28, 9, 10, 1, "Anuluj", function()
-		agui:close()
-		retValue = false
-	end)
-	agui:addButton(17, 9, 10, 1, "OK", function()
-		if name["text"] == "" or address["text"] == "" then
-			GMLmessageBox("Wypełnij wszystkie pola", {"OK"})
-		elseif data.magnetic.list[name["text"]] ~= nil then
-			GMLmessageBox("Czynik o takiej nazwie już istnieje")
-		else
-			resplist = nil
-			readers = {}
-			sendCommand(messages.address, address["text"])
-			os.sleep(2)
-			if not readers[1] then
-				GMLmessageBox("Nie znaleziono czytnika o podanym adresie", {"OK"})
-			elseif readers[1] > 1 then
-				GMLmessageBox("Podana część adresu wskazuje na kilka urządzeń. Podaj więcej znaków", {"OK"})
+	checkSettings()
+	
+	path = fs.concat(dir, "modules.conf")
+	if fs.exists(path) and not fs.isDirectory(path) then
+		local f, e = io.open(path, "r")
+		if f then
+			local s = serial.unserialize(f:read("*a"))
+			if s then
+				modules = s
 			else
-				local tab = {}
-				tab.address = readers[2]
-				tab.level = tonumber(level["text"])
-				tab.color = colors[color["text"]]
-				tab.timeout = tonumber(timeout["text"])
-				data.magnetic.list[name["text"]] = tab
-				local list = {}
-				for k, _ in pairs(data.magnetic.list or {}) do table.insert(list, k) end
-				magnetic.list:updateList(list)
-				saveConfig()
-				agui:close()
-				retValue = true
+				internalLog("loadConfig", "plik modules uszkodzony lub pusty",  false, 0xffff00)
 			end
-			readers = nil
-		end
-	end)
-	agui:run()
-	return retValue
-end
-
-local function modifyMagnetic(action)
-	if action == "add" then
-		local amount = 0
-		for _, _ in pairs(data.magnetic.list) do amount = amount + 1 end
-		if amount < 16 then
-			createMagneticCreator()
+			f:close()
 		else
-			GMLmessageBox("Osiągnięto już maksymalną liczbę zarejestrowanych czytników", {"OK"})
+			internalLog("loadConfig", "błąd pliku modules: " .. e, false, 0xff0000)
+			return false
 		end
-	elseif action == "remove" then
-		local selName = magnetic.list:getSelected()
-		if selName and data.magnetic.list[selName] then
-			if GMLmessageBox("Czy na pewno chcesz usunąć zaznaczony element?", {"Tak", "Nie"}) == "Tak" then
-				data.magnetic.list[selName] = nil
-				local list = {}
-				for k, _ in pairs(data.magnetic.list or {}) do table.insert(list, k) end
-				magnetic.list:updateList(list)
-				saveConfig()
-			end
-		end
-	elseif action == "modify" then
-		local selName = magnetic.list:getSelected()
-		if selName and data.magnetic.list[selName] then
-			local tempContainer = data.magnetic.list[selName]
-			data.magnetic.list[selName] = nil
-			if not createMagneticCreator(selName, tempContainer) then
-				data.magnetic.list[selName] = tempContainer
-			end
-		end
-	elseif action == "card" then
-		data.magnetic.card = not data.magnetic.card
-		magnetic.card["text"] = data.magnetic.card and "tak" or "nie"
-		magnetic.card["text-color"] = data.magnetic.card and 0x00ff00 or 0xff0000
-		magnetic.card:draw()
-		updateCounter()
-	elseif action == "player" then
-		data.magnetic.player = not data.magnetic.player
-		magnetic.player["text"] = data.magnetic.player and "tak" or "nie"
-		magnetic.player["text-color"] = data.magnetic.player and 0x00ff00 or 0xff0000
-		magnetic.player:draw()
-		updateCounter()
-	elseif action == "codes" then
-		local cgui = gml.create("center", "center", 50, 7, gpu)
-		cgui:addLabel("center", 1, 41, "Wprowadź nowy kod kart magnetycznych:")
-		local field = cgui:addTextField("center", 3, 30)
-		cgui:addButton(38, 5, 10, 1, "Anuluj", function() cgui:close() end)
-		cgui:addButton(27, 5, 10, 1, "OK", function()
-			if field["text"] == "" then
-				beep()
-			elseif field["text"]:len() > 20 then
-				GMLmessageBox("Kod nie może być dłuższy niż 20 znaków", {"OK"})
-			elseif not tonumber(field["text"]) then
-				GMLmessageBox("Wprowadzony kod musi być liczbą", {"OK"})
-			else
-				if data.magnetic.password and data.magnetic.password ~= tonumber(field["text"]) then
-					if GMLmessageBox("Zmiana hasła spowoduje, że wszystkie karty magnetyczne przestaną działać. Czy chcesz kontynuować?", {"Tak", "Nie"}) == "Nie" then
-						return
-					end
-				end
-				data.magnetic.password = tonumber(field["text"])
-				saveConfig()
-				cgui:close()
-			end
-		end)
-		cgui:run()
+	else
+		internalLog("loadConfig", "brak pliku modules, tworzenie listy")
 	end
+	checkModules()
+	
+	path = fs.concat(dir, "components.conf")
+	if fs.exists(path) and not fs.isDirectory(path) then
+		local f, e = io.open(path, "r")
+		if f then
+			local s = serial.unserialize(f:read("*a"))
+			if s then
+				components = s
+			else
+				internaLog("loadConfig", "plik components uszkodzony lub pusty", false, 0xffff00)
+			end
+			f:close()
+		else
+			internalLog("loadConfig", "błąd pliku components: " .. e, false, 0xff0000)
+			return false
+		end
+	else
+		internalLog("loadConfig", "brak pliku components, tworzenie listy")
+	end
+	checkComponents()
+	
+	path = fs.concat(dir, "passwd.bin")
+	if fs.exists(path) and not fs.isDirectory(path) then
+		local f, e = io.open(path, "rb")
+		if f then
+			passwd = data.decode64(f:read("*a"))
+			f:close()
+		else
+			internalLog("passwd", "nie udało się otworzyć pliku: " .. e)
+			f:close()
+			return false
+		end
+	else
+		internalLog("passwd", "brak pliku passwd, tworzenie nowego")
+	end
+	if not checkPassword() then return false end
+	
+	return true
 end
 
-local function addCard()
-	if not component.isAvailable("os_cardwriter") then
-		GMLmessageBox("Urządzenie zapisujące karty nie jest dostępne", {"OK"})
-		return
-	elseif not component.isAvailable("os_magreader") then
-		GMLmessageBox("Czytnik kart nie jest dostępny", {"OK"})
-		return
-	elseif not data.magnetic.password then
-		GMLmessageBox("Aby dodać kartę, ustaw kod kart magnetycznych", {"OK"})
-		return
+-- # Funkcje przycisków
+local function passwordPrompt()
+	local status = false
+	local function insertTextTF(tf, text)
+		if tf.selectEnd ~= 0 then
+			tf:removeSelected()
+		end
+		tf.real = tf.real:sub(1, tf.cursorIndex - 1) .. text .. tf.real:sub(tf.cursorIndex)
+		tf.text = string.rep("*", #tf.real)
+		tf.cursorIndex = tf.cursorIndex + #text
+		if tf.cursorIndex - tf.scrollIndex + 1 > tf.width then
+			local ts = tf.scrollIndex + math.floor(tf.width / 3)
+			if tf.cursorIndex - ts + 1 > tf.width then
+				ts = tf.cursorIndex - tf.width + math.floor(tf.width / 3)
+			end
+			tf.scrollIndex = ts
+		end
 	end
-	local leftList, rightList = {}, {}
-	for k, _ in pairs(data.magnetic.list) do table.insert(leftList, k) end
-	local cgui = gml.create("center", "center", 70, 34, gpu)
-	cgui:addLabel("center", 1, 12, "Nowa karta")
-	cgui:addLabel(2, 7, 9, "Nazwa:")
-	cgui:addLabel(2, 9, 9, "Gracz:")
-	cgui:addLabel(2, 11, 9, "Poziom:")
-	cgui:addLabel(2, 13, 9, "Kolor:")
-	cgui:addLabel(2, 15, 25, "Dostępne pomieszczenia:")
-	local field = cgui:addTextField(13, 7, 20)
-	local pName = cgui:addTextField(13, 9, 20)
-	local level = cgui:addButton(13, 11, 8, 1, "1", function(self)
-		self["text"] = self["text"] == "1" and "2" or "1"
-		self:draw()
+	local pgui = gml.create("center", "center", 50, 8)
+	if gui then
+		pgui.style = gui.style
+	end
+	pgui:addLabel("center", 1, 16, "Wprowadź hasło:")
+	local field = pgui:addTextField("center", 3, 30)
+	field.real = ""
+	field.insertText = insertTextTF
+	pgui:addButton(20, 5, 12, 1, "OK", function() 
+		if isPasswordValid(field.real) then
+			status = true
+		end
+		pgui:close()
 	end)
-	local color = cgui:addButton(13, 13, 11, 1, "white", function(self)
-		self.ind = self.ind < 15 and self.ind + 1 or 0
-		self["text"] = colors[self.ind]
-		self:draw()
+	pgui:addButton(34, 5, 12, 1, "Anuluj", function() pgui:close() end)
+	pgui:run()
+	return status
+end
+
+local function componentDetails(t)
+	local dgui = gml.create("center", "center", 55, 16)
+	dgui.style = gui.style
+	dgui:addLabel("center", 1, 22, "Szczegóły komponentu")
+	dgui:addLabel(2, 3, 48, "Adres:      " .. t.address)
+	dgui:addLabel(2, 4, 48, "Typ:        " .. t.type)
+	dgui:addLabel(2, 5, 7, "Nazwa:")
+	local name = dgui:addTextField(14, 5, 20)
+	name.text = t.name or ""
+	dgui:addLabel(2, 6, 9, "Status:")
+	local avail = dgui:addLabel(2, 7, 22, "")
+	dgui:addLabel(2, 9, 17, "Współrzędna X:")
+	dgui:addLabel(2, 10, 17, "Współrzędna Y:")
+	dgui:addLabel(2, 11, 17, "Współrzędna Z:")
+	local cx = dgui:addTextField(20, 9, 10)
+	local cy = dgui:addTextField(20, 10, 10)
+	local cz = dgui:addTextField(20, 11, 10)
+	cx.text = t.x and tostring(t.x) or ""
+	cy.text = t.y and tostring(t.y) or ""
+	cz.text = t.z and tostring(t.z) or ""
+	local button = dgui:addButton(11, 6, 13, 1, "włączony", function(self)
+		if self.status then
+			self.text = "wyłączony"
+			self.status = false
+			self:draw()
+		else
+			self.text = "włączony"
+			self.status = true
+			self:draw()
+		end
 	end)
-	color.ind = 0
-	local leftBox = cgui:addListBox(2, 18, 28, 14, leftList)
-	leftBox:hide()
-	local rightBox = cgui:addListBox(50, 18, 28, 14, {})
-	rightBox:hide()
-	local rightButton = cgui:addButton(31, 22, 8, 2, "--->", function()
-		local sel = leftBox:getSelected()
-		if sel then
-			for k, v in pairs(leftList) do
-				if v == sel then
-					table.remove(leftList, k)
+	button.status = t.state
+	local function refreshAvail()
+		if component.proxy(t.address) then
+			avail.text = "Dostępność: online"
+		else
+			avail.text = "Dostępność: offline"
+			button.status = false
+			button.text = "wyłączony"
+			button:draw()
+		end
+		avail:draw()
+	end
+	refreshAvail()
+	dgui:addButton(25, 7, 12, 1, "Odśwież", refreshAvail)
+	dgui:addButton(4, 14, 14, 1, "Usuń", function()
+		if GMLmessageBox(gui, "Czy na pewno chcesz usunąć ten element?", {"Tak", "Nie"}) == "Tak" then
+			for i, t2 in pairs(components) do
+				if t.address == t2.address then
+					components[i] = nil
+					save.components(true)
+					dgui:close()
 					break
 				end
 			end
-			table.insert(rightList, sel)
-			leftBox:updateList(leftList)
-			rightBox:updateList(rightList)
 		end
 	end)
-	rightButton:hide()
-	local leftButton = cgui:addButton(31, 25, 8, 2, "<---", function()
-		local sel = rightBox:getSelected()
-		if sel then
-			for k, v in pairs(rightList) do
-				if v == sel then
-					table.remove(rightList, k)
+	dgui:addButton(20, 14, 14, 1, "Zapisz", function()
+		local nx = tonumber(cx.text)
+		local ny = tonumber(cy.text)
+		local nz = tonumber(cz.text)
+		if not nx and cx.text:len() > 0 then
+			GMLmessageBox(gui, "Współrzędna X jest niepoprawna", {"OK"})
+		elseif not ny and cy.text:len() > 0 then
+			GMLmessageBox(gui, "Współrzędna Y jest niepoprawna", {"OK"})
+		elseif not nz and cz.text:len() > 0 then
+			GMLmessageBox(gui, "Współrzędna Z jest niepoprawna", {"OK"})
+		elseif name.text:len() > 20 then
+			GMLmessageBox(gui, "Nazwa nie może być dłuższa, niż 20 znaków.", {"OK"})
+		else
+			t.state = button.status
+			t.name = name.text
+			t.x = nx
+			t.y = ny
+			t.z = nz
+			save.components(true)
+			dgui:close()
+		end
+	end)
+	dgui:addButton(36, 14, 14, 1, "Anuluj", function() dgui:close() end)
+	dgui:run()
+end
+
+local function bComponentList()
+	local list, tab = nil, nil
+	local function refreshList()
+		local buffer = {}
+		for _, t in pairs(components) do
+			if not buffer[t.type] then buffer[t.type] = {} end
+			local str = t.address .. ", "
+			if t.name and t.name:len() > 0 then
+				str = str .. "[" .. t.name .. "] "
+			end
+			str = str .. (t.state and "ON" or "OFF")
+			if t.x then str = str .. "  X:" .. tostring(t.x) end
+			if t.y then str = str .. "  Y:" .. tostring(t.y) end
+			if t.z then str = str .. "  Z:" .. tostring(t.z) end
+			if not component.proxy(t.address) then str = "*" .. str end
+			table.insert(buffer[t.type], str)
+		end
+		local buffer2 = {}
+		for a, b in pairs(buffer) do
+			table.insert(buffer2, {a, b})
+		end
+		table.sort(buffer2, function(a, b) return string.byte(a[1], 1) < string.byte(b[1], 1) end)
+		tab = {}
+		for _, t in pairs(buffer2) do
+			table.insert(tab, string.upper(t[1]) .. ":")
+			for _, l in pairs(t[2]) do
+				table.insert(tab, "  " .. l)
+			end
+		end
+	end
+	local function enableAll()
+		for _, t in pairs(components) do
+			if component.proxy(t.address) then t.state = true end
+		end
+		refreshList()
+		list:updateList(tab)
+		save.components(true)
+		computer.pushSignal("components_changed")
+	end
+	local function disableAll()
+		for _, t in pairs(components) do
+			t.state = false
+		end
+		refreshList()
+		list:updateList(tab)
+		save.component(true)
+		computer.pushSignal("components_changed")
+	end
+	local function deleteOffline()
+		if GMLmessageBox(gui, "Czy na pewno chcesz usunąć urządzenia, które są offline?", {"Tak", "Nie"}) == "Tak" then
+			for i, t in pairs(components) do
+				if not component.proxy(t.address) then components[i] = nil end
+			end
+			refreshList()
+			list:updateList(tab)
+			save.components(true)
+			computer.pushSignal("components_changed")
+		end
+	end
+	local function reloadList()
+		refreshList()
+		list:updateList(tab)
+	end
+	local function details()
+		local addr = list:getSelected():match("^%s%s%**(%x+%-%x+%-%x+%-%x+%-%x+),.+")
+		if addr then
+			for _, t in pairs(components) do
+				if t.address == addr then
+					componentDetails(t)
 					break
 				end
 			end
-			table.insert(leftList, sel)
-			leftBox:updateList(leftList)
-			rightBox:updateList(rightList)
 		end
-	end)
-	leftButton:hide()
-	cgui:addButton(29, 15, 12, 1, "wszystkie", function(self)
-		if self["text"] == "wybrane" then
-			self["text"] = "wszystkie"
-			self:draw()
-			leftBox:hide()
-			rightBox:hide()
-			leftButton:hide()
-			rightButton:hide()
-		else
-			self["text"] = "wybrane"
-			self:draw()
-			leftBox:show()
-			rightBox:show()
-			leftButton:show()
-			rightButton:show()
-		end
-	end)
-	cgui:addButton(58, 1, 10, 1, "Anuluj", function() cgui:close() end)
-	cgui:addButton("center", 3, 24, 3, "DODAJ KARTĘ", function()
-		if not component.isAvailable("os_cardwriter") then
-			GMLmessageBox("Urządzenie zapisujące karty nie jest dostępne", {"OK"})
-		elseif not component.isAvailable("os_magreader") then
-			GMLmessageBox("Czytnik kart nie jest dostępny", {"OK"})
-		elseif field["text"] == "" or pName["text"] == "" then
-			GMLmessageBox("Wypełnij wszystkie pola", {"OK"})
-		elseif field["text"]:len() > 20 then
-			GMLmessageBox("Nazwa karty nie może być dłuższa, niż 20 znaków", {"OK"})
-		elseif pName["text"]:len() > 20 then
-			GMLmessageBox("Nazwa gracza nie może być dłuższa, niż 20 znaków", {"OK"})
-		else
-			local cardcontent = {}
-			cardcontent.player = pName["text"]
-			cardcontent.level = tonumber(level["text"])
-			cardcontent.pass = data.magnetic.password
-			if not rightBox:isHidden() and #rightList > 0 then
-				cardcontent.rooms = rightList
-			end
-			local deflatedData = datacard.encode64(datacard.deflate(serial.serialize(cardcontent)))
-			if deflatedData:len() >= 128 then
-				GMLmessageBox("Rozmiar danych przekracza pojemność karty. Usuń kilka pomieszczeń.")
-				return
-			end
-			local writer = component.os_cardwriter
-			if writer.write(deflatedData, field["text"], true, colors[color["text"]]) then
-				local e = {}
-				saveConfig()
-				local igui = gml.create("center", "center", 49, 5, gpu)
-				igui:addLabel(2, 1, 27, "Zapisywanie powiodło się.")
-				igui:addLabel(2, 2, 45, "W ciągu 15 sekund kliknij kartą na czytnik,")
-				igui:addLabel(2, 3, 31, "aby zarejestrować ją w bazie.")
-				event.timer(1, function()
-					e = {event.pull(14, "magData")}
-					os.sleep(0.5)
-					igui:close()
-				end)
-				igui:run()
-				if e[1] == "magData" then
-					if e[4] == deflatedData then
-						table.insert(cards, {field["text"], e[5]})
-						saveConfig()
-						GMLmessageBox("Rejestracja powiodła się", {"OK"})
-					else
-						GMLmessageBox("Została odczytana niewłaściwa karta. Rejestracja nie powiodła się", {"OK"})
-					end
-				else
-					GMLmessageBox("Rejestracja karty nie powiodła się", {"OK"})
-				end
-				cgui:close()
-			else
-				GMLmessageBox("Zapisywanie nie powiodło się: brak karty w slocie", {"OK"})
-			end
-		end
-	end)
+		refreshList()
+		list:updateList(tab)
+		computer.pushSignal("components_changed")
+	end
+	
+	refreshList()
+	local cgui = gml.create("center", "center", 90, 30)
+	cgui.style = gui.style
+	cgui:addLabel("center", 1, 25, "Zainstalowane komponenty")
+	list = cgui:addListBox(2, 3, 84, 20, tab)
+	list.onDoubleClick = details
+	cgui:addLabel(68, 23, 13, "* - offline")
+	cgui:addButton(3, 25, 21, 1, "Włącz wszystkie", enableAll)
+	cgui:addButton(3, 27, 21, 1, "Wyłącz wszystkie", disableAll)
+	cgui:addButton(26, 27, 18, 1, "Usuń offline", deleteOffline)
+	cgui:addButton(54, 27, 14, 1, "Odżwież", reloadList)
+	cgui:addButton(70, 27, 14, 1, "Zamknij", function() cgui:close() end)
 	cgui:run()
 end
 
-local function removeCard()
-	local lgui = gml.create("center", "center", 48, 35)
-	local newCards = cards
-	local list = {}
-	for _, v in pairs(cards) do table.insert(list, v[1]) end
-	lgui:addLabel("center", 1, 12, "Usuń karty")
-	local box = lgui:addListBox(2, 3, 44, 25, list)
-	lgui:addButton(37, 33, 10, 1, "Anuluj", function() lgui:close() end)
-	lgui:addButton(26, 33, 10, 1, "OK", function()
-		cards = newCards
-		saveConfig()
-		lgui:close()
+local function addCreator(address, typee)
+	local agui = gml.create("center", "center", 52, 15)
+	agui.style = gui.style
+	agui:addLabel("center", 1, 29, "Kreator dodawania komponentu")
+	agui:addLabel(2, 3, 48, "Adres:  " .. address)
+	agui:addLabel(2, 4, 48, "Typ:    " .. typee)
+	agui:addLabel(2, 5, 7, "Nazwa:")
+	agui:addLabel(2, 6, 9, "Status:")
+	agui:addLabel(2, 8, 17, "Współrzędna X:")
+	agui:addLabel(2, 9, 17, "Współrzędna Y:")
+	agui:addLabel(2, 10, 17, "Współrzędna Z:")
+	local name = agui:addTextField(11, 5, 22)
+	local cx = agui:addTextField(20, 8, 10)
+	local cy = agui:addTextField(20, 9, 10)
+	local cz = agui:addTextField(20, 10, 10)
+	local button = agui:addButton(11, 6, 13, 1, "włączony", function(self)
+		if self.status then
+			self.text = "wyłączony"
+			self.status = false
+			self:draw()
+		else
+			self.text = "włączony"
+			self.status = true
+			self:draw()
+		end
 	end)
-	lgui:addButton("center", 30, 13, 2, "Usuń", function()
-		local sel = box:getSelected()
-		if sel then
-			for k, v in pairs(newCards) do
-				if v[1] == sel then
-					table.remove(newCards, k)
+	button.status = true
+	agui:addButton(20, 13, 14, 1, "Zapisz", function()
+		local nx = tonumber(cx.text)
+		local ny = tonumber(cy.text)
+		local nz = tonumber(cz.text)
+		if not nx and cx.text:len() > 0 then
+			GMLmessageBox(gui, "Współrzędna X jest niepoprawna", {"OK"})
+		elseif not ny and cy.text:len() > 0 then
+			GMLmessageBox(gui, "Współrzędna Y jest niepoprawna", {"OK"})
+		elseif not nz and cz.text:len() > 0 then
+			GMLmessageBox(gui, "Współrzędna Z jest niepoprawna", {"OK"})
+		elseif name.text:len() > 20 then
+			GMLmessageBox(gui, "Nazwa komponentu nie może być dłuższa, niż 20 znaków.", {"OK"})
+		else
+			local t = {
+				address = address,
+				type = typee,
+				name = name.text,
+				state = button.status,
+				x = nx,
+				y = ny,
+				z = nz
+			}
+			table.insert(components, t)
+			save.components(true)
+			agui:close()
+		end
+	end)
+	agui:addButton(36, 13, 14, 1, "Anuluj", function() agui:close() end)
+	agui:run()
+end
+
+local function bNewComponent()
+	local list, tab = nil, nil
+	local function isAdded(address)
+		for _, t in pairs(components) do
+			if t.address == address then return true end
+		end
+		return false
+	end
+	local function reloadList()
+		tab = {}
+		for addr, name in component.list() do
+			if not isAdded(addr) then
+				table.insert(tab, addr .. "   " .. name)
+			end
+		end
+	end
+	local function addComponent()
+		local addr, typ = list:getSelected():match("^(%x+%-%x+%-%x+%-%x+%-%x+)%s%s%s(.+)")
+		if addr and typ then
+			addCreator(addr, typ)
+			reloadList()
+			list:updateList(tab)
+		end
+	end
+	reloadList()
+	local ngui = gml.create("center", "center", 70, 30)
+	ngui.style = gui.style
+	ngui:addLabel("center", 1, 21, "Dodaj nowy komponent")
+	list = ngui:addListBox(2, 3, 64, 23, tab)
+	list.onDoubleClick = addComponent
+	ngui:addButton(36, 28, 14, 1, "Odśwież", function()
+		reloadList()
+		list:updateList(tab)
+	end)
+	ngui:addButton(52, 28, 14, 1, "Wyjście", function() ngui:close() end)
+	ngui:run()
+end
+
+local function bModuleList()
+	local changeg = false
+	local llist, rlist = nil, nil
+	local ltab, rtab = {}, {}
+	
+	local function refTabs()
+		ltab = {}
+		for i = 1, 4 do
+			if modules[i] then
+				if #ltab == 0 then table.insert(ltab, "  NORMAL:") end
+				table.insert(ltab, tostring(i) .. ". " .. modules[i].name .. ", " .. modules[i].version)
+			end
+		end
+		if modules[5] then
+			if #ltab > 0 then table.insert(ltab, "") end
+			table.insert(ltab, "  LANDSCAPE:")
+			table.insert(ltab, "5. " .. modules[5].name .. ", " .. modules[5].version)
+		end
+		
+		rtab = {}
+		local n, l = {}, {}
+		for _, t in pairs(pmodules) do
+			if t.shape == "normal" then
+				table.insert(n, t.name .. ", " .. t.version)
+			elseif t.shape == "landscape" then
+				table.insert(l, t.name .. ", " .. t.version)
+			end
+		end
+		if #n > 0 then
+			table.insert(rtab, "  normal")
+			for _, e in pairs(n) do table.insert(rtab, e) end
+		end
+		if #l > 0 then
+			if #n > 0 then table.insert(rtab, "") end
+			for _, e in pairs(l) do table.insert(rtab, e) end
+		end
+		
+		if #ltab == 0 then table.insert(ltab, "") end
+		if #rtab == 0 then table.insert(rtab, "") end
+	end
+	
+	local function up()
+		if #ltab > 1 then
+			local num = tonumber(llist:getSelected():match("^(%d)%. .+"))
+			if num and num > 1 and num < 5 then
+				if modules[num - 1] then
+					local buffer = modules[num - 1]
+					modules[num - 1] = modules[num]
+					modules[num] = buffer
+				else
+					modules[num - 1] = modules[num]
+					modules[num] = nil
+				end
+				refTabs()
+				llist:updateList(ltab)
+				changed = true
+			end
+		end
+	end
+	
+	local function down()
+		if #ltab > 1 then
+			local num = tonumber(llist:getSelected():match("^(%d)%. .+"))
+			if num and num > 0 and num < 4 then
+				if modules[num + 1] then
+					local buffer = modules[num + 1]
+					modules[num + 1] = modules[num]
+					modules[num] = buffer
+				else
+					modules[num + 1] = modules[num]
+					modules[num] = nil
+				end
+				refTabs()
+				llist:updateList(ltab)
+				changed = true
+			end
+		end
+	end
+	
+	local function getIndex(pname)
+		if not pname then return nil end
+		for i, t in pairs(pmodules) do
+			if t.name == pname then return i end
+		end
+		return nil
+	end
+	
+	local function toLeft()
+		local index = getIndex(rlist:getSelected():match("^(.+), .+"))
+		if index and pmodules[index].shape == "normal" then
+			local free = nil
+			for i = 1, 4 do
+				if not modules[i] then free = i break end
+			end
+			if free then
+				modules[free] = pmodules[index]
+				pmodules[index] = nil
+				refTabs()
+				llist:updateList(ltab)
+				rlist:updateList(rtab)
+				changed = true
+			else
+				GMLmessageBox(gui, "Brak wolnych stref", {"OK"})
+			end
+		elseif index and pmodules[index].shape == "landscape" then
+			if not modules[5] then
+				modules[5] = pmodules[index]
+				pmodules[index] = nil
+				refTabs()
+				llist:updateList(ltab)
+				rlist:updateList(rtab)
+				changed = true
+			else
+				GMLmessageBox(gui, "Brak wolnych stref", {"OK"})
+			end
+		end
+	end
+	
+	local function toRight()
+		local num = tonumber(llist:getSelected():match("^(%d)%. .+"))
+		if num then
+			table.insert(pmodules, modules[num])
+			modules[num] = nil
+			refTabs()
+			llist:updateList(ltab)
+			rlist:updateList(rtab)
+			changed = true
+		end
+	end
+	refTabs()
+	local mgui = gml.create("center", "center", 90, 24)
+	mgui.style = gui.style
+	mgui:addLabel("center", 1, 15, "Lista modułów")
+	mgui:addLabel(3, 3, 17, "Aktywne moduły:")
+	mgui:addLabel(57, 3, 20, "Nieaktywne moduły:")
+	llist = mgui:addListBox(3, 5, 30, 14, ltab)
+	rlist = mgui:addListBox(57, 5, 30, 14, rtab)
+	mgui:addButton(35, 8, 9, 1, "-->", toRight)
+	mgui:addButton(46, 8, 9, 1, "<--", toLeft)
+	mgui:addButton(35, 12, 6, 1, "/\\", up)
+	mgui:addButton(35, 14, 6, 1, "\\/", down)
+	mgui:addButton(71, 21, 14, 1, "Zamknij", function() mgui:close() end)
+
+	mgui:run()
+	if changed then
+		save.modules(true)
+		GMLmessageBox(gui, "Zmiany zostaną wprowadzone po restarcie serwera", {"OK"})
+	end
+end
+
+local function componentDistribution()
+	local list, all, tab = nil, nil
+	local function refreshList()
+		local buffer = {}
+		local total = 0
+		for _, c in pairs(component.list()) do
+			if not buffer[c] then buffer[c] = 0 end
+			buffer[c] = buffer[c] + 1
+			total = total + 1
+		end
+		local b2 = {}
+		for a, b in pairs(buffer) do
+			table.insert(b2, {a, b})
+		end
+		table.sort(b2, function(a, b) return a[1]:byte(1) < b[1]:byte(1) end)
+		tab = {}
+		for _, t in pairs(b2) do
+			table.insert(tab, t[1]:upper() .. ": " .. tostring(t[2]))
+		end
+		all.text = "Razem: " .. tostring(total)
+	end
+	local dgui = gml.create("center", "center", 50, 18)
+	dgui.style = gui.style
+	dgui:addLabel("center", 1, 21, "Rozkład komponentów")
+	all = dgui:addLabel(4, 13, 15, "")
+	refreshList()
+	list = dgui:addListBox(2, 3, 44, 9, tab)
+	dgui:addButton(18, 15, 14, 1, "Odśwież", function()
+		refreshList()
+		list:updateList(tab)
+		all:draw()
+	end)
+	dgui:addButton(34, 15, 14, 1, "Zamknij", function() dgui:close() end)
+	dgui:run()
+end
+
+local function bInformation()
+	local igui = gml.create("center", "center", 50, 11)
+	igui.style = gui.style
+	igui:addLabel("center", 1, 11, "Informacje")
+	igui:addLabel(2, 3, 14, "Użycie dysku:")
+	igui:addLabel(2, 4, 16, "Użycie pamięci:")
+	igui:addLabel(2, 5, 23, "Podłączone komponenty:")
+	igui:addLabel(2, 6, 18, "Dostępna energia:")
+	local iHdd = igui:addLabel(26, 3, 20, "")
+	local iMem = igui:addLabel(26, 4, 20, "")
+	local iCom = igui:addLabel(26, 5, 20, "")
+	local iEne = igui:addLabel(26, 6, 20, "")
+	local function refreshInformation()
+		local fs = component.proxy(computer.getBootAddress())
+		if fs then
+			local a = math.ceil(fs.spaceUsed() / 1024)
+			local b = math.ceil(fs.spaceTotal() / 1024)
+			local str = tostring(math.ceil(a / b * 100)) .. "%  "
+			str = str .. tostring(a) .. "/" .. tostring(b) .. "KB"
+			iHdd.text = str
+		else
+			iHdd.text = "<niedostępne>"
+		end
+		iHdd:draw()
+		local total = math.ceil(computer.totalMemory() / 1024)
+		local free = total - math.ceil(computer.freeMemory() / 1024)
+		local str = tostring(math.ceil(free / total * 100)) .. "%  "
+		str = str .. tostring(free) .. "/" .. tostring(total) .. "KB"
+		iMem.text = str
+		iMem:draw()
+		local camount = 0
+		for _, _ in component.list() do camount = camount + 1 end
+		iCom.text = tostring(camount)
+		iCom:draw()
+		iEne.text = tostring(math.ceil(computer.energy() / computer.maxEnergy() * 100)) .. "%"
+		iEne:draw()
+	end
+	iCom.onDoubleClick = componentDistribution
+	refreshInformation()
+	igui:addButton(18, 8, 14, 1, "Odśwież", refreshInformation)
+	igui:addButton(34, 8, 14, 1, "Zamknij", function() igui:close() end)
+	igui:run()
+end
+
+local function backup(port)
+	if GMLmessageBox(gui, "Czy na pewno chcesz wykonać kopię zapasową", {"Tak", "Nie"}) == "Nie" then
+		return
+	end
+	if not dsapi.echo(port or 1) then
+		GMLmessageBox(gui, "Serwer danych nie został odnaleziony.", {"OK"})
+		return
+	end
+	
+	local list = {}
+	local function updateList(path)
+		local iter, err = fs.list(fs.concat("/etc", path))
+		if not iter then
+			GMLmessageBox(gui, "Nie udało się wykonać listy elementów: " .. err, {"OK"})
+			return false
+		end
+		for s in iter do
+			local subpath = fs.concat(path, s)
+			if s:sub(-1) == "/" then
+				if not updateList(subpath) then return false end
+			else
+				table.insert(list, subpath)
+			end
+		end
+		return true
+	end
+	local bgui
+	local function beginBackup()
+		local maxx = #list
+		local success = true
+		local errormsg = ""
+		for _, t in pairs(list) do
+			local file, e = io.open(fs.concat("/etc", t), "r")
+			if file then
+				local status, err = dsapi.write(port, t, file:read("*a"))
+				file:close()
+				if not status then
+					errormsg = dsapi.translateCode(err)
+					success = false
+					break
+				end
+			else
+				errormsg = e
+				success = false
+				break
+			end
+		end
+		if success then
+			GMLmessageBox(gui, "Kopia zapasowa wykonana pomyślnie!", {"OK"})
+		else
+			GMLmessageBox(gui, "Nie udało się wykonać kopii zapasowej: " .. errormsg, {"OK"})
+		end
+		bgui:close()
+	end
+	if updateList("/the_guard") then
+		bgui = gml.create("center", "center", 60, 7)
+		bgui.style = gui.style
+		bgui:addLabel("center", 2, 44, "Podczas wykonywania kopii zapasowej program")
+		bgui:addLabel("center", 3, 22, "może nie odpowiadać.")
+		bgui:addButton("center", 5, 14, 1, "Start", beginBackup)
+		bgui:run()
+	end
+end
+
+local function restore(port)
+	if GMLmessageBox(gui, "Czy na pewno chcesz przywrócić dane z kopii zapasowej?", {"Tak", "Nie"}) == "Nie" then
+		return
+	end
+	if not dsapi.echo(port or 1) then
+		GMLmessageBox(gui, "Serwer danych nie został odnaleziony.", {"OK"})
+		return
+	end
+	
+	local function createList(list, path)
+		local status, iter = dsapi.list(port, path)
+		if status then
+			for name, size in iter do
+				local subpath = fs.concat(path, name)
+				if size == -1 then
+					local a, b = createList(list, subpath)
+					if not a then return false, b end
+				else
+					table.insert(list, subpath)
+				end
+			end
+		else
+			return false, dsapi.translateCode(iter)
+		end
+		return true
+	end
+	local function checkDirectory(path)
+		local segments = fs.segments(path)
+		table.remove(segments, #segments)
+		local subpath = ""
+		for _, t in pairs(segments) do subpath = subpath .. "/" .. t end
+		if not fs.isDirectory(subpath) then
+			fs.makeDirectory(subpath)
+		end
+	end
+	local rgui = nil
+	local function beginRestore()
+		local list = {}
+		local status, e = createList(list, "/the_guard")
+		local success = true
+		if status then
+			for _, t in pairs(list) do
+				local s2, content = dsapi.get(port, t)
+				if s2 then
+					local subpath = fs.concat("/etc", t)
+					checkDirectory(subpath)
+					local file, e2 = io.open(subpath, "w")
+					if file then
+						file:write(content)
+						file:close()
+					else
+						success = false
+						GMLmessageBox(gui, "Nie udało się utworzyć pliku: " .. e2, {"OK"})
+						break
+					end
+				else
+					success = false
+					GMLmessageBox(gui, "Nie udało się przywrócić danych: " .. dsapi.translateCode(content), {"OK"})
 					break
 				end
 			end
-			list = {}
-			for _, v in pairs(newCards) do table.insert(list, v[1]) end
-			box:updateList(list)
+		else
+			success = false
+			GMLmessageBox(gui, "Nie udało się utworzyć listy plików: " .. e, {"OK"})
+		end
+		if success then
+			GMLmessageBox(gui, "Przywracanie danych zakończone sukcesem. Teraz następi ponowne uruchomienie komputera.", {"OK"})
+			computer.shutdown(true)
+		end
+		rgui:close()
+	end
+	
+	rgui = gml.create("center", "center", 60, 8)
+	rgui.style = gui.style
+	rgui:addLabel("center", 2, 44, "Podczas przywracania danych program")
+	rgui:addLabel("center", 3, 47, "może nie odpowiadać. Po zakończeniu komputer")
+	rgui:addLabel("center", 4, 30, "zostanie uruchomiony ponownie")
+	rgui:addButton("center", 6, 14, 1, "Start", beginRestore)
+	rgui:run()
+end
+
+local function bSettings()
+	local sgui = gml.create("center", "center", 60, 13)
+	sgui.style = gui.style
+	sgui:addLabel("center", 1, 11, "Ustawienia")
+	sgui:addLabel(2, 3, 13, "Główny port:")
+	sgui:addLabel(2, 4, 12, "Port kopii:")
+	sgui:addLabel(2, 6, 18, "Tryb debugowania:")
+	sgui:addLabel(2, 7, 14, "Ciemny motyw:")
+	sgui:addLabel(2, 8, 23, "Zapis przy zamknięciu:")
+	local mainport = sgui:addTextField(16, 3, 9)
+	mainport.text = tostring(settings.port)
+	local backupport = sgui:addTextField(16, 4, 9)
+	backupport.text = tostring(settings.backupPort)
+	local function switchState(self)
+		if self.status then
+			self.status = false
+			self.text = "nie"
+		else
+			self.status = true
+			self.text = "tak"
+		end
+		self:draw()
+	end
+	local function switchDebugMode(self)
+		if not self.status then
+			local mmsg =
+[[
+Aktywacja trybu debugowania sprawi,
+że do włączenia programu nie będzie
+wymagane podanie hasła.
+Czy chcesz kontynuować?
+]]
+			if GMLmessageBox(gui, mmsg, {"Tak", "Nie"}) == "Nie" then return end
+			switchState(self)
+		else
+			switchState(self)
+		end
+	end
+	local bDebug = sgui:addButton(26, 6, 11, 1, "", switchDebugMode)
+	bDebug.text = settings.debugMode and "tak" or "nie"
+	bDebug.status = settings.debugMode
+	local bDark = sgui:addButton(26, 7, 11, 1, "", switchState)
+	bDark.text = settings.dark and "tak" or "nie"
+	bDark.status = settings.dark
+	local bSave = sgui:addButton(26, 8, 11, 1, "", switchState)
+	bSave.text = settings.saveOnExit and "tak" or "nie"
+	bSave.status = settings.saveOnExit
+	sgui:addButton(41, 3, 16, 1, "Kopia", function()
+		local n = tonumber(backupport.text)
+		if n and n > 1 and n < 65535 then
+			backup(n)
+		else
+			backup(nil)
+		end
+	end)
+	sgui:addButton(41, 5, 16, 1, "Przywracanie", function()
+		local n = tonumber(backupport.text)
+		if n and n > 1 and n < 65535 then
+			restore(n)
+		else
+			restore(nil)
+		end
+	end)
+	sgui:addButton(27, 10, 14, 1, "Zapisz", function()
+		local p1 = tonumber(mainport.text)
+		local p2 = tonumber(backupport.text)
+		if not p1 then
+			GMLmessageBox(gui, "Główny port jest nieprawidłowy", {"OK"})
+		elseif p1 > 65535 or p1 < 1 then
+			GMLmessageBox(gui, "Główny port wykracza poza zakres", {"OK"})
+		elseif not p2 then
+			GMLmessageBox(gui, "Port kopii jest nieprawidłowy", {"OK"})
+		elseif p2 > 65535 or p2 < 1 then
+			GMLmessageBox(gui, "Port kopii wykracza poza zakres", {"OK"})
+		else
+			local p1open, p2open = false, false
+			if modem and modem.isOpen(p1) then
+				modem.close(p1)
+				p1open = true
+			end
+			if modem and modem.isOpen(p2) then
+				modem.close(p2)
+				p2open = true
+			end
+			settings.port = p1
+			settings.backupPort = p2
+			settings.debugMode = bDebug.status
+			settings.dark = bDark.status
+			settings.saveOnExit = bSave.status
+			if p1open and modem then modem.open(p1) end
+			if p2open and modem then modem.open(p2) end
+			save.settings(true)
+			sgui:close()
+		end
+	end)
+	sgui:addButton(43, 10, 14, 1, "Anuluj", function() sgui:close() end)
+	sgui:run()
+end
+
+local function bLogs()
+	local ll, list = {}, nil
+	local function refresh()
+		ll = {}
+		for _, s in pairs(lastlog) do
+			table.insert(ll, s:sub(1, 82))
+		end
+	end
+	local function details()
+		local line = nil
+		for _, s in pairs(lastlog) do
+			if s:sub(1, 20) == list:getSelected():sub(1, 20) then
+				line = s
+				break
+			end
+		end
+		if line then
+			local buffer = {}
+			local count = 0
+			for i = 1, line:len(), 85 do
+				count = count + 1
+				if i < line:len() then 
+					if count < 10 then
+						local tmp = line:sub(i, i + 85)
+						if count > 1 then
+							tmp = "   " .. tmp
+						end
+						table.insert(buffer, tmp)
+					else
+						table.insert(buffer, "(...)")
+						break
+					end
+				else
+					break
+				end
+			end
+			local dgui = gml.create("center", "center", 110, 6 + #buffer)
+			dgui.style = gui.style
+			dgui:addLabel("center", 1, 11, "Szczegóły")
+			for i = 1, #buffer do
+				dgui:addLabel(2, 2 + i, 90, buffer[i])
+			end
+			dgui:addButton(92, 4 + #buffer, 14, 1, "Zamknij", function() dgui:close() end)
+			dgui:run()
+			refresh()
+			list:updateList(ll)
+		end
+	end
+	refresh()
+	local lgui = gml.create("center", "center", 90, 18)
+	lgui.style = gui.style
+	lgui:addLabel("center", 1, 14, "Ostatnie logi")
+	list = lgui:addListBox(3, 3, 84, 12, ll)
+	list.onDoubleClick = details
+	lgui:addButton(55, 17, 14, 1, "Odśwież", function()
+		refresh()
+		list:updateList(ll)
+	end)
+	lgui:addButton(71, 17, 14, 1, "Zamknij", function() lgui:close() end)
+	lgui:run()
+end
+
+local function bLock()
+	if settings.debugMode then return end
+	local lgui = gml.create(1, 1, resolution[1], resolution[2])
+	lgui.style = gui.style
+	lgui:addLabel("center", 23, 26, " << PROGRAM ZABLOKOWANY >>")
+	lgui:addButton("center", 25, 16, 3, "ODBLOKUJ", function()
+		if passwordPrompt() then
+			lgui:close()
+		else
+			GMLmessageBox(lgui, "Wprowadzone hasło jest niepoprawne.", {"OK"})
 		end
 	end)
 	lgui:run()
 end
 
-local function removeAllCards()
-	if GMLmessageBox("Usunięcie listy kart magnetycznych spowoduje, że wszystkie dotychczas utworzone przestaną działać. Czy chcesz kontynuować?", {"Tak", "Nie"}) == "Tak" then
-		cards = {}
-		saveConfig()
+-- # Zabezpieczenia przed crashami
+local function safeCall(fun, ...)
+	local s, r = pcall(fun, ...)
+	if not s then
+		GMLmessageBox(gui, "Wystąpił błąd podczas wykonywania programu.\nSzczegóły w logach.")
+		silentLog("safeCall", r)
+		gui:draw()
+		return nil
+	end
+	return r
+end
+
+local function secureFunction(fun, ...)
+	local s, r = pcall(fun, ...)
+	if not s then
+		GMLmessageBox(gui, "Wystąpił błąd podczas wykonywania funkcji modułu.\n.Szczegóły w logach.")
+		silentLog("secureFunction", r)
+		gui:draw()
+		return nil
+	end
+	return r
+end
+
+local function errorHandler(err)
+	internalLog("Wystąpił bład", err, false, 0xff0000)
+	io.stderr:write(debug.traceback())
+	print()
+end
+
+local function bExit(b)
+	if not settings.debugMode then
+		if not passwordPrompt() then
+			GMLmessageBox(gui, "Podane hasło jest nieprawidłowe.", {"OK"})
+			return
+		end
+	end
+	gui:close()
+end
+
+-- # Main GUI
+local function createMainGui()
+	gui = gml.create(1, 1, resolution[1], resolution[2])
+	
+	if settings.dark then
+		local s, r = pcall(gml.loadStyle, "dark")
+		if s then
+			gui.style = r
+		else
+			internalLog("gui", "nie można załadować ciemnego stylu", false, 0xffff00)
+		end
+	end
+	
+	addTitle(gui, 143, 3)
+	gui:addLabel(150, 7, 8, "(" .. version .. ")")
+	gui:addButton(141, 13, 16, 1, "Komponenty", function() safeCall(bComponentList) end)
+	gui:addButton(141, 15, 16, 1, "Nowy komponent", function() safeCall(bNewComponent) end)
+	gui:addButton(141, 17, 16, 1, "Moduły", function() safeCall(bModuleList) end)
+	gui:addButton(141, 19, 16, 1, "Informacje", function() safeCall(bInformation) end)
+	gui:addButton(142, 25, 14, 1, "Ustawienia", function() safeCall(bSettings) end)
+	gui:addButton(142, 27, 14, 1, "Logi", function() safeCall(bLogs) end)
+	gui:addButton(142, 29, 14, 1, "Blokada", function() safeCall(bLock) end)
+	gui:addButton(142, 31, 14, 1, "Wyjście", function() safeCall(bExit) end)
+	
+	addBar(gui, 138, 1, 39, false)
+	addBar(gui, 1, 40, 158, true)
+	addBar(gui, 69, 1, 19, false)
+	addBar(gui, 69, 21, 19, false)
+	addBar(gui, 1, 20, 68, true)
+	addBar(gui, 70, 20, 68, true)
+	
+	addSymbol(gui, 70, 1, 0x2566)
+	addSymbol(gui, 139, 1, 0x2566)
+	addSymbol(gui, 1, 21, 0x2560)
+	addSymbol(gui, 1, 41, 0x2560)
+	addSymbol(gui, 139, 21, 0x2563)
+	addSymbol(gui, 160, 41, 0x2563)
+	addSymbol(gui, 70, 41, 0x2569)
+	addSymbol(gui, 139, 41, 0x2569)
+	addSymbol(gui, 70, 21, 0x256c)
+end
+
+-- # Loader
+local function initializeActions()
+	actions = {}
+	for _, t in pairs(modules) do
+		local mul = mod[t.name].id * 100
+		local buff = {}
+		for n, at in pairs(mod[t.name].actions) do
+			buff[n + mul] = at
+		end
+		actions[t.name] = buff
 	end
 end
 
-
---[[local function installSoftware()
-	local oldList = component.list("filesystem")
-	local igui = gml.create("center", "center", 50, 15)
-	igui:addLabel("center", 1, 25, "Instalator kontrolerów")
-	igui:addLabel(2, 3, 24, "1. Włóż dysk do stacji")
-	igui:addLabel(2, 4, 34, "2. Wciśnij przycisk \"ISNTALUJ\"")
-	igui:addLabel(2, 5, 46, "3. Na dysku zostanie zainstalowany kontroler")
-	igui:addLabel("center", 6, 35, "UWAGA: dysk zostanie sofrmatowany")
-	igui:addButton("center", 12, 10, 1, "Anuluj", function() igui:close() end)
-	igui:addButton("center", 8, 15, 3, "INSTALUJ", function()
-		local newList = component.list("filesystem")
-		local disk = nil
-		local dAmount = 0
-		for _, _ in pairs(oldList) do
-			dAmount = dAmount + 1
-		end
-		for k, _ in pairs(newList) do
-			local a = 0
-			for k2, _ in pairs(oldList) do
-				a = a + 1
-				if k == k2 then
-					break
-				elseif k ~= k2 and a == dAmount then
-					disk = component.proxy(k)
-					break
+local function loadModules()
+	local function doActionValidation(ac)
+		local davn = "action validator"
+		local counter = 0
+		for i, t in pairs(ac) do
+			if type(i) ~= "number" then
+				internalLog(davn, "niepoprawny identyfikator (" .. type(i) .. ")")
+				return false
+			elseif type(t["type"]) ~= "string" then
+				internalLog(davn, "niepoprawny typ (" .. type(t["type"]) .. ")")
+				return false
+			elseif type(t["desc"]) ~= "string" then
+				internalLog(davn, "niepoprawny opis (" .. type(t["desc"]) .. ")")
+				return false
+			elseif type(t["exec"]) ~= "function" then
+				internalLog(davn, "brak definicji funkcji")
+				return false
+			elseif t["hidden"] and type(t["hidden"]) ~= "boolean" then
+				internalLog(davn, "widoczność niezdefiniowana")
+				return false
+			end
+			local p1t = type(t["p1type"])
+			if p1t == "string" then
+				if not (t["p1type"] == "number" or t["p1type"] == "string" or t["p1type"] == "table" or t["p1type"] == "function" or t["p1type"] == "nil") then
+					internalLog(davn, "pierwszy typ niepoprawny (" .. t["p1type"] .. ")")
+					return false
 				end
+				if type(t["p1desc"]) ~= "string" then
+					internalLog(davn, "pierwszy opis jest pusty")
+					return false
+				end
+			elseif p1t ~= "nil" then
+				internalLog(davn, "pierwszy parametr niepoprawny (" .. p1t .. ")")
+				return false
 			end
-			if disk then break end
+			local p2t = type(t["p2type"])
+			if p2t == "string" then
+				if not (t["p2type"] == "number" or t["p2type"] == "string" or t["p2type"] == "table" or t["p2type"] == "function" or t["p2type"] == "nil") then
+					internalLog(davn, "drugi typ niepoprawny (" .. t["p2type"] .. ")")
+					return false
+				end
+				if type(t["p2desc"]) ~= "string" then
+					internalLog(davn, "drugi opis jest pusty")
+					return false
+				end
+			elseif p2t ~= "nil" then
+				internalLog(davn, "drugi parametr niepoprawny (" .. p2t .. ")")
+				return false
+			end
+			counter = counter + 1
 		end
-		if disk then
-			if GMLmessageBox("Adres dysku: " .. disk.address:sub(1, 3) ..". Czy chcesz kontynuować?", {"Tak", "Nie"}) == "Nie" then
-				return
-			end
-			local rl = disk.list("/")
-			for i = 1, #rl do
-				disk.remove(rl[i])
-			end
-			local copy = function(name)
-				local f = io.open(name, "r")
-				local stream = f:read()
-				f:close()
-				local desc = disk.open(name, "w")
-				disk.write(desc, stream)
-				disk.close(desc)
-			end
-			disk.makeDirectory("/lib")
-			copy("/lib/package.lua")
-			copy("/lib/buffer.lua")
-			copy("/lib/filesystem.lua")
-			copy("/lib/io.lua")
-			copy("/lib/event.lua")
-			copy("/lib/serialization.lua")
-			copy("/lib/keyboard.lua")
-			local initStream = ""
-			initStream = initStream .. "local serverPort = " .. tostring(data.port) .. "\n"
-			initStream = initStream .. "local serverAddress = \"" .. modem.address .. "\"\n"
-			initStream = initStream .. "local version = \"" .. microVersion .. "\"\n"
-			initStream = initStream .. softStream
-			local desc = disk.open("init.lua", "w")
-			disk.write(desc, initStream)
-			disk.close(desc)
-			GMLmessageBox("Oprogramowanie zostało zapisane na dysku", {"OK"})
-			igui:close()
-		else
-			GMLmessageBox("Nie znaleziono nowego dysku", {"OK"})
-		end
-	end)
-	igui:run()
-end]]
-
-local function init()
-	switch.blockade["text-color"] = data.blockade and 0x00ff00 or 0xff0000
-	switch.tesla["text-color"] = data.tesla and 0x00ff00 or 0xff0000
-	switch.shield["text-color"] = data.shield and 0x00ff00 or 0xff0000
-	switch.alarm["text-color"] = data.alarm and 0x00ff00 or 0xff0000
-	detector.list:updateList(data.detector.list or {})
-	detector.listMode["text"] = data.detector.mode and "whitelist" or "blacklist"
-	detector.level["text"] = tostring(data.detector.level or 0)
-	detector.cooldown["text"] = tostring(data.detector.cooldown or 0)
+		internalLog(" zweryfikowano " .. tostring(counter) .. " akcji", "", true)
+		return true
+	end
 	
-	local list = {}
-	for k, _ in pairs(data.magnetic.list or {}) do table.insert(list, k) end
-	magnetic.list:updateList(list)
-	magnetic.card["text"] = data.magnetic.card and "tak" or "nie"
-	magnetic.card["text-color"] = data.magnetic.card and 0x00ff00 or 0xff0000
-	magnetic.player["text"] = data.magnetic.player and "tak" or "nie"
-	magnetic.player["text-color"] = data.magnetic.player and 0x00ff00 or 0xff0000
+	local function checkID(id)
+		for _, t in pairs(mod) do
+			if t.id == id then return false end
+		end
+		return true
+	end
 	
-	ctid = event.timer(60, function()
-		creatures = {}
-	end, math.huge)
-end
-
-local function main()
-	gui = gml.create(1, 1, resolution[1], resolution[2], gpu)
-	addTitle()
-	gui:addLabel(65, 2, 5, version)
-	addBar(121, 1, 48, false)
-	addBar(1, 9, 120, true)
-	addBar(1, 41, 120, true)
-	addBar(60, 10, 31, false)
-	addBar(122, 31, 37, true)
-	gui:addLabel(124, 2, 10, "POZIOM 4")
-	gui:addLabel(124, 9, 10, "POZIOM 3")
-	gui:addLabel(124, 16, 10, "POZIOM 2")
-	gui:addLabel(124, 23, 10, "POZIOM 1")
-	switch.blockade = gui:addButton(127, 4, 30, 3, "Całkowita blokada", blockade)
-	switch.tesla = gui:addButton(127, 11, 30, 3, "Cewka Tesli", tesla)
-	switch.shield = gui:addButton(127, 18, 30, 3, "Osłona", shield)
-	switch.alarm = gui:addButton(127, 25, 30, 3, "Alarm", alarm)
-	gui:changeFocusTo(gui:addButton(136, 33, 20, 1, "Zablokuj ekran", lockScreen))
-	gui:addButton(136, 37, 20, 1, "Synchronizacja", sync)
-	gui:addButton(143, 39, 13, 1, "Ustawienia", settings)
-	gui:addButton(146, 47, 10, 1, "Wyjście", performExit)
-	gui:addLabel(22, 11, 20, "DETEKTORY RUCHU")
-	gui:addLabel(4, 14, 18, "Lista stworzeń:")
-	detector.list = gui:addListBox(3, 15, 37, 20, {})
-	detector.add = gui:addButton(46, 16, 12, 2, "Dodaj", function() modifyDetector("add") end)
-	detector.add = gui:addButton(46, 19, 12, 2, "Usuń", function() modifyDetector("remove") end)
-	gui:addLabel(4, 36, 12, "Tryb listy:")
-	gui:addLabel(4, 38, 24, "Poziom bezpieczeństwa:")
-	gui:addLabel(4, 40, 25, "Czas trwania alarmu [s]:")
-	detector.listMode = gui:addButton(17, 36, 12, 1, "blacklist", function() modifyDetector("mode") end)
-	detector.level = gui:addButton(28, 38, 4, 1, "0", function() modifyDetector("level") end)
-	detector.cooldown = gui:addButton(29, 40, 6, 1, "10", function() modifyDetector("cooldown") end)
-	gui:addLabel(85, 11, 12, "CZYTNIKI")
-	gui:addLabel(64, 14, 18, "Lista czytników:")
-	magnetic.list = gui:addListBox(63, 15, 37, 20, {})
-	gui:addButton(106, 16, 12, 2, "Dodaj", function() modifyMagnetic("add") end)
-	gui:addButton(106, 19, 12, 2, "Usuń", function() modifyMagnetic("remove") end)
-	gui:addButton(106, 22, 12, 2, "Modyfikuj", function() modifyMagnetic("modify") end)
-	gui:addLabel(64, 36, 20, "Autoryzacja karty:")
-	gui:addLabel(64, 38, 20, "Autoryzacja gracza:")
-	magnetic.card = gui:addButton(84, 36, 6, 1, "nie", function() modifyMagnetic("card") end)
-	magnetic.player = gui:addButton(84, 38, 6, 1, "tak", function() modifyMagnetic("player") end)
-	gui:addButton(64, 40, 14, 1, "Zmień kody", function() modifyMagnetic("codes") end)
-	gui:addButton(96, 36, 14, 1, "Dodaj kartę", addCard)
-	gui:addButton(96, 38, 14, 1, "Usuń kartę", removeCard)
-	gui:addButton(96, 40, 24, 1, "Usuń wszystkie karty", removeAllCards)
-	gui:addLabel(4, 42, 5, "LOGI:")
-	logList = gui:addListBox(3, 43, 114, 6, {})
-	GMLbgcolor = GMLextractProperty(gui, GMLgetAppliedStyles(gui), "fill-color-bg")
-	init()
-	event.timer(0.5, function() modem.broadcast(65533, data.port, messages.echo) end)
-	gui:run()
-end
-
---"modem_message", localAddress: string, remoteAddress: string, port: number, distance: number, remotePort: number, ...
-local function modemListener(...)
-	local e = {...}
-	if e[7] == messages.echo then
-		if e[8] == microVersion then
-			modem.send(e[3], e[6], data.port, messages.ok)
-			micros[e[3]] = e[6]
-			logs("Dodano mikrokontroler (" .. e[3]:sub(1, 5) .. ")")
-			component.computer.beep(1800, 0.4)
-		else
-			modem.send(e[3], e[6], data.port, messages.disable)
-			logs("Mikrokontroler (" .. e[3]:sub(1, 5) .. ") jest nieaktualny (v" .. e[8] ..", aktualna wersja: v" .. microVersion .. ")")
+	local function doValidation(mo)
+		local dvn = "validator"
+		if type(mo.name) ~= "string" then
+			internalLog(dvn, "brak nazwy")
+			return false
 		end
-	elseif e[7] == messages.ok then
-		if resplist ~= nil then
-			resplist[e[3]] = math.random()
+		if type(mo.version) ~= "string" then
+			internalLog(dvn, "brak numeru wersji")
+			return false
+		elseif type(mo.id) ~= "number" then
+			internalLog(dvn, "brak identyfikatora")
+			return false
+		elseif not checkID(mo.id) then
+			internalLog(dvn, "identyfikator " .. tostring(mo.id) .. " jest już używany")
+			return false
+		elseif type(mo.apiLevel) ~= "number" then
+			internalLog(dvn, "brak poziomu api")
+			return false
+		elseif mo.apiLevel < apiLevel then
+			internalLog(dvn, "za stara wersja serwera")
+			return false
+		elseif type(mo.shape) ~= "string" then
+			internalLog(dvn, "brak zdefiniowanego kształtu")
+			return false
+		elseif mo.shape ~= "normal" and mo.shape ~= "landscape" then
+			internalLog(dvn, "nieprawidłowy kształt")
+			return false
+		elseif type(mo.setUI) ~= "function" then
+			internalLog(dvn, "brak funkcji setUI()")
+			return false
+		elseif type(mo.start) ~= "function" then
+			internalLog(dvn, "brak funkcji start()")
+			return false
+		elseif type(mo.stop) ~= "function" then
+			internalLog(dvn, "brak funkcji stop()")
+			return false
+		elseif type(mo.pullEvent) ~= "function" then
+			internalLog(dvn, "brak funkcji pullEvent()")
+			return false
+		elseif type(mo.actions) ~= "table" then
+			internalLog(dvn, "brak zdefiniowanych akcji")
+			return false
+		elseif not doActionValidation(mo.actions) then
+			return false
 		end
-	elseif e[7] == messages.mag then
-		local s = serial.unserialize(e[8])
-		if s ~= nil and s[1] == "magData" and s[6] then
-			local inflated = serial.unserialize(datacard.inflate(datacard.decode64(s[4] or "")) or "")
-			if inflated then
-				local failmsg = function(msg)
-					logs("Nieudana próba użycia karty (" .. s[5]:sub(1, 5) .. "): " .. msg)
-				end
-				local genuine = false
-				local access = true
-				for k, v in pairs(cards) do
-					if v[2] == s[5] then
-						genuine = true
-						if inflated.rooms and not inflated.rooms[k] then access = false end
-						break
-					end
-				end
-				if data.blockade and inflated.level < 2 then
-					failmsg("pierwszy poziom podczas blokady")
-				elseif inflated.pass ~= data.magnetic.password then
-					failmsg("błędne hasło")
-				elseif not access then
-					failmsg("brak dostępu")
-				elseif data.magnetic.card and not genuine then
-					failmsg("karta nie jest autentyczna")
-				elseif data.magnetic.player and inflated.player ~= s[3] then
-					failmsg("weryfikacja gracza nie powiodła się")
+		return true
+	end
+	
+	local function loadModule(filename)
+		local m, e = loadfile(filename)
+		if m then
+			local s, buffer = pcall(m)
+			if s then
+				if buffer and doValidation(buffer) then
+					return buffer
 				else
-					for _, v in pairs(data.magnetic.list) do
-						if v.address == s[2] then
-							if v.level <= inflated.level then
-								sendCommand(messages.color, sides.right, v.color, 250, v.timeout)
-								logs("Użyto karty " .. s[5]:sub(1, 5))
-								return
-							else
-								failmsg("zbyt niski poziom")
+					internalLog("Moduł uszkodzony", "dezaktywacja", true, 0xff0000)
+					return nil
+				end
+			else
+				internalLog("Błąd składni", buffer, true, 0xff0000)
+			end
+		else
+			internalLog("loader", "błąd ładowania: " .. e)
+			return nil
+		end
+	end
+	
+	for num, tab in pairs(modules) do
+		if type(num) ~= "number" then
+			internalLog("loader", "nieprawidłowa strefa, wpis usunięty")
+			modules[num] = nil
+		elseif num > 0 and num < 6 then
+			if type(tab.file) == "string" then
+				local buffer = loadModule(tab.file)
+				if buffer then
+					if not mod[buffer.name] then
+						if (buffer.shape == "normal" and (num > 0 and num < 5)) or (buffer.shape == "landscape" and num == 5) then
+							mod[buffer.name] = buffer
+							modules[num].name = buffer.name
+							modules[num].version = buffer.version
+							modules[num].shape = buffer.shape
+							modules[num].id = buffer.id
+						else
+							internaLog("loader", "strefa nie odpowiada kształtowi")
+							modules[num] = nil
+						end
+					else
+						internalLog("loader", "moduł o nazwie " .. buffer.name .. " już istnieje", 0xffff00)
+					end
+				else
+					modules[num] = nil
+					table.insert(bmodules, tab.file)
+				end
+			else
+				internalLog("loader", "wpis modułu uszkodzony, wpis usunięty")
+				modules[num] = nil
+			end
+		end
+	end
+	initializeActions()
+	
+	local function isAdded(filename)
+		local v1, v2 = false, false
+		for _, t in pairs(modules) do
+			if t.file == filename then
+				v1 = true
+				break
+			end
+		end
+		for _, t in pairs(bmodules) do
+			if t == filename then
+				v2 = true
+				break
+			end
+		end
+		return v1 or v2
+	end
+	internalLog("Ładowanie niezainstalowanych modułów", "", true, 0x00a6ff)
+	for n in fs.list(modulesDir) do
+		local name = n:match("^mod_tg_(.+)%.lua$")
+		if name and not isAdded(fs.concat(modulesDir, n)) then
+			internalLog("  " .. name, "", true, 0xffff00)
+			local buffer = loadModule(fs.concat(modulesDir, n))
+			if buffer then
+				local t = {
+					name = buffer.name,
+					file = fs.concat(modulesDir, n),
+					version = buffer.version,
+					shape = buffer.shape,
+					id = buffer.id
+				}
+				table.insert(pmodules, t)
+			end
+		end
+	end
+end
+
+-- #Nasłuchiwacze
+backgroundListener = function(...)
+	local params = {...}
+	for m, t in pairs(events) do
+		for _, n in pairs(t) do
+			if params[1] == n and mod[m] then
+				mod[m].pullEvent(...)
+			end
+		end
+	end
+end
+
+local function getComponentID(addr)
+	for i, t in pairs(components) do
+		if t.address == addr then return i end
+	end
+	return nil
+end
+
+local function internalListener(...)
+	local params = {...}
+	if params[1] == "component_added" then
+		local id = getComponentID(params[2])
+		if id then
+			components[id].state = true
+		end
+	elseif params[1] == "component_removed" then
+		local id = getComponentID(params[2])
+		if id then
+			components[id].state = false
+		end
+	end
+end
+
+local function createGUI()
+	local function calcPosition(x, y, width, height, maxWidth, maxHeight)
+		width = math.min(width, maxWidth)
+		height = math.min(height, maxHeight)
+
+		if x == "left" then
+			x = 1
+		elseif x == "right" then
+			x = maxWidth - width + 1
+		elseif x == "center" then
+			x = math.max(1, math.floor((maxWidth - width) / 2))
+		elseif x < 0 then
+			x = maxWidth - width + 2 + x
+		elseif x < 1 then
+			x = 1
+		elseif x + width - 1 > maxWidth then
+			x = maxWidth - width + 1
+		end
+
+		if y == "top" then
+			y = 1
+		elseif y == "bottom" then
+			y = maxHeight - height + 1
+		elseif y == "center" then
+			y = math.max(1, math.floor((maxHeight - height) / 2))
+		elseif y < 0 then
+			y = maxHeight - height + 2 + y
+		elseif y < 1 then
+			y = 1
+		elseif y + height - 1 > maxHeight then
+			y = maxHeight - height + 1
+		end
+
+		return x, y, width, height
+	end
+	for z, t in pairs(modules) do
+		if z > 0 and z < 6 then
+			internalLog(t.name, "")
+			local m = mod[t.name]
+			if m then
+				local coord = zones[z]
+				local dim = m.shape == "normal" and zones.normal or zones.landscape
+				local subgui = gml.create(coord[1], coord[2], dim[1] + 2, dim[2] + 2)
+				local counter = 0
+				subgui.addLabel = function(...)
+					local aa = {...}
+					local x, y, w = calcPosition(aa[2], aa[3], aa[4], 1, dim[1], dim[2])
+					counter = counter + 1
+					local g = gui:addLabel(x + coord[1] - 1, y + coord[2] - 1, w, aa[5])
+					g.mark = true
+					return g
+				end
+				subgui.addButton = function(...)
+					local aa = {...}
+					local x, y, w, h = calcPosition(aa[2], aa[3], aa[4], aa[5], dim[1], dim[2])
+					counter = counter + 1
+					local g = gui:addButton(x + coord[1] - 1, y + coord[2] - 1, w, h, aa[6], aa[7])
+					g.mark = true
+					return g
+				end
+				subgui.addTextField = function(...)
+					local aa = {...}
+					local x, y, w = calcPosition(aa[2], aa[3], aa[4], 1, dim[1], dim[2])
+					counter = counter + 1
+					local g = gui:addTextField(x + coord[1] - 1, y + coord[2] - 1, w, aa[5])
+					g.mark = true
+					return g
+				end
+				subgui.addListBox = function(...)
+					local aa = {...}
+					local x, y, w, h = calcPosition(aa[2], aa[3], aa[4], aa[5], dim[1], dim[2])
+					counter = counter + 1
+					local g = gui:addListBox(x + coord[1] - 1, y + coord[2] - 1, w, h, aa[6])
+					g.mark = true
+					return g
+				end
+				subgui.addComponent = function(obj, comp)
+					comp.posX = comp.posX + coord[1] - 1
+					comp.posY = comp.posY + coord[2] - 1
+					comp.bodyX, comp.bodyY, comp.bodyW, comp.bodyH = GMLcalcBody(comp)
+					gui:addComponent(comp)
+				end
+				local s, r = pcall(m.setUI, subgui)
+				
+				if s then
+					for _, t in pairs(gui.components) do
+						if t.mark then
+							if t.onClick then
+								local o = t.onClick
+								t.onClick = function(...)
+									return secureFunction(o, ...) 
+								end
+							end
+							if t.onDoubleClick then
+								local o = t.onDoubleClick
+								t.onDoubleClick = function(...)
+									return secureFunction(o, ...)
+								end
+							end
+							if t.onBeginDrag then
+								local o = t.onBeginDrag
+								t.onBeginDrag = function(...)
+									return secureFunction(o, ...)
+								end
+							end
+							if t.onDrag then
+								local o = t.onDrag
+								t.onDrag = function(...)
+									return secureFunction(o, ...)
+								end
+							end
+							if t.onDrop then
+								local o = t.onDrop
+								t.onDrop = function(...)
+									return secureFunction(o, ...)
+								end
 							end
 						end
 					end
-					failmsg("nie znaleziono czytnika o adresie " .. s[2]:sub(1, 5))
-				end
-			end
-		end
-	elseif e[7] == messages.move then
-		local s = serial.unserialize(e[8])
-		if s ~= nil and s[1] == "motion" and creatures[s[6]] == nil then
-			creatures[s[6]] = math.random()
-			logs("Wykryto obiekt: " .. s[6])
-			if data.detector.mode then
-				for _, v in pairs(data.detector.list) do
-					if v ~= s[6] then
-						raiseAlert(data.detector.level or 0)
-					end
+					internalLog("dodano " .. counter .. " elemnty/ów GUI", "", false)
+				else
+					internalLog("modGUI", "nie udało się utworzyć GUI: " .. r, false, 0xffff00)
 				end
 			else
-				for _, v in pairs(data.detector.list) do
-					if v == s[6] then
-						raiseAlert(data.detector.level or 0)
-					end
-				end
+				internalLog("modGUI", "błąd integralności, nie znaleziono modułu", false, 0xff0000)
 			end
 		end
-	elseif e[7] == messages.address and type(readers) == "table" and #readers == 0 then
-		readers[1] = e[8]
-		readers[2] = e[9]
 	end
 end
 
-loadConfig()
-local r = {gpu.getResolution()}
-if r[1] ~= 160 or r[2] ~= 50 then
-	gpu.bind(screen2.address)
-	io.stderr:write("Docelowy monitor i/lub karta graficzna nie jest urzadzeniem 3 poziomu")
-	return
+local function main()
+	if fs.exists("/etc/the_guard") and not fs.isDirectory("/etc/the_guard") then
+		internalLog("main", "usuwanie błędnego folderu")
+		fs.remove("/etc/the_guard")
+	end
+	if not fs.exists("/etc/the_guard") then
+		internalLog("main", "brak folderu konfiguracji, tworzenie nowego")
+		fs.makeDirectory("/etc/the_guard")
+	end
+
+	internalLog("Ładowanie konfiguracji", "", true, 0x00a6ff)
+	if not loadConfig() then
+		internalLog("main", "ładowanie nie powiodło się", false, 0xff0000)
+		return false
+	end
+	
+	if not settings.debugMode then
+		local try = 0
+		repeat
+			if passwordPrompt() then break end
+			try = try + 1
+		until try == 3
+		if try == 3 then
+			internalLog("main", "zbyt wiele prób podania hasła", false, 0xff0000)
+			return false
+		end
+	end
+	
+	internalLog("Ładowanie modułów", "", true, 0x00a6ff)
+	loadModules()
+	
+	internalLog("Uruchamianie modułów", "", true, 0x00a6ff)
+	for n, m in pairs(mod) do
+		internalLog(n, "")
+		local s, e = pcall(m.start, interface)
+		if not s then
+			internalLog("niepowodzenie", e, false, 0xff0000)
+		end
+	end
+	
+	internalLog("Tworzenie GUI", "", true, 0x00a6ff)
+	createMainGui()
+	
+	internalLog("Tworzenie GUI modułów", "", true, 0x00a6ff)
+	createGUI()
+	
+	internalLog("init", "Ładowanie nasłuchiwania w tle")
+	event.listen("component_added", internalListener)
+	event.listen("component_removed", internalListener)
+	for _, e in pairs(revents) do
+		event.listen(e, backgroundListener)
+	end
+	eventsready = true
+	
+	internalLog("Uruchamianie serwera", "", false, 0x00ff00)
+	os.sleep(0.5)
+	gui:run()
+	os.sleep(0.5)
+	eventsready = nil
+	
+	internalLog("init", "Wyłączanie nasłuchiwania w tle")
+	event.ignore("component_added", internalListener)
+	event.ignore("component_removed", internalListener)
+	for _, e in pairs(revents) do
+		event.ignore(e, backgroundListener)
+	end
+	
+	internalLog("Wyłączanie modułów", "", true, 0x00a6ff)
+	for n, m in pairs(mod) do
+		internalLog(n, "")
+		xpcall(m.stop, errorHandler, interface)
+	end
+	
+	if settings.saveOnExit then
+		internalLog("Zapisywanie konfiguracji", "", true)
+		saveConfig()
+	end
+	internalLog("Zapisywanie logów", "", true, 0x00a6ff)
+	flushLog()
+	return true
 end
-r = nil
-if data.modemAddress and data.modemAddress ~= modem.address then
-	GMLmessageBox("Wykryto nową kartę sieciową. Dotychczas utworzone mikrokontrolery przestaną działać.", {"OK"})
+
+local function loadToken()
+	local path = fs.concat(configDir, "token")
+	local ee = component.eeprom
+	if not ee then
+		internalLog("token", "Nie odnaleziono pamięci EEPROM!", false, 0xff0000)
+		return false
+	end
+	if fs.isDirectory(path) then fs.remove(path) end
+	if fs.exists(path) then
+		local file, e = io.open(path, "r")
+		if file then
+			local dec = data.decode64(file:read("*a"))
+			if dec then
+				if ee.address == dec then
+					token = data.md5(ee.address)
+					return true
+				else
+					internalLog("token", "Tokeny się różnią!", false, 0xff0000)
+				end
+			else
+				internalLog("token", "Nie udało się zdekodować tokenu", false, 0xff0000)
+			end
+		else
+			internalLog("token", "Nie udało się otworzyć pliku tokenu (" .. e .. ")", false, 0xff0000)
+		end
+	else
+		internalLog("token", "Brak tokenu, tworzenie nowego", false, 0xffff00)
+		local file, e = io.open(path, "w")
+		if file then
+			file:write(data.encode64(ee.address))
+			file:close()
+			token = data.md5(ee.address)
+			return true
+		else
+			internalLog("token", "Nie udało się utworzyć tokenu (" .. e .. ")", false, 0xff0000)
+		end
+	end
+	return false
 end
-modem.open(data.port)
-event.listen("modem_message", modemListener)
-main()
-event.ignore("modem_message", modemListener)
-modem.close(data.port)
-event.cancel(ctid or 0)
-saveConfig()
-gpu.bind(screen2.address)
+
+local function init()
+	local prev = component.gpu.setForeground(0x00ff00)
+	print("Serwer THE GUARD, wersja " .. version)
+	component.gpu.setForeground(prev)
+	internalLog("init", "Ładowanie tokenu")
+	if not loadToken() then
+		internalLog("init", "Inicjalizacje nieudana", false, 0xff0000)
+		return
+	end
+	internalLog("init", "Inicjalizacja serwera")
+	if not main() then
+		internalLog("init", "Inicjalizacje nieudana", false, 0xff0000)
+		return
+	end
+end
+
+init()
