@@ -1,17 +1,31 @@
 --[[Struktura pliku z lista aplikacji:
-	{Nazwa aplikacji: string,
-	wersja: string,
-	Adres pobierania: string,
-	opis aplikacji: string,
-	autor: string,
-	zaleznosci: table,
-	czy aplikacja jest biblioteka: bool,
-	nazwa pliku manual: string,
-	zmodyfikowana nazwa aplikacji: string lub nil
-	archiwum: bool}
+	{
+		[1] = nazwa aplikacji: string,
+		[2] = wersja: string,
+		[3] = adres pobierania: string,
+		[4] = opis aplikacji: string,
+		[5] = autor: string,
+		[6] = zaleznosci: table or nil,
+		[7] = czy aplikacja jest biblioteka: bool or nil,
+		[8] = nazwa pliku manual: string or nil,
+		[9] = zmodyfikowana nazwa aplikacji: string or nil,
+		[10] = archiwum: bool or nil
+	}
+	
+	Opcje programu:
+		*list [-r]
+		Wyświetla listę dostępnych pakietów. [r] wyświetla również pakiety archiwalne.
+		*info <pakiet>
+		Wyświetla informacje o wybranym pakiecie.
+		*install <pakiet> [-f] [-n]
+		Instaluje nowy pakiet. [f] wymusza instalację, [n] wyłącza instalację zależności
+		*remove <pakiet> [-d]
+		Usuwa pakiet. [d] usuwa również zależności.
+		*test <ścieżka>
+		Testuje bazę offline aplikacji pod kątem błędów.
 ]]
 
-local wersja = "0.2.0"
+local wersja = "0.3.0"
 
 local component = require("component")
 
@@ -39,7 +53,8 @@ local shell = require("shell")
 local resolution = {gpu.getResolution()}
 local args, options = shell.parse(...)
 
-appList = nil
+local appList = nil
+local installed = {}
 
 local colors = {
 	white = 0xffffff,
@@ -57,37 +72,36 @@ local colors = {
 }
 
 local function textColor(color)
-	if gpu.maxDepth() > 1 then
+	if gpu.maxDepth() > 1 and color then
 		return gpu.setForeground(color)
 	end
+end
+
+local function printCommand(com, desc)
+	textColor(colors.orange)
+	term.write("  arpm " .. com)
+	textColor(colors.silver)
+	print(" - " .. desc)
+end
+
+local function ok()
+	textColor(colors.green)
+	term.write("OK")
+	textColor(colors.cyan)
 end
 
 local function usage()
 	local prev = nil
 	prev = textColor(colors.green)
-	print("ARPM - Aranthor's Repository Package Manager     wersja " .. wersja)
+	print("ARPM - ARPM Repository Package Manager     wersja " .. wersja)
 	textColor(colors.cyan)
 	print("Użycie:")
-	textColor(colors.orange)
-	term.write("  arpm install <pakiet> [-f]")
-	textColor(colors.silver)
-	print("  - Instaluje nowy pakiet. Użycie opcji -f wymusza nadpisanie starej aplikacji.")
-	textColor(colors.orange)
-	term.write("  arpm info <pakiet>")
-	textColor(colors.silver)
-	print("  - Wyświetla informacje o wybranym pakiecie")
-	textColor(colors.orange)
-	term.write("  arpm list [-r]")
-	textColor(colors.silver)
-	print("  - Wyświetla liste dostępnych pakietów. Użycie opcji -r wyświetla również pakiety archiwalne")
-	textColor(colors.orange)
-	term.write("  arpm update <pakiet> [-f]")
-	textColor(colors.silver)
-	print("  - Aktualizuje wybrany pakiet. Użycie opcji -f wymusza uaktualnienie.")
-	textColor(colors.orange)
-	term.write("  arpm uninstall <pakiet> [-d]")
-	textColor(colors.silver)
-	print("  - Odinstalowuje wybrany pakiet. Użycie opcji -d powoduje odinstalowanie zależnosci")
+	printCommand("list [-r]", "Wyświetla listę dostępnych pakietów. [r] wyświetla również pakiety archiwalne.")
+	printCommand("info <pakiet>", "Wyświetla informacje o wybranym pakiecie.")
+	printCommand("install <pakiet> [-f] [-d]", "Instaluje nowy pakiet. [f] wymusza instalację, [n] wyłącza instalację zależności.")
+	printCommand("remove <pakiet> [-d]", "Usuwa pakiet. [d] usuwa również zależności")
+	printCommand("update [pakiet] [-f]", "Aktualizuje pakiet. [f] wymusza uaktualnienie.")
+	printCommand("test <ścieżka>", "Testuje bazę offline aplikacji pod kątem błędów.")
 	textColor(prev)
 end
 
@@ -98,30 +112,46 @@ local function getContent(url)
 		return nil
 	end
 	for chunk in response do
-		sContent = sContent..chunk
+		sContent = sContent .. chunk
 	end
 	return sContent
 end
 
-local function getAppList()
-	--[[local f = io.open("/usr/bin/setup-list", "r")
-	local ss, ee = serial.unserialize(f:read("*a"))
-	f:close()
-	if not ss then
-		error(tostring(ss) .. "   " .. ee)
+local function saveAppList(raw)
+	local filename = "/tmp/setup-list"
+	if fs.isDirectory(filename) then
+		if not fs.remove(filename) then return end
 	end
-	appList = ss]]
-	if not appList then
-		local resp = getContent("https://bitbucket.org/Aranthor/oc_equipment/raw/master/installer/setup-list")
-		if resp then
-			local ss, ee = serial.unserialize(resp)
-			if not ss then
-				error(tostring(ss) .. "   " .. ee)
+	local f = io.open(filename, "w")
+	if f then
+		f:write(raw)
+		f:close()
+	end
+end
+
+local function fetchAppList()
+	local filename = "/tmp/setup-list"
+	if fs.exists(filename) and not fs.isDirectory(filename) then
+		local f = io.open(filename, "r")
+		if f then
+			local s = serial.unserialize(f:read("*a"))
+			f:close()
+			if s then
+				appList = s
+				return
 			end
-			appList = ss
-		else
-			io.stderr:write("Nie można polączyć się z Internetem")
 		end
+	end
+	local resp = getContent("https://bitbucket.org/Aranthor/oc_equipment/raw/master/installer/setup-list")
+	if resp then
+		local s, e = serial.unserialize(resp)
+		if not s then
+			io.stderr:write("Nie udało się odczytać listy aplikacji: " .. e)
+		end
+		appList = s
+		saveAppList(resp)
+	else
+		io.stderr:write("Nie można polączyć się z Internetem.")
 	end
 end
 
@@ -130,10 +160,140 @@ local function getApp(url)
 end
 
 local function getAppData(appName)
-	for _,nm in pairs(appList) do
+	for _, nm in pairs(appList) do
 		if nm[1] == appName then return nm end
 	end
 	return nil
+end
+
+local function testApp(app, all)
+	local warn = {}
+	if type(app[1]) ~= "string" then
+		table.insert(warn, "nazwa (1) nie jest ciągiem znaków")
+	elseif app[1]:len() == 0 then
+		table.insert(warn, "nazwa (1) jest za krótka")
+	end
+	if type(app[2]) ~= "string" then
+		table.insert(warn, "wersja (2) nie jest ciągiem znaków")
+	elseif app[2]:len() == 0 then
+		table.insert(warn, "wersja (2) jest za krótka")
+	end
+	if type(app[3]) ~= "string" then
+		table.insert(warn, "adres (3) nie jest ciągiem znaków")
+	else
+		local s, i = pcall(component.internet.request, app[3])
+		if s then
+			local d, e = pcall(i.read, 1)
+			if not d then
+				table.insert(warn, "adres (3): " .. e)
+			end
+			i.close()
+		else
+			table.insert(warn, "adres (3): " .. i)
+		end
+	end
+	if type(app[4]) ~= "string" then
+		table.insert(warn, "opis (4) nie jest ciągiem znaków")
+	elseif app[4]:len() == 0 then
+		table.insert(warn, "nie podano opisu (4)")
+	end
+	if type(app[5]) ~= "string" then
+		table.insert(warn, "nazwa autora (5) nie jest ciągiem znaków")
+	elseif app[5]:len() == 0 then
+		table.insert(warn, "nie podano autora (5)")
+	end
+	if type(app[6]) == "table" then
+		for _, dep in pairs(app[6]) do
+			local found = false
+			for _, a in pairs(all) do
+				if a[1] == dep then
+					found = true
+					break
+				end
+			end
+			if not found then
+				table.insert(warn, "zależność '" .. dep .. "' nie została odnaleziona")
+			end
+		end
+	elseif type(app[6]) ~= "nil" then
+		table.insert(warn, "zależności (6) maja niewłaściwy typ danych")
+	end
+	if type(app[7]) ~= "boolean" and type(app[7]) ~= "nil" then
+		table.insert(warn, "flaga biblioteki (7) ma niewłaściwy typ danych")
+	end
+	if type(app[8]) == "string" then
+		if app[8]:len() == 0 then
+			table.insert(warn, "nazwa pliku manual (8) jest za krótka")
+		end
+	elseif type(app[8]) ~= "nil" then
+		table.insert(warn, "nazwa pliku manual (8) ma niewłaściwy typ danych")
+	end
+	if type(app[9]) == "string" then
+		if app[9]:len() == 0 then
+			table.insert(warn, "zmodyfikowana nazwa aplikacji (9) jest za krótka")
+		end
+	elseif type(app[9]) ~= "nil" then
+		table.insert(warn, "zmodyfikowana nazwa aplikacji (9) ma niewłaściwy typ danych")
+	end
+	if type(app[10]) ~= "boolean" and type(app[10]) ~= "nil" then
+		table.insert(warn, "flaga archiwum (10) ma niewłaściwy typ danych")
+	end
+	return warn
+end
+
+local function testRepo(path)
+	if not path or path:len() == 0 then
+		io.stderr:write("Nie podano ścieżki do bazy aplikacji.")
+		return
+	end
+	if path:sub(1, 1) ~= "/" then
+		path = fs.concat(shell.getWorkingDirectory(), path)
+	end
+	if not fs.exists(path) then
+		io.stderr:write("Podany plik nie istnieje.")
+		return
+	end
+	if fs.isDirectory(path) then
+		io.stderr:write("Podany plik jest katalogiem!")
+		return
+	end
+	local file, e = io.open(path, "r")
+	if not file then
+		io.stderr:write("Nie udało się otworzyć pliku: " .. e)
+		return
+	end
+	local tab, e = serial.unserialize(file:read("*a"))
+	file:close()
+	if not tab then
+		io.stderr:write("Nie udało się przetworzyć pliku: " .. e)
+		return
+	end
+	textColor(colors.cyan)
+	term.write("Testowanie wpisów:")
+	local errors = 0
+	for _, t in pairs(tab) do
+		textColor(colors.silver)
+		term.write("\n" .. t[1] .. "   ")
+		local test = testApp(t, tab)
+		if #test > 0 then
+			textColor(colors.yellow)
+			for _, s in pairs(test) do
+				term.write("\n  " .. s)
+				errors = errors + 1
+			end
+		else
+			ok()
+		end
+	end
+	textColor(colors.cyan)
+	print("\n\nZweryfikowano " .. tostring(#tab) .. " aplikacji/e.")
+	if errors > 0 then
+		textColor(colors.orange)
+		print("Test zakończony. Znaleziono " .. tostring(errors) .. " błędy/ów.")
+	else
+		textColor(colors.green)
+		print("Test zakończony pomyślnie.")
+	end
 end
 
 local function packetInfo(packetName)
@@ -141,7 +301,7 @@ local function packetInfo(packetName)
 		io.stderr:write("Nie podano nazwy pakietu")
 		return
 	end
-	getAppList()
+	fetchAppList()
 	if appList then
 		for _, packet in pairs(appList) do
 			if type(packet) == "table" and packet[1] == packetName then
@@ -210,7 +370,7 @@ local function packetInfo(packetName)
 end
 
 local function printAppList(archive)
-	getAppList()
+	fetchAppList()
 	if appList then
 		local page = 1
 		local apps = {}
@@ -244,7 +404,7 @@ local function printAppList(archive)
 			local ev = {event.pull("key_down")}
 			if ev[4] == keyboard.keys.q then
 				return
-			elseif ev[4] == keybaord.keys.left and #apps > ((resolution[2] - 3) * page) then
+			elseif ev[4] == keyboard.keys.left and #apps > ((resolution[2] - 3) * page) then
 				page = page + 1
 			elseif ev[4] == keyboard.keys.right and page > 1 then
 				page = page - 1
@@ -261,146 +421,170 @@ local function clearAfterFail(tab)
 	end
 end
 
-local function installApp(appName, force_install)
+local generateList = nil
+generateList = function(appData, deps, list)
+	--[[
+	list = {
+		{
+			[1] = nazwa aplikacji:string
+			[2] = adres pobierania:string,
+			[3] = folder:string,
+			[4] = nazwa pliku:string,
+			[5] = wersja:string
+			[6] = nazwa instrukcji:string or nil
+		}
+		...
+	}
+	]]
+	if not list then list = {} end
+	local found = false
+	for _, b in pairs(list) do
+		if b[1] == appData[1] then
+			found = true
+			break
+		end
+	end
+	if not found then
+		local saveLocation = appData[7] and "/lib/" or "/usr/bin/"
+		if appData[9] then
+			saveLocation = saveLocation .. appData[9]
+		else
+			saveLocation = saveLocation .. appData[1] .. ".lua"
+		end
+		local segments = fs.segments(saveLocation)
+		local dir = ""
+		for i = 1, #segments - 1 do
+			dir = dir .. "/" .. segments[i]
+		end
+		dir = dir .. "/"
+		local add = {
+			[1] = appData[1],
+			[2] = appData[3],
+			[3] = dir,
+			[4] = segments[#segments],
+			[5] = appData[2],
+			[6] = appData[8]
+		}
+		table.insert(list, add)
+	end
+	if deps then
+		for _, b in pairs(appData[6] or {}) do
+			local dependency = getAppData(b)
+			if not dependency then
+				io.stderr:write("Nie znaleziono zależności " .. b)
+				return
+			end
+			if not generateList(dependency, true, list) then return end
+		end
+	end
+	return list
+end
+
+local function installApp(appName, force_install, disable_dep_install)
 	textColor(colors.blue)
 	print("\nRozpoczynanie instalacji...")
 	os.sleep(0.2)
 	textColor(colors.cyan)
 	term.write("\nPobieranie listy aplikacji...   ")
-	getAppList()
+	fetchAppList()
 	if appList then
-		installed = {}
-		application = nil
-		for _, app in pairs(appList) do
-			if app[1] == appName then
-				application = app
-				break
-			end
-		end
+		application = getAppData(appName)
 		if not application then
 			textColor(colors.red)
-			term.write("\nBlad: brak aplikacji o podanej nazwie")
+			term.write("\nBłąd: brak aplikacji o podanej nazwie")
 			return
 		end
-		textColor(colors.green)
-		term.write("OK")
-		textColor(colors.cyan)
-		term.write("\nSprawdzanie katalogu docelowego...   ")
-		dir = "/usr/bin"
-		if application[7] then dir = "/lib" end
-		if not fs.isDirectory(dir) then fs.makeDirectory(dir) end
-		nam = application[9] or application[1] .. ".lua"
-		textColor(colors.green)
-		term.write("OK")
-		textColor(colors.cyan)
-		term.write("\nKopiowanie plików:")
-		textColor(colors.silver)
-		term.write("\n" .. fs.concat(dir, nam))
-		if fs.exists(shell.resolve(fs.concat(dir, nam))) and not force_install then
-			io.stderr:write("\nAplikacja jest juz zainstalowana!")
+		ok()
+		term.write("\nGenerowanie listy instalacyjnej...   ")
+		local list = generateList(application, not disable_dep_install)
+		if not list then
 			textColor(colors.yellow)
 			term.write("\nInstalacja przerwana.")
 			return
 		end
-		plikApp = io.open(fs.concat(dir, nam), "w")
-		table.insert(installed, fs.concat(dir, nam))
-		if plikApp then
-			appCode = getApp(application[3])
-			if appCode then
-				plikApp:write(appCode)
-				plikApp:close()
-			else
-				io.stderr:write("\nNie udało się pobrać pliku " .. nam)
-				if not force_install then
-					io.stderr:write("\nInstalacja nie powiodła się!")
-					plikApp:close()
-					clearAfterFail(installed)
-					return
-				else
-					plikApp:close()
-					fs.remove(fs.concat(dir, nam))
-				end
-			end
-		else
-			io.stderr:write("\nNie można utworzyć pliku " .. nam)
-			if not force_install then
-				io.stderr:write("\nInstalacja nie powiodła się!")
-				plikApp:close()
-				clearAfterFail(installed)
-				return
-			else
-				plikApp:close()
-				fs.remove(fs.concat(dir, nam))
-			end
-		end
-		if application[6] then
-			dependencies = application[6]
-			for _, dep in pairs(dependencies) do
-				ddata = getAppData(dep)
-				if not ddata then
-					clearAfterFail(installed)
-					textColor(colors.red)
-					term.write("\nNie można odnaleźć zależnosći o nazwie " .. dep .. " w bazie")
+		ok()
+		term.write("\nSprawdzanie katalogów...   ")
+		for _, t in pairs(list) do
+			if not fs.isDirectory(t[3]) then
+				local s, e = fs.makeDirectory(t[3])
+				if not s then
+					io.stderr:write("Nie można utworzyć katalogu " .. t[3] .. ": " .. e)
+					textColor(colors.yellow)
 					term.write("\nInstalacja przerwana.")
 					return
 				end
-				depDir = dir
-				if ddata[7] then
-					if ddata[7] then depDir = "/lib" end
+			end
+		end
+		ok()
+		term.write("\nKopiowanie plików:")
+		textColor(colors.silver)
+		for _, t in pairs(list) do
+			local filename = fs.concat(t[3], t[4])
+			term.write("\n" .. filename)
+			if fs.exists(filename) then
+				local localfile = loadfile(filename)
+				local version = localfile and localfile("version_check") or ""
+				if version == t[5] and not force_install then
+					io.stderr:write("\nAplikacja jest już zainstalowana!")
+					textColor(colors.yellow)
+					term.write("\nInstalacja przerwana.")
+					return
 				end
-				fileName = ddata[9] or ddata[1]..".lua"
-				term.write("\n" .. fs.concat(depDir, fileName))
-				depCode = getApp(ddata[3])
-				plikDep = io.open(fs.concat(depDir, fileName),"w")
-				if depCode then
-					table.insert(installed, fs.concat(depDir, fileName))
-					if plikDep then
-						plikDep:write(depCode)
-						plikDep:close()
-					else
-						io.stderr:write("\nNie można utworzyć pliku " .. fileName)
-						if not force_install then
-							io.stderr:write("\nInstalacja nie powiodla się!")
-							plikDep:close()
-							clearAfterFail(installed)
-							return
-						else
-							plikDep:close()
-							fs.remove(fs.concat(depDir, fileName))
-						end
-					end
+			end
+			local output = io.open(filename, "w")
+			if not output then
+				io.stderr:write("\nNie można utworzyć pliku " .. t[4])
+				if not force_install then
+					io.stderr:write("\nInstalacja nie powiodła się!")
+					output:close()
+					clearAfterFail(installed)
+				end
+			end
+			table.insert(installed, filename)
+			local source = getApp(t[2])
+			if source then
+				output:write(source)
+				output:close()
+			else
+				io.stderr:write("\nNie udało się pobrać pliku " .. t[4])
+				if not force_install then
+					io.stderr:write("\nInstalacja nie powiodła się!")
+					output:close()
+					clearAfterFail(installed)
+					return
 				else
-					io.stderr:write("\nNie udało się pobrać pliku " .. dep .. ".lua")
-					if not force_install then
-						io.stderr:write("\nInstalacja nie powiodła się!")
-						plikDep:close()
-						clearAfterFail(installed)
-						return
-					else
-						plikDep:close()
-						fs.remove(fs.concat(depDir, dep .. ".lua"))
-					end
+					output:close()
+					fs.remove(filename)
 				end
 			end
 		end
-		if application[8] then
+		local manuals = {}
+		for _, t in pairs(list) do
+			if t[5] then
+				table.insert(manuals, t[6])
+			end
+		end
+		if #manuals > 0 then
+			local manaddr = "https://bitbucket.org/Aranthor/oc_equipment/raw/master/man/"
+			local mandir = "/usr/man/"
 			textColor(colors.cyan)
 			term.write("\nPrzygotowywanie instrukcji...")
-			manCode = getApp(application[8])
-			if manCode then
-				plikMan = io.open("/usr/man/" .. application[8], "w")
-				if plikMan then
-					plikMan:write(manCode)
-					plikMan:close()
+			textColor(colors.silver)
+			for _, s in pairs(manuals) do
+				term.write("\n" .. s)
+				local mansource = getapp(manaddr .. s)
+				if mansource then
+					local manfile = io.open(fs.concat(mandir, s), "w")
+					if manfile then
+						manfile:write(mansource)
+						manfile:close()
+					else
+						io.stderr:write("\nNie udało się utworzyć pliku instrukcji.")
+						fs.remove(fs.concat(mandir, s))
+					end
 				else
-					textColor(colors.yellow)
-					term.write("\nNie udało się utworzyć pliku instrukcji.")
-					plikMan:close()
-					fs.remove("/usr/man/" .. application[8])
+					io.stderr:write("\nNie odnaleziono instrukcji.")
 				end
-			else
-				textColor(colors.yellow)
-				term.write("\nNie udało się pobrać instrukcji.")
 			end
 		end
 		textColor(colors.green)
@@ -411,176 +595,69 @@ local function installApp(appName, force_install)
 	end
 end
 
-local function doUpdate(application, force)
-	local directory = application[7] and "/lib" or "/usr/bin"
-	local appName = application[9] or application[1] .. ".lua"
-	textColor(colors.green)
-	term.write("\nAktualizowanie aplikacji " .. application[1] .. "...")
-	if fs.exists(fs.concat(directory, appName)) then
-		local appVersion = loadfile(fs.concat(directory, appName))
-		if appVersion("version_check") == application[2] and not force then
-			textColor(colors.yellow)
-			term.write("\nAplikacja jest juz aktualna. Instalacja przerwana.")
-			return
-		end
-		textColor(colors.silver)
-		term.write("\n" .. fs.concat(directory, appName))
-		local plikApp = io.open(fs.concat(directory, appName), "w")
-		if plikApp then
-			local appCode = getApp(application[3])
-			if appCode then
-				plikApp:write(appCode)
-				plikApp:close()
-				local dependencies = application[6]
-				if dependencies then
-					textColor(colors.cyan)
-					term.write("\nAktualizowanie zależności...")
-					textColor(colors.silver)
-					for _, dep in pairs(dependencies) do
-						for _, app2 in pairs(appList) do
-							if app2[1] == dep then
-								depCode = getApp(app2[3])
-								if depCode then
-									local subdir = app2[7] and "/lib" or "/usr/bin"
-									local subname = app2[9] or app2[1] .. ".lua"
-									term.write("\n" .. fs.concat(subdir, subname))
-									plikDep = io.open(fs.concat(subdir, subname), "w")
-									plikDep:write(depCode)
-									plikDep:close()
-								end
-							end
-						end
-					end
-					textColor(colors.cyan)
-					term.write("\nAktualizowanie instrukcji...")
-					manCode = getApp(application[8])
-					if manCode then
-						plikMan = io.open("/usr/man/" .. application[8], "w")
-						if plikMan then
-							plikMan:write(manCode)
-							plikMan:close()
-						else
-							textColor(colors.yellow)
-							term.write("\nNie udało się zaktualizować instrukcji.")
-							plikMan:close()
-							fs.remove("/usr/man/" .. application[8])
-						end
-					else
-						textColor(colors.yellow)
-						term.write("\nNie udało się zaktualizować instrukcji.")
-					end
-				end
-			else
-				plikApp:close()
-				fs.remove(fs.concat(directory, appFile))
-				textColor(colors.red)
-				term.write("\nNie udało się pobrać kodu aplikacji z repozytorium")
-			end
-		else
-			plikApp:close()
-			fs.remove(fs.concat(directory, appFile))
-			textColor(colors.red)
-			term.write("\nNie udało się otworzyć pliku aplikacji.")
-			return
-		end
-		textColor(colors.green)
-		term.write("\nAktualizacja zakończona sukcesem.")
-	else
-		textColor(colors.red)
-		term.write("\nAplikacja nie jest zainstalowana na komputerze.")
-	end
-end
-
-local function updateApp(appName, force)
-	if string.sub(appName, string.len(appName) - 3, string.len(appName)) == ".lua" then
-		appName = string.sub(appName, 1, string.len(apppName) - 4)
-	end
-	textColor(colors.cyan)
-	term.write("\nPobieranie listy aplikacji...   ")
-	getAppList()
-	if appList then
-		if not appName then
-			io.stderr:write("Nie podano nazwy aplikacji")
-		else
-			term.write("\nSzukanie aplikacji w repozytorium...")
-			for _, application in pairs(appList) do
-				if application[1] == appName or application[9] == appName then
-					doUpdate(application, force)
-					return
-				end
-			end
-			textColor(colors.red)
-			term.write("Repozytorium nie zawiera aplikacji o podanej nazwie.")
-		end
-	else
-		io.stderr:write("Niepowodzenie\nNie można pobrać listy aplikacji. Aktualizacja przerwana")
-	end
-end
-
-local function doUninstall(application)
-	local fname = application[9] or application[1] .. ".lua"
-	local path = application[7] and "/lib/" or "/usr/bin/"
-	return fs.remove(path .. fname)
-end
-
 local function uninstallApp(appName, deps)
+	if not appName then
+		io.stderr:write("Nie podano nazwy aplikacji.")
+		return
+	end
 	local name = appName
-	if string.sub(appName, string.len(appName) - 3, string.len(appName)) == ".lua" then
+	if string.sub(appName, string.len(appName) - 4, string.len(appName)) == ".lua" then
 		name = string.sub(appName, 1, string.len(apppName) - 4)
 	end
 	textColor(colors.cyan)
-	print("\nPobieranie listy aplikacji...   ")
-	getAppList()
-	if appList then
-		for _, application in pairs(appList) do
-			if application[1] == name then
-				textColor(colors.green)
-				print("Odinstalowywanie aplikacji " .. name .. "...")
-				if not doUninstall(application) then
-					textColor(colors.red)
-					print("Nie znaleziono pliku aplikacji. Deinstalacja przerwana.")
-					return
-				end
-				if deps then
-					textColor(colors.cyan)
-					print("Usuwanie zależności:")
-					textColor(color.gray)
-					for _, dep in pairs(application[6] or {}) do
-						print(dep)
-						local data = getAppData(dep)
-						if data then
-							if not doUninstall(data) then
-								textColor(colors.orange)
-								print("Nie znaleziono pliku zależności")
-							end
-						else
-							textColor(colors.orange)
-							print("Zależność nie została odnaleziona na serwerze")
-						end
-					end	
-				end
-				textColor(colors.green)
-				print("\nDeinstalacja zakończona pomyślnie")
-				return
+	term.write("\nPobieranie listy aplikacji...   ")
+	fetchAppList()
+	if not appList then
+		textColor(colors.red)
+		term.write("Błąd\nNie udało się pobrać listy aplikacji.")
+		textColor(colors.yellow)
+		term.write("\nDeinstalacja przerwana.")
+		return
+	end
+	local application = getAppData(name)
+	if not application then
+		textColor(colors.red)
+		term.write("Błąd\nNie znaleziono aplikacji o podanej nazwie.")
+		textColor(colors.yellow)
+		term.write("\nDeinstalacja przerwana.")
+		return
+	end
+	ok()
+	term.write("\nGenerowanie listy deinstalacyjnej...   ")
+	local list  = generateList(application, deps)
+	if not list then
+		textColor(colors.yellow)
+		term.write("\nInstalacja przerwana.")
+		return
+	end
+	ok()
+	term.write("\nUsuwanie aplikacji:")
+	textColor(colors.silver)
+	for _, t in pairs(list) do
+		local filename = fs.concat(t[3], t[4])
+		term.write("\n" .. filename)
+		if fs.exists(filename) then
+			local s, e = fs.remove(filename)
+			if not s then
+				io.stderr:write("\nBłąd: " .. e)
 			end
 		end
-		io.stderr:write("Nie znaleziono aplikacji o podanej nazwie")
-	else
-		io.stderr:write("Nie udało się pobrać listy aplikacji. Deinstalacja przerwana.")
 	end
+	textColor(colors.green)
+	print("\nDeinstalacja zakończona pomyślnie.")
 end
 
 local function main()
-	if args[1] == "info" then
-		packetInfo(args[2])
-	elseif args[1] == "list" then
+	if args[1] == "list" then
 		printAppList(options.r)
-	elseif args[1] == "update" then
-		updateApp(args[2], options.f)
+	elseif args[1] == "info" then
+		packetInfo(args[2])
 	elseif args[1] == "install" then
-		installApp(args[2], options.f)
-	elseif args[1] == "uninstall" then
+		installApp(args[2], options.f, options.n)
+	elseif args[1] == "remove" then
 		uninstallApp(args[2], options.d)
+	elseif args[1] == "test" then
+		testRepo(args[2])
 	else
 		usage()
 	end
