@@ -5,7 +5,7 @@
 -- ###############################################
 
 
-local version = "0.4.1"
+local version = "0.4.2"
 local startArgs = {...}
 
 if startArgs[1] == "version_check" then return version end
@@ -578,16 +578,20 @@ local function main()
 	element.timeout:hide()
 	gui:addLabel(3, 20, 16, "Lista adresów:")
 	local list = {}
-	for _, v in pairs(data.list) do
-		table.insert(list, v.name .. " (" .. v.world .. ")")
+	for a, v in pairs(data.list) do
+		table.insert(list, tostring(a) .. ". " .. v.name .. " (" .. v.world .. ")")
 	end
 	element.list = gui:addListBox(3, 21, 40, 24, list)
-	element.list["onChange"] = function(listBox, prevIndex, selectedIndex)
-		element.name["text"] = data.list[selectedIndex].name
+	element.list.onClick = function(listBox)
+		local sel = listBox:getSelected()
+		if not sel then return end
+		local index = tonumber(sel:match("^(%d+)%.%s"))
+		if not index or not data.list[index] then return end
+		element.name["text"] = data.list[index].name
 		element.name:draw()
-		element.world["text"] = data.list[selectedIndex].world
+		element.world["text"] = data.list[index].world
 		element.world:draw()
-		element.address["text"] = data.list[selectedIndex].address
+		element.address["text"] = data.list[index].address
 		element.address:draw()
 	end
 	gui:addButton(4, 46, 10, 2, "Dodaj", function() modifyList("add") end)

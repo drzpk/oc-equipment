@@ -17,7 +17,7 @@
 	{"dark-style","none","https://bitbucket.org/Aranthor/oc_equipment/raw/master/lib/dark.gss","Ciemny motyw do gml","Aranthor",nil,true,nil,"dark.gss"},
 	{"hdp","2.1","https://bitbucket.org/Aranthor/oc_equipment/raw/master/lib/hdp.lua","Protokół sieciowy","Aranthor",nil,true,nil,nil},
 	--programs
-	{"sgcx","0.4.1","https://bitbucket.org/Aranthor/oc_equipment/raw/master/stargate/sgcx.lua","Sterownik gwiezdnych wrót","Aranthor",{"gml","gfxbuffer","default-style","dark-style"},nil,nil,nil},
+	{"sgcx","0.4.2","https://bitbucket.org/Aranthor/oc_equipment/raw/master/stargate/sgcx.lua","Sterownik gwiezdnych wrót","Aranthor",{"gml","gfxbuffer","default-style","dark-style"},nil,nil,nil},
 	{"irisAuth","1.8","https://bitbucket.org/Aranthor/oc_equipment/raw/master/stargate/irisAuth.lua","Program do zdalnego otwierania przeslony wrót","Aranthor",nil,nil,nil,nil},
 	{"geo_analyzer","1.3","https://bitbucket.org/Aranthor/oc_equipment/raw/master/misc/geo_analyzer.lua","Skaner terenu","Aranthor",nil,nil,nil,nil},
 	{"projector","1.0","https://bitbucket.org/Aranthor/oc_equipment/raw/master/misc/projector.lua","Projektor skanow terenu","Aranthor",nil,nil,nil,nil},
