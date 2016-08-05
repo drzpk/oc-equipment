@@ -5,7 +5,7 @@
 -- ###############################################
 
 
-local version = "0.4.0"
+local version = "0.4.1"
 local startArgs = {...}
 
 if startArgs[1] == "version_check" then return version end
@@ -459,7 +459,7 @@ local function modifyList(action)
 			GMLmessageBox("Uzupełnij wszystkie pola", {"OK"})
 		elseif element.name["text"]:len() > 20 or element.world["text"]:len() > 20 then
 			GMLmessageBox("Długość nazwy i/lub świata nie mogą przekraczać 20 znaków", {"OK"})
-		elseif not pcall(sg.energyToDial, element.address["text"]) then
+		elseif not sg.energyToDial(element.address["text"]) then
 			GMLmessageBox("Adres jest niepoprawny lub nie istnieje", {"OK"})
 		else
 			for _, v in pairs(data.list) do
@@ -490,7 +490,7 @@ local function modifyList(action)
 			GMLmessageBox("Uzupełnij wszystkie pola", {"OK"})
 		elseif element.name["text"]:len() > 20 or element.world["text"]:len() > 20 then
 			GMLmessageBox("Długość nazwy i/lub świata nie mogą przekraczać 20 znaków", {"OK"})
-		elseif not pcall(sg.energyToDial, element.address["text"]) then
+		elseif not sg.energyToDial(element.address["text"]) then
 			GMLmessageBox("Adres jest niepoprawny lub nie istnieje", {"OK"})
 		else
 			if GMLmessageBox("Czy na pewno chcesz zmodyfikować wpis?", {"Tak", "Nie"}) == "Tak" then
@@ -534,7 +534,7 @@ end
 
 local function dial()
 	if sg.stargateState() == "Idle" then
-		local status, response = pcall(sg.dial, element.address["text"])
+		local status, response = sg.dial(element.address["text"])
 		if status then
 			element.connectionType["text"] = "Połączenie wychodzące"
 			element.connectionType:show()

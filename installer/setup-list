@@ -17,7 +17,7 @@
 	{"dark-style","none","https://bitbucket.org/Aranthor/oc_equipment/raw/master/lib/dark.gss","Ciemny motyw do gml","Aranthor",nil,true,nil,"dark.gss"},
 	{"hdp","2.1","https://bitbucket.org/Aranthor/oc_equipment/raw/master/lib/hdp.lua","Protokół sieciowy","Aranthor",nil,true,nil,nil},
 	--programs
-	{"sgcx","0.4.0","https://bitbucket.org/Aranthor/oc_equipment/raw/master/stargate/sgcx.lua","Sterownik gwiezdnych wrót","Aranthor",{"gml","gfxbuffer","default-style","dark-style"},nil,nil,nil},
+	{"sgcx","0.4.1","https://bitbucket.org/Aranthor/oc_equipment/raw/master/stargate/sgcx.lua","Sterownik gwiezdnych wrót","Aranthor",{"gml","gfxbuffer","default-style","dark-style"},nil,nil,nil},
 	{"irisAuth","1.8","https://bitbucket.org/Aranthor/oc_equipment/raw/master/stargate/irisAuth.lua","Program do zdalnego otwierania przeslony wrót","Aranthor",nil,nil,nil,nil},
 	{"geo_analyzer","1.3","https://bitbucket.org/Aranthor/oc_equipment/raw/master/misc/geo_analyzer.lua","Skaner terenu","Aranthor",nil,nil,nil,nil},
 	{"projector","1.0","https://bitbucket.org/Aranthor/oc_equipment/raw/master/misc/projector.lua","Projektor skanow terenu","Aranthor",nil,nil,nil,nil},
@@ -31,7 +31,7 @@
 	{"levels","1.0","https://bitbucket.org/Aranthor/oc_equipment/raw/master/servers/mod_tg/mod_tg_levels.lua","Moduł obsługujący poziomy do strażnika","Aranthor",nil,nil,nil,"mod_tg/mod_tg_levels.lua"},
 	{"auth","1.0","https://bitbucket.org/Aranthor/oc_equipment/raw/master/servers/mod_tg/mod_tg_auth.lua","Moduł obsługujący czytniki i klawiatury do strażnika","Aranthor",nil,nil,nil,"mod_tg/mod_tg_auth.lua"},
 	{"io","1.0","https://bitbucket.org/Aranthor/oc_equipment/raw/master/servers/mod_tg/mod_tg_io.lua","Moduł obsługujący obwody redstone do strażnika","Aranthor",nil,nil,nil,"mod_tg/mod_tg_io.lua"},
-	{"turrets","1.0","https://bitbucket.org/Aranthor/oc_equipment/raw/master/servers/mod_tg/mod_tg_turrets.lua","Moduł obsługujący wieżyczki i czujniki ruchu do strażnika","Aranthor",nil,nil,nil,"mod_tg_turrets.lua"},
+	{"turrets","1.0","https://bitbucket.org/Aranthor/oc_equipment/raw/master/servers/mod_tg/mod_tg_turrets.lua","Moduł obsługujący wieżyczki i czujniki ruchu do strażnika","Aranthor",nil,nil,nil,"mod_tg/mod_tg_turrets.lua"},
 	--3rd party
 	{"OpenReactor","1.0","https://bitbucket.org/Aranthor/oc_equipment/raw/master/misc/OpenReactor.lua","Kontroler reaktorów z moda Big Reactors","2016mfransen",nil,nil,nil,nil},
 	{"TitanBIOS","1.0","https://bitbucket.org/Aranthor/oc_equipment/raw/master/misc/titanbios.lua","Rozruch przez HTTP","Lyra",nil,nil,nil,nil},
