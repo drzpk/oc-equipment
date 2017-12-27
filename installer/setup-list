@@ -1,12 +1,12 @@
 {
 	--legacy
-	{"admox_installer","0.1.4","https://gitlab.com/d_rzepka/oc-equipment/raw/master/archive/admox_installer.lua","Archiwalny instalator","Aranthor",nil,nil,nil,nil,true},
-	{"sgcx-legacy","0.3.7","https://bitbucket.org/Aranthor/oc_equipment/raw/ae1a46c7676b5ef0c3aa028bdad0ef908acc7b1e/stargate/sgcx.lua","Stara wersja sterownika wrót (dla ekranow 2 poziomu)","Aranthor",{"gml"},nil,nil,nil,true},
-	{"irisAuth-legacy","1.7","https://bitbucket.org/Aranthor/oc_equipment/raw/ae1a46c7676b5ef0c3aa028bdad0ef908acc7b1e/stargate/irisAuth.lua","Stara wersja programu do zdalnego otwierania przesłony wrót (obsługująca sgcx-legacy)","Aranthor",nil,nil,nil,nil,true},
-	{"data_server","0.2.0beta","https://gitlab.com/d_rzepka/oc-equipment/raw/master/archive/data_server.lua","Serwer danych","Aranthor",{"rtpo"},nil,nil,nil,true},
-	{"the_guard_legacy","1.0","https://gitlab.com/d_rzepka/oc-equipment/raw/master/archive/the_guard_legacy.lua","Strażnik - stara wersja","Aranthor",{"gml","hdp","dsapi"},nil,nil,nil,true},
-	{"micro","1","https://gitlab.com/d_rzepka/oc-equipment/raw/master/servers/micro.lua","Mikrokontroler strażnika (1.x)","Aranthor",{"hdp","dsapi"},nil,nil,nil,true},
-	{"ds-manager","1.1","https://gitlab.com/d_rzepka/oc-equipment/raw/master/archive/ds-manager.lua","Menedżer serwera danych","Aranthor",{"ds-api"},nil,nil,nil,true},
+	{"admox_installer","0.1.4","https://gitlab.com/d_rzepka/oc-equipment/raw/master/archive/admox_installer.lua","Archiwalny instalator","IlynPayne",nil,nil,nil,nil,true},
+	{"sgcx-legacy","0.3.7","https://gitlab.com/d_rzepka/oc-equipment/raw/510b45f30f5361f5bd0308d815fbce79413f0168/stargate/sgcx.lua","Stara wersja sterownika wrót (dla ekranow 2 poziomu)","IlynPayne",{"gml"},nil,nil,nil,true},
+	{"irisAuth-legacy","1.7","https://gitlab.com/d_rzepka/oc-equipment/raw/510b45f30f5361f5bd0308d815fbce79413f0168/stargate/irisAuth.lua","Stara wersja programu do zdalnego otwierania przesłony wrót (obsługująca sgcx-legacy)","IlynPayne",nil,nil,nil,nil,true},
+	{"data_server","0.2.0beta","https://gitlab.com/d_rzepka/oc-equipment/raw/master/archive/data_server.lua","Serwer danych","IlynPayne",{"rtpo"},nil,nil,nil,true},
+	{"the_guard_legacy","1.0","https://gitlab.com/d_rzepka/oc-equipment/raw/master/archive/the_guard_legacy.lua","Strażnik - stara wersja","IlynPayne",{"gml","hdp","dsapi"},nil,nil,nil,true},
+	{"micro","1","https://gitlab.com/d_rzepka/oc-equipment/raw/master/servers/micro.lua","Mikrokontroler strażnika (1.x)","IlynPayne",{"hdp","dsapi"},nil,nil,nil,true},
+	{"ds-manager","1.1","https://gitlab.com/d_rzepka/oc-equipment/raw/master/archive/ds-manager.lua","Menedżer serwera danych","IlynPayne",{"ds-api"},nil,nil,nil,true},
 	--library
 	{"rtpo","2.0","https://gitlab.com/d_rzepka/oc-equipment/raw/master/archive/rtpo.lua","Protokół sieciowy","IlynPayne",nil,true,nil,nil,true},
 	{"ds-api","1.3","https://gitlab.com/d_rzepka/oc-equipment/raw/master/archive/ds-api.lua","API serwera danych","IlynPayne",{"rtpo"},nil,nil,nil,true},
