@@ -5,7 +5,7 @@
 -- ###############################################
 
 
-local version = "0.4.2"
+local version = "0.5.0"
 local startArgs = {...}
 
 if startArgs[1] == "version_check" then return version end
@@ -31,10 +31,12 @@ end
 local modem = component.modem
 
 local gui = nil
+local darkStyle = nil
 local element = {}
 local data = {}
 local sg = nil
 local irisTimeout = 11
+local sgChunk = {}
 
 local tmp = {}
 local dialDialog = false
@@ -43,6 +45,21 @@ local timerEneriga = nil
 local irisTime = 0
 local irisTimer = nil
 local timeToClose = 0
+
+-- Stałe do obliczania adresów
+local SYMBOLS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789'
+local NUM_SYMBOLS = SYMBOLS:len()
+local MIN_COORD = -139967
+local MAX_COORD = 139967
+local MIN_DIM = -648
+local MAX_DIM = 1295
+local DIM_RANGE = 1296
+local MC = 279937
+local PC = 93563
+local QC = 153742
+local MD = 1297
+local PD = 953
+local QD = 788
 
 local function saveConfig()
 	local plik = io.open("/etc/sg.cfg", "w")
@@ -399,6 +416,7 @@ local function translateState()
 	if state == "Connecting" then return "Otwieranie tunelu" end
 	if state == "Connected" then return "Tunel aktywny" end
 	if state == "Offline" then return "Offline" end
+	return state
 end
 
 local function translateIrisState()
@@ -414,7 +432,7 @@ local function translateResponse(res)
 	elseif string.sub(res, 1, 23) == "No stargate at address " then return "Brak wrót o adresie " .. string.sub(res, 24) .. "!"
 	elseif string.sub(res, 1, 28) == "Not enough chevrons to dial " then return "Wrota nie obslugują tunelów międzywymiarowych"
 	elseif res == "Stargate has insufficient energy" then return "Za mało energi do nawiązania połączenia"
-	else return "Nie można otworzyć tunelu!"
+	else return "Nie można otworzyć tunelu (" .. res .. ")"
 	end
 end
 
@@ -551,14 +569,227 @@ local function dial()
 		end
 	elseif sg.stargateState() == "Connected" or sg.stargateState() == "Dialling" then
 		sg.disconnect()
+		timeToClose = -1
+		if timerID ~= nil then
+			event.cancel(timerID)
+		end
 	elseif sg.stargateState() ~= "Offline" then
 		GMLmessageBox("Wrota są zajęte", {"OK"})
 	end
 end
 
-local function main()
-	require("term").setCursorBlink(false)
-	local darkStyle = gml.loadStyle("dark")
+local function hash(i1, i2, i3)
+	local r = (((i1 + 1) * i2) % i3) - 1
+	return r
+end
+
+local function chunkInRange(c)
+	return c >= MIN_COORD and c <= MAX_COORD
+end
+
+local function getSymbols(i1, i2)
+	local ret = ""
+	while i2 > 0 do
+		i2 = i2 - 1
+		i = (i1 % NUM_SYMBOLS) + 1
+		ret = ret .. SYMBOLS:sub(i, i)
+		i1 = math.floor(i1 / NUM_SYMBOLS)
+	end
+	
+	return ret:reverse()
+end
+
+local function getSymbolsValue(s)
+	l = 0
+	for x = 1, s:len() do
+		local index = 0
+		for i = 1, NUM_SYMBOLS do
+			if SYMBOLS:sub(i, i) == s:sub(x, x) then
+				index = i - 1
+				break
+			end
+		end
+		l = (l * NUM_SYMBOLS) + index
+	end
+	
+	return l
+end
+
+local function interleave(i1, i2)
+	l1 = 1
+	l2 = 0
+	while i1 > 0 or i2 > 0 do
+		l2 = l2 + (l1 * (i1 % 6))
+		i1 = math.floor(i1 / 6)
+		l1 = l1 * 6
+		l2 = l2 + (l1 * (i2 % 6))
+		i2 = math.floor(i2 / 6)
+		l1 = l1 * 6
+	end
+	
+	return l2
+end
+
+local function fromBaseSix(s)
+	local ret = 0
+	for i = 1, s:len() do
+		local f = tonumber(s:sub(i, i))
+		ret = ret + f * math.pow(6, i - 1)
+	end
+	
+	return ret
+end
+
+local function uninterleave(i)
+	local i1 = ''
+	local i2 = ''
+	while i > 0 do
+		i1 = i1 .. tostring(i % 6)
+		i = math.floor(i / 6)
+		i2 = i2 .. tostring(i % 6)
+		i = math.floor(i / 6)
+	end
+	
+	i1 = fromBaseSix(i1)
+	i2 = fromBaseSix(i2)
+	return {i1, i2}
+end
+
+local function chunkToAddress(cx, cz)
+	if not chunkInRange(cx) then
+		GMLmessageBox("Współrzędna X jest poza zasięgem adresacji", {"OK"})
+		return
+	elseif not chunkInRange(cz) then
+		GMLmessageBox("Współrzędna Z jest poza zasięgem adresacji", {"OK"})
+		return
+	end
+	
+	local l = interleave(hash(cx - MIN_COORD, PC, MC), hash(cz - MIN_COORD, PC, MC))
+	return getSymbols(l, 7)
+end
+
+local function addressToChunk(address)
+	local l = getSymbolsValue(address:sub(1, 7))
+	if not l then return end
+	local a = uninterleave(l)
+	local i = MIN_COORD + hash(a[1], QC, MC)
+	local j = MIN_COORD + hash(a[2], QC, MC)
+	return {i, j}
+end
+
+local function computeDistance(addressTarget, chunkTarget)
+	if not chunkTarget then
+		chunkTarget = addressToChunk(addressTarget)
+		if not chunkTarget then return end
+	end
+	
+	local dx = math.abs(sgChunk[1] - chunkTarget[1])
+	local dz = math.abs(sgChunk[2] - chunkTarget[2])
+	local dist = math.sqrt(dx * dx + dz * dz)
+	dist = math.floor(dist * 160) / 10
+	return dist
+end
+
+local function clearAddress(addr)
+	if not addr or addr:len() < 7 then return nil end
+	local clear = ""
+	for i = 1, 7 do
+		local c = string.byte(addr:sub(i, i))
+		if (c >= 65 and c <= 90) or (c >= 48 and c <= 57) then
+			clear = clear .. addr:sub(i, i)
+		elseif c >= 97 and c <= 122 then
+			clear = clear .. string.char(c - 32)
+		else
+			return nil
+		end
+	end
+	return clear
+end
+
+local function coordsCalculator()
+	local cgui = gml.create("center", "center", 60, 21)
+	cgui.style = darkStyle
+	cgui:addButton(42, 18, 12, 1, "Zamknij", function() cgui:close() end)
+	cgui:addLabel(3, 2, 4, "X:")
+	cgui:addLabel(3, 5, 4, "Z:")
+	cgui:addLabel(3, 8, 10, "Chunk X:")
+	cgui:addLabel(3, 11, 10, "Chunk Z:")
+	local posX = cgui:addTextField(3, 3, 14)
+	local posZ = cgui:addTextField(3, 6, 14)
+	local posCX = cgui:addTextField(3, 9, 14)
+	local posCZ = cgui:addTextField(3, 12, 14)
+	cgui:addLabel(38, 5, 8, "Adres:")
+	local address = cgui:addTextField(38, 6, 17)
+	cgui:addButton(38, 8, 17, 1, "Kopiuj z listy", function()
+		address.text = element.address.text
+		address:draw()
+	end)
+	cgui:addLabel(38, 10, 13, "Odległość:")
+	local distance = cgui:addLabel(38, 11, 17, "0")
+	cgui:addLabel(3, 15, 56, "* Symbole światów nie są generowane deterministycznie")
+	local function updateDistance(cx, cz)
+		local dist = computeDistance(nil, {cx, cz})
+		distance.text = tostring(dist)
+		distance:draw()
+	end
+	local function updateAddress(cx, cz)
+		local addr = chunkToAddress(cx, cz)
+		if addr then
+			address.text = addr
+			address:draw()
+		end
+		updateDistance(cx, cz)
+	end
+	cgui:addButton(22, 5, 11, 2, "--->", function()
+		if posX.text:len() > 0 and posZ.text:len() > 0 then
+			local npx = tonumber(posX.text)
+			local npz = tonumber(posZ.text)
+			if not npx then
+				GMLmessageBox("Współrzędna X musi być liczbą", {"OK"})
+			elseif not npz then
+				GMLmessageBox("Współrzędne Z musi być liczbą", {"OK"})
+			else
+				updateAddress(math.floor(npx / 16), math.floor(npz / 16))
+			end
+		elseif posCX.text:len() > 0 and posCZ.text:len() > 0 then
+			local ncx = tonumber(posCX.text)
+			local ncz = tonumber(posCZ.text)
+			if not ncx then
+				GMLmessageBox("Współrzędna chunka X musi być liczbą", {"OK"})
+			elseif not ncz then
+				GMLmessageBox("Współrzędna chunka Z musi być liczbą", {"OK"})
+			else
+				updateAddress(ncx, ncz)
+			end
+		else
+			GMLmessageBox("Uzupełnij współrzędne bloku lub chunka", {"OK"})
+		end
+	end)
+	cgui:addButton(22, 10, 11, 2, "<---", function()
+		if address.text:len() >= 7 then
+			local cleared = clearAddress(address.text)
+			if not cleared then
+				GMLmessageBox("Adres zawiera niedozwolone znaki", {"OK"})
+			else
+				local chunk = addressToChunk(cleared)
+				posCX.text = tostring(chunk[1])
+				posCX:draw()
+				posCZ.text = tostring(chunk[2])
+				posCZ:draw()
+				posX.text = tostring(chunk[1] * 16)
+				posX:draw()
+				posZ.text = tostring(chunk[2] * 16)
+				posZ:draw()
+				updateDistance(chunk[1], chunk[2])
+			end
+		else
+			GMLmessageBox("Pole adresu musi zawierać 7 znaków", {"OK"})
+		end
+	end)
+	cgui:run()
+end
+
+local function createUI()
 	gui = gml.create(0, 0, res[1], res[2])
 	gui.style = darkStyle
 	addTitle()
@@ -570,11 +801,12 @@ local function main()
 	element.status = gui:addLabel(56, 5, 25, "Status: " .. translateState())
 	element.iris = gui:addLabel(56, 6, 25, "Przesłona: " .. translateIrisState())
 	element.energy = gui:addLabel(56, 7, 35, "Energia: " .. getEnergy())
-	element.connectionType = gui:addLabel(56, 10, 30, "")
+	element.distance = gui:addLabel(56, 8, 35, "Odległość: ")
+	element.connectionType = gui:addLabel(56, 11, 30, "")
 	element.connectionType:hide()
-	element.remoteAddress = gui:addLabel(56, 11, 30, "")
+	element.remoteAddress = gui:addLabel(56, 12, 30, "")
 	element.remoteAddress:hide()
-	element.timeout = gui:addLabel(56, 12, 30, "")
+	element.timeout = gui:addLabel(56, 13, 30, "")
 	element.timeout:hide()
 	gui:addLabel(3, 20, 16, "Lista adresów:")
 	local list = {}
@@ -582,7 +814,7 @@ local function main()
 		table.insert(list, tostring(a) .. ". " .. v.name .. " (" .. v.world .. ")")
 	end
 	element.list = gui:addListBox(3, 21, 40, 24, list)
-	element.list.onClick = function(listBox)
+	element.list.onChange = function(listBox)
 		local sel = listBox:getSelected()
 		if not sel then return end
 		local index = tonumber(sel:match("^(%d+)%.%s"))
@@ -593,6 +825,11 @@ local function main()
 		element.world:draw()
 		element.address["text"] = data.list[index].address
 		element.address:draw()
+		local clear = clearAddress(element.address.text)
+		if clear then
+			element.distance.text = "Odległość: " .. tostring(computeDistance(clear))
+			element.distance:draw()
+		end
 	end
 	gui:addButton(4, 46, 10, 2, "Dodaj", function() modifyList("add") end)
 	gui:addButton(15, 46, 10, 2, "Usuń", function() modifyList("remove") end)
@@ -622,7 +859,7 @@ local function main()
 		updateCounter()
 	end)
 	gui:addLabel(110, 5, 7, "Port:")
-	gui:addButton(118, 5, 14, 1, data.portStatus and "Otwarty" or "Zamknięty", function(self)
+	gui:addButton(118, 5, 15, 1, data.portStatus and "Otwarty" or "Zamknięty", function(self)
 		if data.portStatus then
 			modem.close(data.port)
 			self["text"] = "Zamknięty"
@@ -637,7 +874,7 @@ local function main()
 		updateCounter()
 	end)["text-color"] = data.portStatus and 0x00ff00 or 0xff0000
 	gui:addLabel(110, 6, 8, "Kanał:")
-	gui:addButton(118, 6, 14, 1, tostring(data.port), function(self)
+	gui:addButton(118, 6, 15, 1, tostring(data.port), function(self)
 		local isOpen = modem.isOpen(data.port)
 		if isOpen then modem.close(data.port) end
 		data.port = math.random(10000, 50000)
@@ -647,13 +884,23 @@ local function main()
 		updateCounter()
 	end)
 	gui:addLabel(110, 7, 6, "Kod:")
-	gui:addButton(118, 7, 14, 1, tostring(data.irisCode), function(self)
+	gui:addButton(118, 7, 15, 1, tostring(data.irisCode), function(self)
 		data.irisCode = math.random(1000, 9999)
 		self["text"] = tostring(data.irisCode)
 		self:draw()
 	end)
+	gui:addButton(110, 9, 23, 1, "Kalkulator adresów", function() coordsCalculator() end)
 	tmp.GMLbgcolor = GMLextractProperty(gui, GMLgetAppliedStyles(gui), "fill-color-bg")
 	gui:run()
+end
+
+local function main()
+	local address = sg.localAddress():sub(1, 7)
+	sgChunk = addressToChunk(address)
+	
+	require("term").setCursorBlink(false)
+	darkStyle = gml.loadStyle("dark")
+	createUI()
 end
 
 local function countdown()
@@ -670,7 +917,7 @@ local function countdown()
 	end
 end
 
-local function eventListener(...)
+local function __eventListener(...)
 	local ev = {...}
 	if ev[1] == "sgDialIn" then
 		if data.autoIris then
@@ -708,7 +955,9 @@ local function eventListener(...)
 			element.timeout:hide()
 			element.dial["text"] = "Otwórz tunel"
 			element.dial:draw()
-			event.cancel(timerID)
+			if timerID then
+				event.cancel(timerID)
+			end
 			timeToClose = 0
 			element.stargate:draw()
 			element.stargate:lockSymbol(0)
@@ -739,6 +988,14 @@ local function eventListener(...)
 				modem.send(ev[3], ev[6], serial.serialize({false, "Błędny kod przesłony!", irisTimeout}))
 			end
 		end
+	end
+end
+
+local function eventListener(...)
+	local args = {...}
+	local status, msg = pcall(__eventListener, table.unpack(args))
+	if not status then
+		GMLmessageBox("Blad: " .. msg)
 	end
 end
 
