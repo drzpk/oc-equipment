@@ -1,3 +1,9 @@
+-- ###############################################
+-- #                  IrisAuth                   #
+-- #                                             #
+-- #   12.2014                   by: IlynPayne   #
+-- ###############################################
+
 local event = require("event")
 local term = require("term")
 local key = require("keyboard")

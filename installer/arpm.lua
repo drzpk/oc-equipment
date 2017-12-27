@@ -1,3 +1,9 @@
+-- ###############################################
+-- #                  ARPM                       #
+-- #                                             #
+-- #   08.2015                   by: IlynPayne   #
+-- ###############################################
+
 --[[Struktura pliku z lista aplikacji:
 	{
 		[1] = nazwa aplikacji: string,

@@ -1,8 +1,8 @@
 -- ########################################################
--- ##              Data Server wersja 2.4               ##
+-- ##              Data Server wersja 2.4                ##
 -- #   Serwer służący do magazynowania danych w postaci   #
 -- #  plików na dyskach                                   #
--- ##   05.2015                           by: Aranthor   ##
+-- ##   05.2015                           by: IlynPayne  ##
 -- ########################################################
 
 --[[

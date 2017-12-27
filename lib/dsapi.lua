@@ -1,49 +1,49 @@
 -- #################################################
--- ##   API do obs³ugi serwera danych dataSrv2    ##
+-- ##   API do obsï¿½ugi serwera danych dataSrv2    ##
 -- #                                               #
--- ##  05.2015                     by: Aranthor   ##
+-- ##  05.2015                     by: IlynPayne  ##
 -- #################################################
 
 --[[
 	## Opis funkcji ##
 	dsapi.write(port, path, content)
-	Funkcja wysy³a nowy plik na serwer. Gdy plik ju¿ istnieje, jego
-	zawartoœæ jest nadpisywana
+	Funkcja wysyï¿½a nowy plik na serwer. Gdy plik juï¿½ istnieje, jego
+	zawartoï¿½ï¿½ jest nadpisywana
 		@param port - port serwera
-		@param path - œcie¿ka do pliku
-		@param content - zawartoœæ pliku
+		@param path - ï¿½cieï¿½ka do pliku
+		@param content - zawartoï¿½ï¿½ pliku
 		
 		@return
-		true - gdy zapis siê powiód³
-		false, kod - gdy nie uda siê zapisaæ pliku
+		true - gdy zapis siï¿½ powiï¿½dï¿½
+		false, kod - gdy nie uda siï¿½ zapisaï¿½ pliku
 		
 	dsapi.remove(port, path)
 	Funkcja usuwa plik z serwera
 		@param port - port serwera
-		@param path - œcie¿ka do pliku
+		@param path - ï¿½cieï¿½ka do pliku
 		
 		@return
-		true - gdy usuwanie siê powiod³o
-		false, kod - gdy usuwanie siê nie powiod³o
+		true - gdy usuwanie siï¿½ powiodï¿½o
+		false, kod - gdy usuwanie siï¿½ nie powiodï¿½o
 		
 	dsapi.get(port, path)
-	Funkcja pobiera zawartoœæ pliku z serwera
+	Funkcja pobiera zawartoï¿½ï¿½ pliku z serwera
 		@param port - port serwera
-		@param path - œcie¿ka do pliku
+		@param path - ï¿½cieï¿½ka do pliku
 		
 		@return
-		true, <zawartoœæ> - gdy pobieranie siê powiod³o
-		false, kod - gdy wyst¹pi³ b³¹d
+		true, <zawartoï¿½ï¿½> - gdy pobieranie siï¿½ powiodï¿½o
+		false, kod - gdy wystï¿½piï¿½ bï¿½ï¿½d
 		
 	dsapi.list(port, path)
-	Funkcja zwraca iterator do elementów podanego katalogu
+	Funkcja zwraca iterator do elementï¿½w podanego katalogu
 		@param port - port serwera
-		@param path - œcie¿ka do pliku
+		@param path - ï¿½cieï¿½ka do pliku
 		
 		@return
-		true, iterator - gdy otrzymano listê
-		false, kod - gdy wyst¹pi³ b³¹d
-		Przyk³ad:
+		true, iterator - gdy otrzymano listï¿½
+		false, kod - gdy wystï¿½piï¿½ bï¿½ï¿½d
+		Przykï¿½ad:
 			a, b = dsapi.list(modem, port, path)
 			if a then
 				for name, size in b do
@@ -53,15 +53,15 @@
 			else
 				print(dsapi.translateCode(b))
 			end
-		Jeœli rozmiar jest równy -1, obiekt jest folderem
+		Jeï¿½li rozmiar jest rï¿½wny -1, obiekt jest folderem
 	
 	dsapi.echo(port)
-	Funkcja sprawdza, czy serwer jest dostêpny
+	Funkcja sprawdza, czy serwer jest dostï¿½pny
 		@param port - port serwera
 		
 		@return
-		true - jeœli serwer jest dostêpny
-		false - jeœli nie mo¿na nawi¹zaæ po³¹czenia z serwerem
+		true - jeï¿½li serwer jest dostï¿½pny
+		false - jeï¿½li nie moï¿½na nawiï¿½zaï¿½ poï¿½ï¿½czenia z serwerem
 ]]
 
 local hdp = require("hdp")
@@ -73,22 +73,22 @@ local wersja = "2.3"
 local aa, bb = require("shell").parse(...)
 if aa[1] == "version_check" then return wersja end
 
--- Czas, po którym po³¹czenie jest zrywane
+-- Czas, po ktï¿½rym poï¿½ï¿½czenie jest zrywane
 local timeout = 2
 
 -- Zapytania do serwera
 local reqCode = {
-	file = 0x01, --@param:(œcie¿ka, zawartoœæ)
-	get  = 0x02, --@param:(œcie¿ka)
-	list = 0x03, --@param:(œcie¿ka)
+	file = 0x01, --@param:(ï¿½cieï¿½ka, zawartoï¿½ï¿½)
+	get  = 0x02, --@param:(ï¿½cieï¿½ka)
+	list = 0x03, --@param:(ï¿½cieï¿½ka)
 	echo = 0x04
 }
 
 -- Kody odpowiedzi serwera wraz z opisem
 local respCode = {
-	success = {0x00, "czynnosc powiodla sie"}, -- zadana czynnoœæ powiod³a siê
-	failed = {0x01, "wystapil nieznany blad"}, -- nieznany b³¹d
-	nomem = {0x02, "za malo pamieci na serwerze"}, -- za ma³o miejsca na serwerze
+	success = {0x00, "czynnosc powiodla sie"}, -- zadana czynnoï¿½ï¿½ powiodï¿½a siï¿½
+	failed = {0x01, "wystapil nieznany blad"}, -- nieznany bï¿½ï¿½d
+	nomem = {0x02, "za malo pamieci na serwerze"}, -- za maï¿½o miejsca na serwerze
 	notfound = {0x03, "element nie zostal odnaleziony"}, -- nie znaleziono pliku lub folderu
 	badreq = {0x04, "bledne zapytanie"}, -- zapytanie jest niekompletne lub nie istnieje
 	echo = {0x10, "echo"}, -- echo

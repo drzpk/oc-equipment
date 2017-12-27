@@ -1,4 +1,9 @@
---by: Aranthor
+-- ###############################################
+-- #                  GenAnalyzer                #
+-- #                                             #
+-- #   05.2015	        		  by: IlynPayne  #
+-- ###############################################
+
 local wersja = "1.3"
 local sArgs = {...}
 if sArgs[1] == "version_check" then return wersja
