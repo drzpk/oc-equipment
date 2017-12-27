@@ -46,7 +46,7 @@
 package.loaded.gml = nil
 package.loaded.gfxbuffer = nil
 
-local version = "1.0"
+local version = "1.1"
 local args = {...}
 
 if args[1] == "version_check" then return version
@@ -64,6 +64,7 @@ local serial = require("serialization")
 local fs = require("filesystem")
 local colors = require("colors")
 local gml = require("gml")
+local sides = require("sides")
 if not component.isAvailable("modem") then
 	io.stderr:write("Program wymaga do działania karty sieciowej")
 	return
@@ -454,8 +455,14 @@ local function searchAddress(name, address)
 	return amount, fullAddress
 end
 
+local function translateSideToCode(side)
+	local num = tonumber(side)
+	if num ~= nil then return num end
+	return sides[side]
+end
+
 local function add()
-	local snippet, amount = nil, 0
+	local snippet, amount, numside = nil, 0, nil
 	local cgui = gml.create("center", "center", 55, 10, gpu)
 	cgui:addLabel("center", 1, 19, "Nowe pomieszczenie")
 	cgui:addLabel(2, 3, 21, "Identyfikator:   #" .. tostring(#switch + 1))
@@ -468,6 +475,7 @@ local function add()
 	cgui:addButton(41, 8, 10, 1, "Anuluj", function() cgui:close() end)
 	cgui:addButton(30, 8, 10, 1, "OK", function()
 		amount, snippet = searchAddress("redstone", address["text"])
+		numside = translateSideToCode(side["text"], false)
 		if name["text"]:len() == 0 or address["text"]:len() == 0 or side["text"]:len() == 0 then
 			GMLmessageBox("Wypełnij wszystkie pola!", {"OK"})
 		elseif name["text"]:len() > 30 then
@@ -476,13 +484,13 @@ local function add()
 			GMLmessageBox("Nie znaleziono urządzenia Redstone I/O o podanym adresie", {"OK"})
 		elseif amount > 1 then
 			GMLmessageBox("Podana część adresu nie jest jednoznaczna. Wpisz więcej znaków", {"OK"})
-		elseif tonumber(side["text"]) == nil or tonumber(side["text"]) > 6 or tonumber(side["text"]) < 0 then
+		elseif numside == nil or numside > 6 or numside < 0 then
 			GMLmessageBox("Strona jest niepoprawna", {"OK"})
 		else
 			local item = {}
 			item.name = name["text"]
 			item.address = snippet
-			item.side = tonumber(side["text"])
+			item.side = numside
 			local red = component.proxy(snippet)
 			if red.getBundledOutput(item.side, colors.lightblue) > 0 then
 				item.door = true
@@ -508,7 +516,7 @@ local function add()
 end
 
 local function modify(index)
-	local snippet, amount = nil, 0
+	local snippet, amount, numside = nil, 0, nil
 	local s = switch[index + (page - 1) * 7]
 	local mgui = gml.create("center", "center", 55, 10, gpu)
 	mgui:addLabel("center", 1, 26, "Edycja pomieszczenia #" .. tostring(index + (page - 1) * 7))
@@ -520,10 +528,11 @@ local function modify(index)
 	local address = mgui:addTextField(19, 4, 20)
 	address["text"] = s.address
 	local side = mgui:addTextField(19, 5, 20)
-	side["text"] = tostring(s.side)
+	side["text"] = sides[s.side]
 	mgui:addButton(41, 7, 10, 1, "Anuluj", function() mgui:close() end)
 	mgui:addButton(30, 7, 10, 1, "OK", function()
 		amount, snippet = searchAddress("redstone", address["text"])
+		numside = translateSideToCode(side["text"])
 		if name["text"]:len() == 0 or address["text"]:len() == 0 or side["text"]:len() == 0 then
 			GMLmessageBox("Wypełnij wszystkie pola!", {"OK"})
 		elseif name["text"]:len() > 30 then
@@ -533,7 +542,7 @@ local function modify(index)
 			GMLmessageBox("Nie znaleziono urządzenia Redstone I/O o podanym adresie", {"OK"})
 		elseif amount > 1 then
 			GMLmessageBox("Podana część adresu nie jest jednoznaczna. Wpisz więcej znaków", {"OK"})
-		elseif tonumber(side["text"]) == nil or tonumber(side["text"]) > 6 or tonumber(side["text"]) < 0 then
+		elseif numside == nil or numside > 6 or numside < 0 then
 			GMLmessageBox("Strona jest niepoprawna", {"OK"})
 		else
 			local r = component.proxy(snippet)
@@ -545,7 +554,7 @@ local function modify(index)
 			r.setBundledOutput(s.side, colors.yellow, 0)
 			s.name = name["text"]
 			s.address = snippet
-			s.side = tonumber(side["text"])
+			s.side = numside
 			switch[index + (page - 1) * 7] = s
 			saveConfig()
 			refreshSection(index)

@@ -144,7 +144,7 @@
 		}
 ]]
 
-local version = "1.0"
+local version = "1.1"
 local args = {...}
 
 if args[1] == "version_check" then return version end
@@ -174,7 +174,8 @@ local excluded = { -- elementy wykluczone ze skanowania
 	"Experience orb",
 	"item%..*",
 	"item%.item%..*",
-	"entity%.opensecurity%..*"
+	"entity%.opensecurity%..*",
+	"entity.sgcraft.Stargate Iris.name"
 }
 local targetHeight = 0.75 -- wysokość celu
 local attemptDelay = 0.2 -- interwał prób strzału
@@ -1116,7 +1117,7 @@ local function settings()
 	sgui:addLabel(4, 9, 26, "Zasięg skanowania[5-20]:")
 	sgui:addLabel(2, 12, 10, "Sensory:")
 	sgui:addLabel(4, 14, 17, "Tryb wykrywania:")
-	sgui:addLabel(4, 15, 17, "Czułość[0.1-10]:")
+	sgui:addLabel(4, 15, 19, "Czułość[0.1-10]:")
 	sgui:addLabel(4, 16, 25, "Czas aktywacji[0,15-180s]:")
 	
 	local tint = sgui:addTextField(44, 7, 5)
@@ -1310,7 +1311,7 @@ mod.start = function(core)
 		config.sensitivity = 0.4
 	end
 	if check(config.delay, 1, 15) then
-		config.delay = 10
+		config.delay = 5
 	end
 	if check(config.range, 5, 20) then
 		config.range = 7
