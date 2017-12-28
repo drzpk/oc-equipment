@@ -4,39 +4,71 @@
 -- #   08.2015                   by: IlynPayne   #
 -- ###############################################
 
---[[Struktura pliku z lista aplikacji:
-	{
-		[1] = nazwa aplikacji: string,
-		[2] = wersja: string,
-		[3] = adres pobierania: string,
-		[4] = opis aplikacji: string,
-		[5] = autor: string,
-		[6] = zaleznosci: table or nil,
-		[7] = czy aplikacja jest biblioteka: bool or nil,
-		[8] = nazwa pliku manual: string or nil,
-		[9] = zmodyfikowana nazwa aplikacji: string or nil,
-		[10] = archiwum: bool or nil
-	}
+--[[
+	.----------------.  .----------------.  .----------------.  .----------------. 
+	| .--------------. || .--------------. || .--------------. || .--------------. |
+	| |      __      | || |  _______     | || |   ______     | || | ____    ____ | |
+	| |     /  \     | || | |_   __ \    | || |  |_   __ \   | || ||_   \  /   _|| |
+	| |    / /\ \    | || |   | |__) |   | || |    | |__) |  | || |  |   \/   |  | |
+	| |   / ____ \   | || |   |  __ /    | || |    |  ___/   | || |  | |\  /| |  | |
+	| | _/ /    \ \_ | || |  _| |  \ \_  | || |   _| |_      | || | _| |_\/_| |_ | |
+	| ||____|  |____|| || | |____| |___| | || |  |_____|     | || ||_____||_____|| |
+	| |              | || |              | || |              | || |              | |
+	| '--------------' || '--------------' || '--------------' || '--------------' |
+	'----------------'  '----------------'  '----------------'  '----------------' 
+	ARPM REPOSITORY PACKAGE MANAGER
+
+
+	## Description ##
+	Package manager that allows downloading applications from this repository. It uses global registry for application
+	 management (setup-list). Its structure is described in the section below. Only the newest versions of applications
+	can be downloaded: when the newer version is released, the older one becomes inaccessible because registry is
+	overwriten.
 	
-	Opcje programu:
-		*list [-r]
-		Wyświetla listę dostępnych pakietów. [r] wyświetla również pakiety archiwalne.
-		*info <pakiet>
-		Wyświetla informacje o wybranym pakiecie.
-		*install <pakiet> [-f] [-n]
-		Instaluje nowy pakiet. [f] wymusza instalację, [n] wyłącza instalację zależności
-		*remove <pakiet> [-d]
-		Usuwa pakiet. [d] usuwa również zależności.
-		*test <ścieżka>
-		Testuje bazę offline aplikacji pod kątem błędów.
+	## Registry structure ##
+	{
+		{
+			[1] = application name: string,
+			[2] = version: string,
+			[3] = download link: string,
+			[4] = description: string,
+			[5] = author: string,
+			[6] = dependencies: table or nil,
+			[7] = whether application is a library: bool or nil,
+			[8] = manual file name: string or nil,
+			[9] = alternate application name: string or nil,
+			[10] = archived: bool or nil
+		},
+		...
+	}
+
+	Additional info:
+	[6] - currently package manager doesn't resolve dependencies recursively, so a complete list of dependencies
+		must be provided.
+	[7] - information displayed in app list
+	[8] - manual file name (with an extension, if has one). Manuals are downloaded from 'man' directory.
+	[9] - the actual mame under which application is saved on disk (may contain directory path)
+	[10] - whehter application is archived (not developed anymore); used for app list filtering
+	
+	## Application options ##
+		* list [-r]
+			Displays available packages. [r] also displays archived packages.
+		* info <package>
+			Displays detailed information about specified package.
+		* install <package> [-f] [-n]
+			Installs selected package. [f] forces installation, [n] disables installation of dependencies.
+		* remove <package> [-d]
+			Removes specified package. [d] also removes dependencies.
+		* test <path>
+			Tests offline registry (setup-list) for known errors before uploading.
 ]]
 
-local wersja = "0.3.0"
+local version = "0.3.0"
 
 local component = require("component")
 
 if not component.isAvailable("internet") then
-	io.stderr:write("Ta aplikacja wymaga zainstalowanej karty internetowej")
+	io.stderr:write("This application requires an internet card")
 	return
 end
 
@@ -45,7 +77,7 @@ local gpu = component.gpu
 local internet = require("internet")
 
 if not inter2.isHttpEnabled() then
-	io.stderr:write("Polaczenia z Internetem sa obecnie zablokowane.")
+	io.stderr:write("Internet connections are currently disabled in game config")
 	return
 end
 
@@ -99,15 +131,14 @@ end
 local function usage()
 	local prev = nil
 	prev = textColor(colors.green)
-	print("ARPM - ARPM Repository Package Manager     wersja " .. wersja)
+	print("ARPM - ARPM Repository Package Manager     version " .. version)
 	textColor(colors.cyan)
 	print("Użycie:")
-	printCommand("list [-r]", "Wyświetla listę dostępnych pakietów. [r] wyświetla również pakiety archiwalne.")
-	printCommand("info <pakiet>", "Wyświetla informacje o wybranym pakiecie.")
-	printCommand("install <pakiet> [-f] [-d]", "Instaluje nowy pakiet. [f] wymusza instalację, [n] wyłącza instalację zależności.")
-	printCommand("remove <pakiet> [-d]", "Usuwa pakiet. [d] usuwa również zależności")
-	printCommand("update [pakiet] [-f]", "Aktualizuje pakiet. [f] wymusza uaktualnienie.")
-	printCommand("test <ścieżka>", "Testuje bazę offline aplikacji pod kątem błędów.")
+	printCommand("list [-r]", "Displays available packages. [r] also displays archived packages.")
+	printCommand("info <package>", "Displays detailed information about specified package.")
+	printCommand("install <package> [-f] [-d]", "Installs selected package. [f] forces installation, [n] disables installation of dependencies.")
+	printCommand("remove <package> [-d]", "Removes specified package. [d] also removes dependencies.")
+	printCommand("test <path>", "Tests offline registry (setup-list) for known errors before uploading.")
 	textColor(prev)
 end
 
@@ -148,16 +179,16 @@ local function fetchAppList()
 			end
 		end
 	end
-	local resp = getContent("https://bitbucket.org/Aranthor/oc_equipment/raw/master/installer/setup-list")
+	local resp = getContent("https://gitlab.com/d_rzepka/oc-equipment/raw/master/installer/setup-list")
 	if resp then
 		local s, e = serial.unserialize(resp)
 		if not s then
-			io.stderr:write("Nie udało się odczytać listy aplikacji: " .. e)
+			io.stderr:write("Couldn'd read the registry: " .. e)
 		end
 		appList = s
 		saveAppList(resp)
 	else
-		io.stderr:write("Nie można polączyć się z Internetem.")
+		io.stderr:write("Couldn't establish internet connection.")
 	end
 end
 
@@ -175,38 +206,38 @@ end
 local function testApp(app, all)
 	local warn = {}
 	if type(app[1]) ~= "string" then
-		table.insert(warn, "nazwa (1) nie jest ciągiem znaków")
+		table.insert(warn, "application name (1) must be a string")
 	elseif app[1]:len() == 0 then
-		table.insert(warn, "nazwa (1) jest za krótka")
+		table.insert(warn, "application name (1) is too short")
 	end
 	if type(app[2]) ~= "string" then
-		table.insert(warn, "wersja (2) nie jest ciągiem znaków")
+		table.insert(warn, "version (2) must be a string")
 	elseif app[2]:len() == 0 then
-		table.insert(warn, "wersja (2) jest za krótka")
+		table.insert(warn, "version (2) is too short")
 	end
 	if type(app[3]) ~= "string" then
-		table.insert(warn, "adres (3) nie jest ciągiem znaków")
+		table.insert(warn, "download link (3) must be a string")
 	else
 		local s, i = pcall(component.internet.request, app[3])
 		if s then
 			local d, e = pcall(i.read, 1)
 			if not d then
-				table.insert(warn, "adres (3): " .. e)
+				table.insert(warn, "download link (3): " .. e)
 			end
 			i.close()
 		else
-			table.insert(warn, "adres (3): " .. i)
+			table.insert(warn, "download link (3): " .. i)
 		end
 	end
 	if type(app[4]) ~= "string" then
-		table.insert(warn, "opis (4) nie jest ciągiem znaków")
+		table.insert(warn, "description (4) must be a string")
 	elseif app[4]:len() == 0 then
-		table.insert(warn, "nie podano opisu (4)")
+		table.insert(warn, "description (4) is empty")
 	end
 	if type(app[5]) ~= "string" then
-		table.insert(warn, "nazwa autora (5) nie jest ciągiem znaków")
+		table.insert(warn, "author name (5) must be a string")
 	elseif app[5]:len() == 0 then
-		table.insert(warn, "nie podano autora (5)")
+		table.insert(warn, "author name (5) is empty")
 	end
 	if type(app[6]) == "table" then
 		for _, dep in pairs(app[6]) do
@@ -218,64 +249,64 @@ local function testApp(app, all)
 				end
 			end
 			if not found then
-				table.insert(warn, "zależność '" .. dep .. "' nie została odnaleziona")
+				table.insert(warn, "dependency '" .. dep .. "' not found")
 			end
 		end
 	elseif type(app[6]) ~= "nil" then
-		table.insert(warn, "zależności (6) maja niewłaściwy typ danych")
+		table.insert(warn, "dependency list (6) must be a table")
 	end
 	if type(app[7]) ~= "boolean" and type(app[7]) ~= "nil" then
-		table.insert(warn, "flaga biblioteki (7) ma niewłaściwy typ danych")
+		table.insert(warn, "library flag (7) must be boolean or nil")
 	end
 	if type(app[8]) == "string" then
 		if app[8]:len() == 0 then
-			table.insert(warn, "nazwa pliku manual (8) jest za krótka")
+			table.insert(warn, "manual name (8) is too short")
 		end
 	elseif type(app[8]) ~= "nil" then
-		table.insert(warn, "nazwa pliku manual (8) ma niewłaściwy typ danych")
+		table.insert(warn, "manual name (8) must be a string")
 	end
 	if type(app[9]) == "string" then
 		if app[9]:len() == 0 then
-			table.insert(warn, "zmodyfikowana nazwa aplikacji (9) jest za krótka")
+			table.insert(warn, "alternate application name (9) is too short")
 		end
 	elseif type(app[9]) ~= "nil" then
-		table.insert(warn, "zmodyfikowana nazwa aplikacji (9) ma niewłaściwy typ danych")
+		table.insert(warn, "alternate application name (9) must be a string or nil")
 	end
 	if type(app[10]) ~= "boolean" and type(app[10]) ~= "nil" then
-		table.insert(warn, "flaga archiwum (10) ma niewłaściwy typ danych")
+		table.insert(warn, "archive flag (10) must be a boolean or nil")
 	end
 	return warn
 end
 
 local function testRepo(path)
 	if not path or path:len() == 0 then
-		io.stderr:write("Nie podano ścieżki do bazy aplikacji.")
+		io.stderr:write("Registry name must be supplied")
 		return
 	end
 	if path:sub(1, 1) ~= "/" then
 		path = fs.concat(shell.getWorkingDirectory(), path)
 	end
 	if not fs.exists(path) then
-		io.stderr:write("Podany plik nie istnieje.")
+		io.stderr:write("File not found")
 		return
 	end
 	if fs.isDirectory(path) then
-		io.stderr:write("Podany plik jest katalogiem!")
+		io.stderr:write("Given path is a directory")
 		return
 	end
 	local file, e = io.open(path, "r")
 	if not file then
-		io.stderr:write("Nie udało się otworzyć pliku: " .. e)
+		io.stderr:write("Couldn't open a file: " .. e)
 		return
 	end
 	local tab, e = serial.unserialize(file:read("*a"))
 	file:close()
 	if not tab then
-		io.stderr:write("Nie udało się przetworzyć pliku: " .. e)
+		io.stderr:write("Couldn't process the file: " .. e)
 		return
 	end
 	textColor(colors.cyan)
-	term.write("Testowanie wpisów:")
+	term.write("Testing entries:")
 	local errors = 0
 	for _, t in pairs(tab) do
 		textColor(colors.silver)
@@ -292,19 +323,19 @@ local function testRepo(path)
 		end
 	end
 	textColor(colors.cyan)
-	print("\n\nZweryfikowano " .. tostring(#tab) .. " aplikacji/e.")
+	print("\n\nVerified " .. tostring(#tab) .. " applications.")
 	if errors > 0 then
 		textColor(colors.orange)
-		print("Test zakończony. Znaleziono " .. tostring(errors) .. " błędy/ów.")
+		print("Test completed. Found " .. tostring(errors) .. " errors.")
 	else
 		textColor(colors.green)
-		print("Test zakończony pomyślnie.")
+		print("Test completed succesfully.")
 	end
 end
 
 local function packetInfo(packetName)
 	if not packetName or packetName == "" then
-		io.stderr:write("Nie podano nazwy pakietu")
+		io.stderr:write("Package name not supplied.")
 		return
 	end
 	fetchAppList()
@@ -312,31 +343,31 @@ local function packetInfo(packetName)
 		for _, packet in pairs(appList) do
 			if type(packet) == "table" and packet[1] == packetName then
 				textColor(colors.cyan)
-				print("\n>> Informacje o pakiecie <<")
+				print("\n>> Package information <<")
 				textColor(colors.yellow)
-				io.write("\nNazwa pakietu: ")
+				io.write("\nPackage name: ")
 				textColor(colors.gray)
 				print(packet[1])
 				if packet[9] then
 					textColor(colors.yellow)
-					io.write("Nazwa pliku: ")
+					io.write("File name: ")
 					textColor(colors.gray)
 					print(packet[9])
 				end
 				textColor(colors.yellow)
-				io.write("Aktualna wersja: ")
+				io.write("Current version: ")
 				textColor(colors.gray)
 				print(packet[2])
 				textColor(colors.yellow)
-				io.write("Opis aplikacji: ")
+				io.write("Description: ")
 				textColor(colors.gray)
 				print(packet[4])
 				textColor(colors.yellow)
-				io.write("Autor: ")
+				io.write("Author: ")
 				textColor(colors.gray)
 				print(packet[5])
 				textColor(colors.yellow)
-				io.write("Adres pobierania: ")
+				io.write("Download link: ")
 				textColor(colors.gray)
 				do
 					if packet[3]:len() > resolution[1] - 20 then
@@ -348,7 +379,7 @@ local function packetInfo(packetName)
 				if packet[6] then
 					local deps = packet[6]
 					textColor(colors.yellow)
-					io.write("Zaleznosci: ")
+					io.write("Dependencies: ")
 					textColor(colors.gray)
 					for i = 1, #deps do
 						if i < #deps then io.write(deps[i] .. ", ")
@@ -356,22 +387,22 @@ local function packetInfo(packetName)
 					end
 				end
 				textColor(colors.yellow)
-				io.write("Biblioteka: ")
+				io.write("Is library: ")
 				textColor(colors.gray)
 				if packet[7] then print("Tak") else print("Nie") end
 				textColor(colors.yellow)
-				io.write("Instrukcja: ")
+				io.write("Has manual: ")
 				textColor(colors.gray)
 				if packet[8] then print("Tak") else print("Nie") end
 				if packet[10] then
 					textColor(colors.magenta)
-					print("Archiwum: Tak")
+					print("Is archive: Tak")
 				end
 				print()
 				return
 			end
 		end
-		io.stderr:write("Nie znaleziono pakietu o podanej nazwie")
+		io.stderr:write("Package with specified name not found")
 	end
 end
 
@@ -391,9 +422,9 @@ local function printAppList(archive)
 			term.clear()
 			term.setCursor(1, 1)
 			textColor(colors.green)
-			io.write("Lista dostępnych pakietów     ")
+			io.write("Package list     ")
 			textColor(colors.orange)
-			print("strona " .. tostring(page))
+			print("page " .. tostring(page))
 			for i = 1, resolution[2] - 3 do
 				if i + (page - 1) * (resolution[2] - 3) > #apps then break end
 				local app = apps[i + ((resolution[2] - 3) * (page - 1))]
@@ -404,9 +435,9 @@ local function printAppList(archive)
 			end
 			term.setCursor(1, resolution[2])
 			textColor(colors.green)
-			term.write("Q - wyjście z listy ")
-			if page > 1 then io.write(" [Left] - poprzednia strona") end
-			if #apps > (resolution[2] * page) then io.write("[Right] - nastepna strona") end
+			term.write("Q - quit application ")
+			if page > 1 then io.write(" [Left] - previous page") end
+			if #apps > (resolution[2] * page) then io.write("[Right] - next page") end
 			local ev = {event.pull("key_down")}
 			if ev[4] == keyboard.keys.q then
 				return
@@ -417,7 +448,7 @@ local function printAppList(archive)
 			end
 		end
 	else
-		io.stderr:write("Nie udało się pobrać listy aplikacji.")
+		io.stderr:write("Couldn't download the registry")
 	end
 end
 
@@ -432,12 +463,12 @@ generateList = function(appData, deps, list)
 	--[[
 	list = {
 		{
-			[1] = nazwa aplikacji:string
-			[2] = adres pobierania:string,
-			[3] = folder:string,
-			[4] = nazwa pliku:string,
-			[5] = wersja:string
-			[6] = nazwa instrukcji:string or nil
+			[1] = package name:string
+			[2] = download link:string,
+			[3] = directory:string,
+			[4] = file name:string,
+			[5] = version:string
+			[6] = manual:string or nil
 		}
 		...
 	}
@@ -477,7 +508,7 @@ generateList = function(appData, deps, list)
 		for _, b in pairs(appData[6] or {}) do
 			local dependency = getAppData(b)
 			if not dependency then
-				io.stderr:write("Nie znaleziono zależności " .. b)
+				io.stderr:write("Dependency not found: " .. b)
 				return
 			end
 			if not generateList(dependency, true, list) then return end
@@ -488,41 +519,41 @@ end
 
 local function installApp(appName, force_install, disable_dep_install)
 	textColor(colors.blue)
-	print("\nRozpoczynanie instalacji...")
+	print("\nStarting installation...")
 	os.sleep(0.2)
 	textColor(colors.cyan)
-	term.write("\nPobieranie listy aplikacji...   ")
+	term.write("\nDownloading the registry...   ")
 	fetchAppList()
 	if appList then
 		application = getAppData(appName)
 		if not application then
 			textColor(colors.red)
-			term.write("\nBłąd: brak aplikacji o podanej nazwie")
+			term.write("\nError: application with specified name not found")
 			return
 		end
 		ok()
-		term.write("\nGenerowanie listy instalacyjnej...   ")
+		term.write("\nGenerating installation list...   ")
 		local list = generateList(application, not disable_dep_install)
 		if not list then
 			textColor(colors.yellow)
-			term.write("\nInstalacja przerwana.")
+			term.write("\nInstallation aborted.")
 			return
 		end
 		ok()
-		term.write("\nSprawdzanie katalogów...   ")
+		term.write("\nChecking directories...   ")
 		for _, t in pairs(list) do
 			if not fs.isDirectory(t[3]) then
 				local s, e = fs.makeDirectory(t[3])
 				if not s then
-					io.stderr:write("Nie można utworzyć katalogu " .. t[3] .. ": " .. e)
+					io.stderr:write("Cannot create directory " .. t[3] .. ": " .. e)
 					textColor(colors.yellow)
-					term.write("\nInstalacja przerwana.")
+					term.write("\nInstallation aborted.")
 					return
 				end
 			end
 		end
 		ok()
-		term.write("\nKopiowanie plików:")
+		term.write("\nCopying files:")
 		textColor(colors.silver)
 		for _, t in pairs(list) do
 			local filename = fs.concat(t[3], t[4])
@@ -531,17 +562,17 @@ local function installApp(appName, force_install, disable_dep_install)
 				local localfile = loadfile(filename)
 				local version = localfile and localfile("version_check") or ""
 				if version == t[5] and not force_install then
-					io.stderr:write("\nAplikacja jest już zainstalowana!")
+					io.stderr:write("\nApplication is already installed!")
 					textColor(colors.yellow)
-					term.write("\nInstalacja przerwana.")
+					term.write("\nInstallation aborted.")
 					return
 				end
 			end
 			local output = io.open(filename, "w")
 			if not output then
-				io.stderr:write("\nNie można utworzyć pliku " .. t[4])
+				io.stderr:write("\nCannot create file: " .. t[4])
 				if not force_install then
-					io.stderr:write("\nInstalacja nie powiodła się!")
+					io.stderr:write("\nInstallation failed!")
 					output:close()
 					clearAfterFail(installed)
 				end
@@ -554,7 +585,7 @@ local function installApp(appName, force_install, disable_dep_install)
 			else
 				io.stderr:write("\nNie udało się pobrać pliku " .. t[4])
 				if not force_install then
-					io.stderr:write("\nInstalacja nie powiodła się!")
+					io.stderr:write("\nInstallation failed!")
 					output:close()
 					clearAfterFail(installed)
 					return
@@ -571,10 +602,10 @@ local function installApp(appName, force_install, disable_dep_install)
 			end
 		end
 		if #manuals > 0 then
-			local manaddr = "https://bitbucket.org/Aranthor/oc_equipment/raw/master/man/"
+			local manaddr = "https://gitlab.com/d_rzepka/oc-equipment/raw/master/man/"
 			local mandir = "/usr/man/"
 			textColor(colors.cyan)
-			term.write("\nPrzygotowywanie instrukcji...")
+			term.write("\nPreparing manual...")
 			textColor(colors.silver)
 			for _, s in pairs(manuals) do
 				term.write("\n" .. s)
@@ -585,25 +616,25 @@ local function installApp(appName, force_install, disable_dep_install)
 						manfile:write(mansource)
 						manfile:close()
 					else
-						io.stderr:write("\nNie udało się utworzyć pliku instrukcji.")
+						io.stderr:write("\nCouldn't create manual file.")
 						fs.remove(fs.concat(mandir, s))
 					end
 				else
-					io.stderr:write("\nNie odnaleziono instrukcji.")
+					io.stderr:write("\nManual file not found.")
 				end
 			end
 		end
 		textColor(colors.green)
-		term.write("\nInstalacja zakończona sukcesem!")
+		term.write("\nInstallation sucessful")
 	else
-		io.stderr:write("Nie udało się pobrać listy aplikacji.")
+		io.stderr:write("Couldn't download the registry.")
 		return
 	end
 end
 
 local function uninstallApp(appName, deps)
 	if not appName then
-		io.stderr:write("Nie podano nazwy aplikacji.")
+		io.stderr:write("You must specifiy application name")
 		return
 	end
 	local name = appName
@@ -611,33 +642,33 @@ local function uninstallApp(appName, deps)
 		name = string.sub(appName, 1, string.len(apppName) - 4)
 	end
 	textColor(colors.cyan)
-	term.write("\nPobieranie listy aplikacji...   ")
+	term.write("\nDownloading the registry...   ")
 	fetchAppList()
 	if not appList then
 		textColor(colors.red)
-		term.write("Błąd\nNie udało się pobrać listy aplikacji.")
+		term.write("Błąd\nRegistry download failed.")
 		textColor(colors.yellow)
-		term.write("\nDeinstalacja przerwana.")
+		term.write("\nDeinistallation aborted.")
 		return
 	end
 	local application = getAppData(name)
 	if not application then
 		textColor(colors.red)
-		term.write("Błąd\nNie znaleziono aplikacji o podanej nazwie.")
+		term.write("Błąd\nCouldn't find the application with specified name")
 		textColor(colors.yellow)
 		term.write("\nDeinstalacja przerwana.")
 		return
 	end
 	ok()
-	term.write("\nGenerowanie listy deinstalacyjnej...   ")
+	term.write("\nGenerating deinstallation list...   ")
 	local list  = generateList(application, deps)
 	if not list then
 		textColor(colors.yellow)
-		term.write("\nInstalacja przerwana.")
+		term.write("\nDeinstallation aborted")
 		return
 	end
 	ok()
-	term.write("\nUsuwanie aplikacji:")
+	term.write("\nRemoving applications:")
 	textColor(colors.silver)
 	for _, t in pairs(list) do
 		local filename = fs.concat(t[3], t[4])
@@ -645,12 +676,12 @@ local function uninstallApp(appName, deps)
 		if fs.exists(filename) then
 			local s, e = fs.remove(filename)
 			if not s then
-				io.stderr:write("\nBłąd: " .. e)
+				io.stderr:write("\nError: " .. e)
 			end
 		end
 	end
 	textColor(colors.green)
-	print("\nDeinstalacja zakończona pomyślnie.")
+	print("\nDeinstallation successful.")
 end
 
 local function main()

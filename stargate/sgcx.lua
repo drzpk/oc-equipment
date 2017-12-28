@@ -21,11 +21,11 @@ local serial = require("serialization")
 local gpu = component.gpu
 local res = {gpu.getResolution()}
 if res[1] ~= 160 or res[2] ~= 50 then
-	io.stderr:write("Program wymaga do dzialania karty graficznej i monitora 3 poziomu")
+	io.stderr:write("Application requires 3rd tier GPU and monitor in order to work")
 	return
 end
 if not component.isAvailable("modem") then
-	io.stderr:write("Program wymaga do działania modemu")
+	io.stderr:write("This application requires modem component to be installed")
 	return
 end
 local modem = component.modem
@@ -46,20 +46,14 @@ local irisTime = 0
 local irisTimer = nil
 local timeToClose = 0
 
--- Stałe do obliczania adresów
+-- Constants required for address calculation
 local SYMBOLS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789'
 local NUM_SYMBOLS = SYMBOLS:len()
 local MIN_COORD = -139967
 local MAX_COORD = 139967
-local MIN_DIM = -648
-local MAX_DIM = 1295
-local DIM_RANGE = 1296
 local MC = 279937
 local PC = 93563
 local QC = 153742
-local MD = 1297
-local PD = 953
-local QD = 788
 
 local function saveConfig()
 	local plik = io.open("/etc/sg.cfg", "w")
@@ -70,13 +64,18 @@ end
 local function loadConfig()
 	if not fs.exists("/etc/sg.cfg") or startArgs[1] then
 		if not startArgs[1] then
-			io.stderr:write("Brak pliku konfiguracyjnego. Aby go utworzyć, napisz sgcx <adres_interfejsu_wrót>")
+			io.stderr:write("Configuration file not found. In order to create on, type sgcx <stargate interface address>")
 			return false
 		end
 		data.address = startArgs[1]
 		sg = component.proxy(startArgs[1])
 		if not sg then
-			io.stderr:write("Podany adres jest nieprawidłowy!")
+			io.stderr:write("Wrong stargate interface address")
+			return false
+		end
+
+		if not sg.dial then
+			io.stderr:write("Given address does not belong to a stargate interface")
 			return false
 		end
 	else
@@ -85,8 +84,11 @@ local function loadConfig()
 		plik:close()
 		sg = component.proxy(data.address or "")
 		if not sg then
-			GMLmessageBox("Adres interfejsu wrót jest nieprawidłowy",{"Zamknij"})
+			GMLmessageBox("Stargate interface address is incorrect",{"Close"})
 			return false
+		end
+		if not sg.dial then
+			GMLmessageBox("Given address does not belong to a stargate interfacee", {"Close"})
 		end
 	end
 	data.list = data.list or {}
@@ -409,31 +411,11 @@ local function separateAddress(addr)
 	return string.sub(addr, 1, 4) .. "-" .. string.sub(addr, 5, 7) .. "-" .. string.sub(addr, 8, 9)
 end
 
-local function translateState()
-	state = sg.stargateState()
-	if state == "Idle" then return "Bezczynny" end
-	if state == "Dialling" then return "Wybieranie adresu" end
-	if state == "Connecting" then return "Otwieranie tunelu" end
-	if state == "Connected" then return "Tunel aktywny" end
-	if state == "Offline" then return "Offline" end
-	return state
-end
-
-local function translateIrisState()
-	if sg.irisState() == "Open" then return "Otwarta" end
-	if sg.irisState() == "Opening" then return "Otwieranie" end
-	if sg.irisState() == "Closed" then return "Zamknięta" end
-	if sg.irisState() == "Closing" then return "Zamykanie" end
-	return "Offline"
-end
-
 local function translateResponse(res)
-	if res == "Malformed stargate address" or res == "bad arguments #1 (string expected, got no value)" then return "Niepoprawny adres wrót!"
-	elseif string.sub(res, 1, 23) == "No stargate at address " then return "Brak wrót o adresie " .. string.sub(res, 24) .. "!"
-	elseif string.sub(res, 1, 28) == "Not enough chevrons to dial " then return "Wrota nie obslugują tunelów międzywymiarowych"
-	elseif res == "Stargate has insufficient energy" then return "Za mało energi do nawiązania połączenia"
-	else return "Nie można otworzyć tunelu (" .. res .. ")"
+	if res == "bad arguments #1 (string expected, got no value)" then
+		return "Malformed stargate address"
 	end
+	return res
 end
 
 local function round(num, idp)
@@ -457,7 +439,7 @@ local function getEnergy()
 end
 
 local function energyRefresh()
-	element.energy["text"] = "Energia: " .. getEnergy()
+	element.energy["text"] = "Energy: " .. getEnergy()
 	element.energy:draw()
 end
 
@@ -474,18 +456,18 @@ end
 local function modifyList(action)
 	if action == "add" then
 		if element.name["text"] == "" or element.world["text"] == "" or element.address["text"] == "" then
-			GMLmessageBox("Uzupełnij wszystkie pola", {"OK"})
+			GMLmessageBox("Fill all fields", {"OK"})
 		elseif element.name["text"]:len() > 20 or element.world["text"]:len() > 20 then
-			GMLmessageBox("Długość nazwy i/lub świata nie mogą przekraczać 20 znaków", {"OK"})
+			GMLmessageBox("Names cannot be longer than 20 characters", {"OK"})
 		elseif not sg.energyToDial(element.address["text"]) then
-			GMLmessageBox("Adres jest niepoprawny lub nie istnieje", {"OK"})
+			GMLmessageBox("Address is incorrect or does not exist", {"OK"})
 		else
 			for _, v in pairs(data.list) do
 				if v.name == element.name["text"] then
-					GMLmessageBox("Adres o podanej nazwie jest już na liście", {"OK"})
+					GMLmessageBox("Address with given name is already on the list", {"OK"})
 					return
 				elseif v.address == element.address then
-					GMLmessageBox("Podany adres jest już na liście pod nazwą " .. v.name, {"OK"})
+					GMLmessageBox("Given address is already on the list under the name " .. v.name, {"OK"})
 					return
 				end
 			end
@@ -501,48 +483,48 @@ local function modifyList(action)
 			end
 			element.list:updateList(list)
 			saveConfig()
-			GMLmessageBox("Adres został dodany do listy", {"OK"})
+			GMLmessageBox("Address has been added to the list", {"OK"})
 		end
 	elseif action == "modify" and element.list:getSelected() then
 		if element.name["text"] == "" or element.world["text"] == "" or element.address["text"] == "" then
-			GMLmessageBox("Uzupełnij wszystkie pola", {"OK"})
+			GMLmessageBox("Fill all fields", {"OK"})
 		elseif element.name["text"]:len() > 20 or element.world["text"]:len() > 20 then
-			GMLmessageBox("Długość nazwy i/lub świata nie mogą przekraczać 20 znaków", {"OK"})
+			GMLmessageBox("Names cannot be longer than 20 characters", {"OK"})
 		elseif not sg.energyToDial(element.address["text"]) then
-			GMLmessageBox("Adres jest niepoprawny lub nie istnieje", {"OK"})
+			GMLmessageBox("Address is incorrect or does not exist", {"OK"})
 		else
-			if GMLmessageBox("Czy na pewno chcesz zmodyfikować wpis?", {"Tak", "Nie"}) == "Tak" then
+			if GMLmessageBox("Are you sure you want to modify this entry", {"Yes", "No"}) == "Yes" then
 				local selected = element.list:getSelected()
-				for _, v in pairs(data.list) do
-					if selected == v.name .. " (" .. v.world .. ")" then
+				for a, v in pairs(data.list) do
+					if selected == tostring(a) .. ". " .. v.name .. " (" .. v.world .. ")" then
 						v.name = element.name["text"]
 						v.world = element.world["text"]
 						v.address = element.address["text"]:upper()
 						local list = {}
-						for _, v in pairs(data.list) do
-							table.insert(list, v.name .. " (" .. v.world .. ")")
+						for a, v in pairs(data.list) do
+							table.insert(list, tostring(a) .. ". " .. v.name .. " (" .. v.world .. ")")
 						end
 						element.list:updateList(list)
 						saveConfig()
-						GMLmessageBox("Wpis został zmodyfikowany", {"OK"})
+						GMLmessageBox("The entry has been modified", {"OK"})
 						break
 					end
 				end
 			end
 		end
 	elseif action == "remove" and element.list:getSelected() then
-		if GMLmessageBox("Czy na pewno chcesz usunąć zaznaczony element?", {"Tak", "Nie"}) == "Tak" then
+		if GMLmessageBox("Are you sure you want to remove selected entry?", {"Yes", "No"}) == "Yes" then
 			local selected = element.list:getSelected()
 			for k, v in pairs(data.list) do
-				if selected == v.name .. " (" .. v.world .. ")" then
+				if selected == tostring(k) .. ". " .. v.name .. " (" .. v.world .. ")" then
 					table.remove(data.list, k)
 					local list = {}
-					for _, v in pairs(data.list) do
-						table.insert(list, v.name .. " (" .. v.world .. ")")
+					for a, v in pairs(data.list) do
+						table.insert(list, tostring(a) .. ". " .. v.name .. " (" .. v.world .. ")")
 					end
 					element.list:updateList(list)
 					saveConfig()
-					GMLmessageBox("Wpis został usunięty", {"OK"})
+					GMLmessageBox("The entry has been removed", {"OK"})
 					break
 				end
 			end
@@ -554,7 +536,7 @@ local function dial()
 	if sg.stargateState() == "Idle" then
 		local status, response = sg.dial(element.address["text"])
 		if status then
-			element.connectionType["text"] = "Połączenie wychodzące"
+			element.connectionType["text"] = "Outgoing connection"
 			element.connectionType:show()
 			local timeout = tonumber(element.time["text"])
 			if timeout and timeout >= 10 and timeout <= 300 then
@@ -574,7 +556,7 @@ local function dial()
 			event.cancel(timerID)
 		end
 	elseif sg.stargateState() ~= "Offline" then
-		GMLmessageBox("Wrota są zajęte", {"OK"})
+		GMLmessageBox("Stargate is busy", {"OK"})
 	end
 end
 
@@ -657,10 +639,10 @@ end
 
 local function chunkToAddress(cx, cz)
 	if not chunkInRange(cx) then
-		GMLmessageBox("Współrzędna X jest poza zasięgem adresacji", {"OK"})
+		GMLmessageBox("The X coordinate is beyond the addressation range", {"OK"})
 		return
 	elseif not chunkInRange(cz) then
-		GMLmessageBox("Współrzędna Z jest poza zasięgem adresacji", {"OK"})
+		GMLmessageBox("The Z coordinate is beyond the addressation range", {"OK"})
 		return
 	end
 	
@@ -709,7 +691,7 @@ end
 local function coordsCalculator()
 	local cgui = gml.create("center", "center", 60, 21)
 	cgui.style = darkStyle
-	cgui:addButton(42, 18, 12, 1, "Zamknij", function() cgui:close() end)
+	cgui:addButton(42, 18, 12, 1, "Close", function() cgui:close() end)
 	cgui:addLabel(3, 2, 4, "X:")
 	cgui:addLabel(3, 5, 4, "Z:")
 	cgui:addLabel(3, 8, 10, "Chunk X:")
@@ -718,15 +700,15 @@ local function coordsCalculator()
 	local posZ = cgui:addTextField(3, 6, 14)
 	local posCX = cgui:addTextField(3, 9, 14)
 	local posCZ = cgui:addTextField(3, 12, 14)
-	cgui:addLabel(38, 5, 8, "Adres:")
+	cgui:addLabel(38, 5, 10, "Address:")
 	local address = cgui:addTextField(38, 6, 17)
-	cgui:addButton(38, 8, 17, 1, "Kopiuj z listy", function()
+	cgui:addButton(38, 8, 17, 1, "Copy from list", function()
 		address.text = element.address.text
 		address:draw()
 	end)
-	cgui:addLabel(38, 10, 13, "Odległość:")
+	cgui:addLabel(38, 10, 13, "Distance:")
 	local distance = cgui:addLabel(38, 11, 17, "0")
-	cgui:addLabel(3, 15, 56, "* Symbole światów nie są generowane deterministycznie")
+	cgui:addLabel(3, 15, 56, "* World symbols aren't generated deterministically")
 	local function updateDistance(cx, cz)
 		local dist = computeDistance(nil, {cx, cz})
 		distance.text = tostring(dist)
@@ -745,9 +727,9 @@ local function coordsCalculator()
 			local npx = tonumber(posX.text)
 			local npz = tonumber(posZ.text)
 			if not npx then
-				GMLmessageBox("Współrzędna X musi być liczbą", {"OK"})
+				GMLmessageBox("The X coordinate must be a number", {"OK"})
 			elseif not npz then
-				GMLmessageBox("Współrzędne Z musi być liczbą", {"OK"})
+				GMLmessageBox("The Z coordinate must be a number", {"OK"})
 			else
 				updateAddress(math.floor(npx / 16), math.floor(npz / 16))
 			end
@@ -755,21 +737,21 @@ local function coordsCalculator()
 			local ncx = tonumber(posCX.text)
 			local ncz = tonumber(posCZ.text)
 			if not ncx then
-				GMLmessageBox("Współrzędna chunka X musi być liczbą", {"OK"})
+				GMLmessageBox("The chunk X coordinate must be a number", {"OK"})
 			elseif not ncz then
-				GMLmessageBox("Współrzędna chunka Z musi być liczbą", {"OK"})
+				GMLmessageBox("The chunk Z coordinate must be a number", {"OK"})
 			else
 				updateAddress(ncx, ncz)
 			end
 		else
-			GMLmessageBox("Uzupełnij współrzędne bloku lub chunka", {"OK"})
+			GMLmessageBox("Enter coordinates of a block or chunk", {"OK"})
 		end
 	end)
 	cgui:addButton(22, 10, 11, 2, "<---", function()
 		if address.text:len() >= 7 then
 			local cleared = clearAddress(address.text)
 			if not cleared then
-				GMLmessageBox("Adres zawiera niedozwolone znaki", {"OK"})
+				GMLmessageBox("Address field contains forbidden characters", {"OK"})
 			else
 				local chunk = addressToChunk(cleared)
 				posCX.text = tostring(chunk[1])
@@ -783,7 +765,7 @@ local function coordsCalculator()
 				updateDistance(chunk[1], chunk[2])
 			end
 		else
-			GMLmessageBox("Pole adresu musi zawierać 7 znaków", {"OK"})
+			GMLmessageBox("The address field must contain 7 characters", {"OK"})
 		end
 	end)
 	cgui:run()
@@ -796,19 +778,19 @@ local function createUI()
 	gui:addLabel(35, 2, 10, version)["text-color"] = 0x666666
 	addBar(53, 1, 15, false)
 	element.stargate = addStargate()
-	gui:addButton("right", 1, 10, 1, "Wyjście", function() gui:close() end)
-	gui:addLabel(56, 4, 20, "Adres: " .. separateAddress(sg.localAddress()))
-	element.status = gui:addLabel(56, 5, 25, "Status: " .. translateState())
-	element.iris = gui:addLabel(56, 6, 25, "Przesłona: " .. translateIrisState())
-	element.energy = gui:addLabel(56, 7, 35, "Energia: " .. getEnergy())
-	element.distance = gui:addLabel(56, 8, 35, "Odległość: ")
+	gui:addButton("right", 1, 10, 1, "Exit", function() gui:close() end)
+	gui:addLabel(56, 4, 22, "Address: " .. separateAddress(sg.localAddress()))
+	element.status = gui:addLabel(56, 5, 25, "Status: " .. sg.stargateState())
+	element.iris = gui:addLabel(56, 6, 25, "Iris: " .. sg.irisState())
+	element.energy = gui:addLabel(56, 7, 35, "Energy: " .. getEnergy())
+	element.distance = gui:addLabel(56, 8, 35, "Distance: ")
 	element.connectionType = gui:addLabel(56, 11, 30, "")
 	element.connectionType:hide()
-	element.remoteAddress = gui:addLabel(56, 12, 30, "")
+	element.remoteAddress = gui:addLabel(56, 12, 32, "")
 	element.remoteAddress:hide()
 	element.timeout = gui:addLabel(56, 13, 30, "")
 	element.timeout:hide()
-	gui:addLabel(3, 20, 16, "Lista adresów:")
+	gui:addLabel(3, 20, 16, "Address list:")
 	local list = {}
 	for a, v in pairs(data.list) do
 		table.insert(list, tostring(a) .. ". " .. v.name .. " (" .. v.world .. ")")
@@ -827,22 +809,22 @@ local function createUI()
 		element.address:draw()
 		local clear = clearAddress(element.address.text)
 		if clear then
-			element.distance.text = "Odległość: " .. tostring(computeDistance(clear))
+			element.distance.text = "Distance: " .. tostring(computeDistance(clear))
 			element.distance:draw()
 		end
 	end
-	gui:addButton(4, 46, 10, 2, "Dodaj", function() modifyList("add") end)
-	gui:addButton(15, 46, 10, 2, "Usuń", function() modifyList("remove") end)
-	gui:addButton(27, 46, 15, 2, "Modyfikuj", function() modifyList("modify") end)
-	gui:addLabel(45, 22, 7, "Nazwa:")["text-color"] = 0x999999
-	gui:addLabel(45, 25, 9, "Świat:")["text-color"] = 0x999999
-	gui:addLabel(45, 29, 9, "Adres:")["text-color"] = 0x999999
-	gui:addLabel(45, 32, 27, "Czas połączenia [10-300]:")["text-color"] = 0x999999
+	gui:addButton(4, 46, 10, 2, "Add", function() modifyList("add") end)
+	gui:addButton(15, 46, 10, 2, "Remove", function() modifyList("remove") end)
+	gui:addButton(27, 46, 15, 2, "Modify", function() modifyList("modify") end)
+	gui:addLabel(45, 22, 7, "Name:")["text-color"] = 0x999999
+	gui:addLabel(45, 25, 9, "World:")["text-color"] = 0x999999
+	gui:addLabel(45, 29, 11, "Address:")["text-color"] = 0x999999
+	gui:addLabel(45, 32, 27, "Connection time [10-300]:")["text-color"] = 0x999999
 	element.name = gui:addTextField(45, 23, 25)
 	element.world = gui:addTextField(45, 26, 25)
 	element.address = gui:addTextField(45, 30, 25)
 	element.time = gui:addTextField(45, 33, 10)
-	element.dial = gui:addButton(45, 36, 25, 3, "Otwórz tunel", dial)
+	element.dial = gui:addButton(45, 36, 25, 3, "Open a tunnel", dial)
 	element.irisButton = gui:addButton(45, 40, 25, 3, "", function()
 		if sg.irisState() == "Open" then
 			sg.closeIris()
@@ -850,31 +832,31 @@ local function createUI()
 			sg.openIris()
 		end
 	end)
-	element.irisButton["text"] = sg.irisState() == "Closed" and "Otwórz przesłonę" or (sg.irisState() == "Open" and "Zamknij przesłonę" or "Przełącz przesłonę")
-	element.autoIris = gui:addLabel(45, 44, 7, "Tryb:")
-	gui:addButton(52, 44, 18, 1, data.autoIris and "automatyczny" or "ręczny", function(self)
+	element.irisButton["text"] = sg.irisState() == "Closed" and "Open the iris" or (sg.irisState() == "Open" and "Close the iris" or "Switch the iris")
+	element.autoIris = gui:addLabel(45, 44, 7, "Mode:")
+	gui:addButton(52, 44, 18, 1, data.autoIris and "automatic" or "manual", function(self)
 		data.autoIris = not data.autoIris
-		self["text"] = data.autoIris and "automatyczny" or "ręczny"
+		self["text"] = data.autoIris and "automatic" or "manual"
 		self:draw()
 		updateCounter()
 	end)
 	gui:addLabel(110, 5, 7, "Port:")
-	gui:addButton(118, 5, 15, 1, data.portStatus and "Otwarty" or "Zamknięty", function(self)
+	gui:addButton(120, 5, 15, 1, data.portStatus and "Open" or "Closed", function(self)
 		if data.portStatus then
 			modem.close(data.port)
-			self["text"] = "Zamknięty"
+			self["text"] = "Closed"
 			self["text-color"] = 0xff0000
 		else
 			modem.open(data.port)
-			self["text"] = "Otwarty"
+			self["text"] = "Open"
 			self["text-color"] = 0x00ff00
 		end
 		data.portStatus = not data.portStatus
 		self:draw()
 		updateCounter()
 	end)["text-color"] = data.portStatus and 0x00ff00 or 0xff0000
-	gui:addLabel(110, 6, 8, "Kanał:")
-	gui:addButton(118, 6, 15, 1, tostring(data.port), function(self)
+	gui:addLabel(110, 6, 10, "Channel:")
+	gui:addButton(120, 6, 15, 1, tostring(data.port), function(self)
 		local isOpen = modem.isOpen(data.port)
 		if isOpen then modem.close(data.port) end
 		data.port = math.random(10000, 50000)
@@ -883,13 +865,13 @@ local function createUI()
 		if isOpen then modem.open(data.port) end
 		updateCounter()
 	end)
-	gui:addLabel(110, 7, 6, "Kod:")
-	gui:addButton(118, 7, 15, 1, tostring(data.irisCode), function(self)
+	gui:addLabel(110, 7, 6, "Code:")
+	gui:addButton(120, 7, 15, 1, tostring(data.irisCode), function(self)
 		data.irisCode = math.random(1000, 9999)
 		self["text"] = tostring(data.irisCode)
 		self:draw()
 	end)
-	gui:addButton(110, 9, 23, 1, "Kalkulator adresów", function() coordsCalculator() end)
+	gui:addButton(110, 9, 25, 1, "Address calculator", function() coordsCalculator() end)
 	tmp.GMLbgcolor = GMLextractProperty(gui, GMLgetAppliedStyles(gui), "fill-color-bg")
 	gui:run()
 end
@@ -908,10 +890,10 @@ local function countdown()
 		sg.disconnect()
 		event.cancel(timerID)
 	else
-		minuty = tostring(math.floor(timeToClose / 60))
-		sekundy = tostring(60 * ((timeToClose / 60) - math.floor(timeToClose / 60)))
-		if string.len(sekundy) == 1 then sekundy = "0" .. sekundy end
-		element.timeout["text"] = "Pozostały czas: " .. minuty .. ":" .. sekundy
+		local minutes = tostring(math.floor(timeToClose / 60))
+		local seconds = tostring(60 * ((timeToClose / 60) - math.floor(timeToClose / 60)))
+		if string.len(seconds) == 1 then seconds = "0" .. seconds end
+		element.timeout["text"] = "Remaining time: " .. minutes .. ":" .. seconds
 		element.timeout:draw()
 		timeToClose = timeToClose - 1
 	end
@@ -926,23 +908,23 @@ local function __eventListener(...)
 			end)
 		end
 		timeToClose = 300
-		element.connectionType["text"] = "Połączenie przychodzące"
+		element.connectionType["text"] = "Incomming connection"
 		element.connectionType:show()
-		element.remoteAddress["text"] = "Zewnętrzny adres: " .. separateAddress(sg.remoteAddress())
+		element.remoteAddress["text"] = "Remote address: " .. separateAddress(sg.remoteAddress())
 		element.remoteAddress:show()
 	elseif ev[1] == "sgIrisStateChange" then
-		element.iris["text"] = "Przesłona: " .. translateIrisState()
+		element.iris["text"] = "Iris: " .. sg.irisState()
 		element.iris:draw()
 		if ev[3] == "Closed" then
-			element.irisButton["text"] = "Otwórz przesłonę"
+			element.irisButton["text"] = "Open the iris"
 			element.irisButton:draw()
 		elseif ev[3] == "Open" then
-			element.irisButton["text"] = "Zamknij przesłonę"
+			element.irisButton["text"] = "Close the iris"
 			element.irisButton:draw()
 		end
 		if ev[3] == "Open" or ev[3] == "Closed" then element.stargate:draw() end
 	elseif ev[1] == "sgStargateStateChange" then
-		element.status["text"] = "Status: " .. translateState()
+		element.status["text"] = "Status: " .. sg.stargateState()
 		element.status:draw()
 		if ev[3] == "Idle" then
 			if data.autoIris then
@@ -953,7 +935,7 @@ local function __eventListener(...)
 			element.connectionType:hide()
 			element.remoteAddress:hide()
 			element.timeout:hide()
-			element.dial["text"] = "Otwórz tunel"
+			element.dial["text"] = "Open a tunnel"
 			element.dial:draw()
 			if timerID then
 				event.cancel(timerID)
@@ -962,11 +944,11 @@ local function __eventListener(...)
 			element.stargate:draw()
 			element.stargate:lockSymbol(0)
 		elseif ev[3] == "Connected" then
-			element.remoteAddress["text"] = "Zewnętrzny adres: " .. separateAddress(sg.remoteAddress())
+			element.remoteAddress["text"] = "Remote address: " .. separateAddress(sg.remoteAddress())
 			element.remoteAddress:show()
-			element.timeout["text"] = "Pozostały czas: "
+			element.timeout["text"] = "Remaining time: "
 			element.timeout:show()
-			element.dial["text"] = "Zamknij tunel"
+			element.dial["text"] = "Close the tunnel"
 			element.dial:draw()
 			timerID = event.timer(1, countdown, 301)
 			element.stargate:draw()
@@ -977,7 +959,7 @@ local function __eventListener(...)
 		if ev[4] == data.port then
 			if ev[7] == data.irisCode then
 				os.sleep(0.1)
-				modem.send(ev[3], ev[6], serial.serialize({true, "Przesłona otwarta", irisTimeout}))
+				modem.send(ev[3], ev[6], serial.serialize({true, "Iris open", irisTimeout}))
 				if sg.irisState() == "Closed" then
 					sg.openIris()
 					irisTime = irisTimeout
@@ -985,7 +967,7 @@ local function __eventListener(...)
 				end
 			else
 				os.sleep(0.1)
-				modem.send(ev[3], ev[6], serial.serialize({false, "Błędny kod przesłony!", irisTimeout}))
+				modem.send(ev[3], ev[6], serial.serialize({false, "Wrong iris code!", irisTimeout}))
 			end
 		end
 	end

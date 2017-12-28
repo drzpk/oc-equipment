@@ -57,14 +57,14 @@ local function draw()
 	gpu.fill(1, 2, res[1], 2, "|")
 	gpu.fill(2, 2, res[1] - 2, 2, " ")
 	term.setCursor(3, 2)
-	term.write("Iris Authenticator - program do zdalnego otwierania przesłony")
-	wrt(3, 3, "Wersja " .. wersja)
+	term.write("Iris Authenticator - remote iris controller for sgcx")
+	wrt(3, 3, "Version " .. wersja)
 	wrt(4, 7, "Port:  " .. tostring(port))
-	wrt(4, 8, "Kod:   " .. tostring(kod))
-	wrt(3, 10, "P - zmiana portu")
-	wrt(3, 11, "K - zmiana kodu")
-	wrt(3, 12, "S - wysłanie sygnalu")
-	wrt(3, 13, "Q - wyjście z programu")
+	wrt(4, 8, "Code:   " .. tostring(kod))
+	wrt(3, 10, "P - change port")
+	wrt(3, 11, "K - change code")
+	wrt(3, 12, "S - send signal")
+	wrt(3, 13, "Q - quit program")
 	wrt(1, 15, "--------")
 	term.setCursor(2, 16)
 end
@@ -74,33 +74,33 @@ local function main()
 		draw()
 		local ev = {event.pull("key_down")}
 		if ev[4] == key.keys.p then
-			term.write("Wprowadź nowy numer portu[10 000 - 50 000]: ")
+			term.write("Enter new port number[10 000 - 50 000]: ")
 			ret = tonumber(term.read())
 			if ret~=nil then
 				if ret >= 10000 and ret <= 50000 then
 					port = ret
 					changed = true
 				else
-					wrt(2, 17, "Wprowadzono niepoprawny numer portu!")
+					wrt(2, 17, "Entered incorrect port number!")
 					os.sleep(2)
 				end
 			else
-				wrt(2, 17, "Wprowadzono niepoprawny numer portu!")
+				wrt(2, 17, "Entered incorrect port number!")
 				os.sleep(2)
 			end
 		elseif ev[4] == key.keys.k then
-			term.write("Wprowadź nowy kod[1000 - 9999]: ")
+			term.write("Enter new code[1000 - 9999]: ")
 			ret = tonumber(term.read())
 			if ret~=nil then
 				if ret >= 1000 and ret <= 9999 then
 					kod = ret
 					changed = true
 				else
-					wrt(2, 17, "Wprowadzono niepoprawny kod!")
+					wrt(2, 17, "Entered incorrect code!")
 					os.sleep(2)
 				end
 			else
-				wrt(2, 17, "Wprowadzono niepoprawny kod!")
+				wrt(2, 17, "Entered incorrect code!")
 				os.sleep(2)
 			end
 		elseif ev[4] == key.keys.s then
@@ -111,10 +111,10 @@ local function main()
 				until localPort ~= port and not modem.isOpen(localPort)
 				modem.open(localPort)
 				modem.broadcast(port, localPort, kod)
-				wrt(2, 17, "Wiadomość została wysłana")
+				wrt(2, 17, "Message sent")
 				evv = {event.pull(2, "modem_message")}
 				if evv[1] == nil then
-					wrt(4, 18, "Brak odpowiedzi!")
+					wrt(4, 18, "No reponse!")
 					os.sleep(2)
 				else
 					status = serial.unserialize(evv[6])
@@ -122,7 +122,7 @@ local function main()
 						wrt(4, 18, status[2])
 						local czas = status[3] + 1
 						while czas > -1 do
-							wrt(4, 19, "Czas do zamknięcia przesłony: " .. czas .. " ")
+							wrt(4, 19, "Time until iris is closed: " .. czas .. " ")
 							os.sleep(1)
 							czas = czas - 1
 						end
@@ -133,7 +133,7 @@ local function main()
 				end
 				modem.close(localPort)
 			else
-				wrt(2, 17, "Nie wykryto bezprzewodowego modemu!")
+				wrt(2, 17, "Wireless modem not detected!")
 				os.sleep(2)
 			end
 		elseif ev[4] == key.keys.q then
