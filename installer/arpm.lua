@@ -389,14 +389,14 @@ local function packetInfo(packetName)
 				textColor(colors.yellow)
 				io.write("Is library: ")
 				textColor(colors.gray)
-				if packet[7] then print("Tak") else print("Nie") end
+				if packet[7] then print("yes") else print("No") end
 				textColor(colors.yellow)
 				io.write("Has manual: ")
 				textColor(colors.gray)
-				if packet[8] then print("Tak") else print("Nie") end
+				if packet[8] then print("Yes") else print("No") end
 				if packet[10] then
 					textColor(colors.magenta)
-					print("Is archive: Tak")
+					print("Is archive: Yes")
 				end
 				print()
 				return
@@ -583,7 +583,7 @@ local function installApp(appName, force_install, disable_dep_install)
 				output:write(source)
 				output:close()
 			else
-				io.stderr:write("\nNie udało się pobrać pliku " .. t[4])
+				io.stderr:write("\nCouldn't download file " .. t[4])
 				if not force_install then
 					io.stderr:write("\nInstallation failed!")
 					output:close()
@@ -646,7 +646,7 @@ local function uninstallApp(appName, deps)
 	fetchAppList()
 	if not appList then
 		textColor(colors.red)
-		term.write("Błąd\nRegistry download failed.")
+		term.write("Error\nRegistry download failed.")
 		textColor(colors.yellow)
 		term.write("\nDeinistallation aborted.")
 		return
@@ -654,7 +654,7 @@ local function uninstallApp(appName, deps)
 	local application = getAppData(name)
 	if not application then
 		textColor(colors.red)
-		term.write("Błąd\nCouldn't find the application with specified name")
+		term.write("Error\nCouldn't find the application with specified name")
 		textColor(colors.yellow)
 		term.write("\nDeinstalacja przerwana.")
 		return
