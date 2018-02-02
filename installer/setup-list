@@ -26,10 +26,10 @@
 	{"dsman","1.0","https://gitlab.com/d_rzepka/oc-equipment/raw/master/servers/dsman.lua","Menedżer serwera danych","IlynPayne",{"hdp","dsapi"},nil,nil,nil},
 	{"the_switch","1.1","https://gitlab.com/d_rzepka/oc-equipment/raw/master/servers/the_switch.lua","Switch server (redstone control)","IlynPayne",{"gml","gfxbuffer","default-style","hdp","dsapi"},nil,nil,nil},
 	{"switchRemote","1.0","https://gitlab.com/d_rzepka/oc-equipment/raw/master/servers/switchRemote.lua","Remote for the_switch","IlynPayne",nil,nil,nil,nil},
-	{"the_guard","2.0","https://gitlab.com/d_rzepka/oc-equipment/raw/master/servers/the_guard.lua","Complex security system","IlynPayne",{"gml","dsapi","logs","levels","auth","io","turrets"},nil,nil,nil},
+	{"the_guard","2.1","https://gitlab.com/d_rzepka/oc-equipment/raw/master/servers/the_guard.lua","Complex security system","IlynPayne",{"gml","dsapi","logs","levels","auth","io","turrets"},nil,nil,nil},
 	{"logs","1.0","https://gitlab.com/d_rzepka/oc-equipment/raw/master/servers/mod_tg/mod_tg_logs.lua","Log module for the_guard","IlynPayne",nil,nil,nil,"mod_tg/mod_tg_logs.lua"},
 	{"levels","1.0","https://gitlab.com/d_rzepka/oc-equipment/raw/master/servers/mod_tg/mod_tg_levels.lua","Security levels module for the_guard","IlynPayne",nil,nil,nil,"mod_tg/mod_tg_levels.lua"},
-	{"auth","1.0","https://gitlab.com/d_rzepka/oc-equipment/raw/master/servers/mod_tg/mod_tg_auth.lua","Card readers and keypads module for the_guard","IlynPayne",nil,nil,nil,"mod_tg/mod_tg_auth.lua"},
+	{"auth","1.1","https://gitlab.com/d_rzepka/oc-equipment/raw/master/servers/mod_tg/mod_tg_auth.lua","Card readers and keypads module for the_guard","IlynPayne",nil,nil,nil,"mod_tg/mod_tg_auth.lua"},
 	{"io","1.0","https://gitlab.com/d_rzepka/oc-equipment/raw/master/servers/mod_tg/mod_tg_io.lua","Redstone control module for the_guard","IlynPayne",nil,nil,nil,"mod_tg/mod_tg_io.lua"},
 	{"turrets","1.1","https://gitlab.com/d_rzepka/oc-equipment/raw/master/servers/mod_tg/mod_tg_turrets.lua","Turrets and sensors module for the_guard","IlynPayne",nil,nil,nil,"mod_tg/mod_tg_turrets.lua"},
 	--3rd party

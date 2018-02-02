@@ -1,7 +1,7 @@
 -- ################################################
--- #                The Guard  2.0                #
+-- #                The Guard  2.1                #
 -- #                                              #
--- #  03.2016                      by: IlynPayne  #
+-- #  03.2016                      by: Aranthor   #
 -- ################################################
 
 --[[
@@ -138,11 +138,12 @@
 		strefy. Moduł wychodzący poza strefę zostanie wyłączony.
 ]]
 
-local version = "2.0"
+local version = "2.1"
 local apiLevel = 2
 local args = {...}
 
 if args[1] == "version_check" then return version end
+local strict = args[1] == "strict"
 
 local computer = require("computer")
 local component = require("component")
@@ -460,10 +461,41 @@ interface.call = function(mod, id, p1, p2, silent)
 	else
 		silentLog("interface.call", "akcja " .. tostring(id) .. " nie została odneleziona")
 		if not silent then
-			GMLmessageBox(gui, "Nie odnalziono akcji " .. tostring(id) .. "!", {"OK"})
+			GMLmessageBox(gui, "Nie odnaleziono akcji " .. tostring(id) .. "!", {"OK"})
 		end
 	end
 	return nil
+end
+
+--[[
+Wywołuje daną akcję po nazwie
+	@mod - moduł wywołujący
+	@id - nazwa akcji
+	@p1 - parametr 1. lub nil
+	@p2 - parametr 2. lub nil
+	@silent:boolean - nie wyświetlanie komunikatów o błędach
+	RET: <wartość zwracana przez akcję> or nil
+]]
+interface.callByName = function(mod, name, p1, p2, silent)
+	local found = nil
+	for _, t in pairs(actions) do
+		for i, a in pairs(t) do
+			if a.name == name then
+				found = i
+				break
+			end
+		end
+		if found ~= nil then break end
+	end
+	if found ~= nil then
+		return interface.call(mod, found, p1, p2, silent)
+	else
+		silentLog("interface.call", "akcja \"" .. name .. "\" nie została odneleziona")
+		if not silent then
+			GMLmessageBox(gui, "Nie odnaleziono akcji o nazwie" .. name .. "!", {"OK"})
+		end
+		return nil
+	end
 end
 
 --[[
@@ -1138,7 +1170,10 @@ end
 
 silentLog = function(source, description, disableTimer, color)
 	local timer = disableTimer and "" or (os.date():sub(-8) .. " - ")
-	local text = timer .. source .. ": " .. description
+	local text = timer .. source
+	if description ~= nil and description:len() > 0 then
+		text = text .. ": " .. description
+	end
 	intlog = intlog .. text .. "\n"
 	loglines = loglines + 1
 	if loglines > 20 then
@@ -2433,7 +2468,7 @@ local function initializeActions()
 end
 
 local function loadModules()
-	local function doActionValidation(ac)
+	local function doActionValidation(ac, name)
 		local davn = "action validator"
 		local counter = 0
 		for i, t in pairs(ac) do
@@ -2483,7 +2518,7 @@ local function loadModules()
 			end
 			counter = counter + 1
 		end
-		internalLog(" zweryfikowano " .. tostring(counter) .. " akcji", "", true)
+		internalLog(name .. ": zarejestrowano " .. tostring(counter) .. " akcji", "")
 		return true
 	end
 	
@@ -2536,10 +2571,17 @@ local function loadModules()
 		elseif type(mo.actions) ~= "table" then
 			internalLog(dvn, "brak zdefiniowanych akcji")
 			return false
-		elseif not doActionValidation(mo.actions) then
+		elseif not doActionValidation(mo.actions, mo.name) then
 			return false
 		end
 		return true
+	end
+
+	local function checkStrict()
+		if strict then
+			internalLog("loader", "tryb ścisły włączony - kończenie pracy serwera")
+			require("os").exit()
+		end
 	end
 	
 	local function loadModule(filename)
@@ -2551,15 +2593,17 @@ local function loadModules()
 					return buffer
 				else
 					internalLog("Moduł uszkodzony", "dezaktywacja", true, 0xff0000)
-					return nil
+					checkStrict()
 				end
 			else
 				internalLog("Błąd składni", buffer, true, 0xff0000)
+				checkStrict()
 			end
 		else
 			internalLog("loader", "błąd ładowania: " .. e)
-			return nil
+			checkStrict()
 		end
+		return nil
 	end
 	
 	for num, tab in pairs(modules) do
