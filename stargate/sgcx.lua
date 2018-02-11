@@ -5,7 +5,7 @@
 -- ###############################################
 
 
-local version = "0.5.0"
+local version = "0.5.1"
 local startArgs = {...}
 
 if startArgs[1] == "version_check" then return version end
@@ -55,40 +55,71 @@ local MC = 279937
 local PC = 93563
 local QC = 153742
 
+local function chooseInterface()
+	if startArgs[1] ~= "init" then return "" end
+	print(">> Choose new stargate interface address (type q to quit) <<")
+	local componentList = component.list('stargate')
+	local list = {}
+	for address, _ in pairs(componentList) do
+		table.insert(list, address)
+	end
+	if #list == 0 then
+		io.stderr:write("Error: there is no connected stargate interfaces. Connect a stargate and rerun this program.")
+		return nil
+	end
+	for i, address in pairs(list) do
+		print(string.format("%d. %s", i, address))
+	end
+	print()
+	local selection = nil
+	while selection == nil do
+		io.write("Choose interface: ")
+		selection = io.read()
+		if selection:sub(1, 1) == "q" then return nil end
+		selection = tonumber(selection)
+		if selection ~= nil then
+			selection = round(selection)
+			if selection < 1 or selection > #list then selection = nil end
+		end
+		if selection ~= nil then
+			return list[selection]
+		end
+	end
+end
+
 local function saveConfig()
 	local plik = io.open("/etc/sg.cfg", "w")
 	plik:write(serial.serialize(data))
 	plik:close()
 end
 
-local function loadConfig()
-	if not fs.exists("/etc/sg.cfg") or startArgs[1] then
-		if not startArgs[1] then
-			io.stderr:write("Configuration file not found. In order to create on, type sgcx <stargate interface address>")
+local function loadConfig(overrideAddress)
+	if not fs.exists("/etc/sg.cfg") then
+		if not overrideAddress then
+			io.stderr:write("Configuration file not found. In order to create one, type 'sgcx init'")
 			return false
 		end
-		data.address = startArgs[1]
-		sg = component.proxy(startArgs[1])
+		data.address = overrideAddress
+		sg = component.proxy(overrideAddress)
 		if not sg then
-			io.stderr:write("Wrong stargate interface address")
+			io.stderr:write("Wrong stargate interface address. Type 'sgcx init' to choose a new one.")
 			return false
-		end
-
-		if not sg.dial then
-			io.stderr:write("Given address does not belong to a stargate interface")
+		elseif sg.type ~= "stargate" then
+			io.stderr:write("Chosen interface doesn't belong to a stargate interface.")
 			return false
 		end
 	else
 		local plik = io.open("/etc/sg.cfg", "r")
 		data = serial.unserialize(plik:read()) or {}
+		if overrideAddress then data.address = overrideAddress end
 		plik:close()
 		sg = component.proxy(data.address or "")
 		if not sg then
-			GMLmessageBox("Stargate interface address is incorrect",{"Close"})
+			io.stderr:write("Stargate component not found. Check connection with Stargate interface or run 'sgcx init' command to choose new interface.")
 			return false
-		end
-		if not sg.dial then
-			GMLmessageBox("Given address does not belong to a stargate interfacee", {"Close"})
+		elseif sg.type ~= "stargate" then
+			io.stderr:write("Given interface address doesn't belong to a stargate interface.")
+			return false
 		end
 	end
 	data.list = data.list or {}
@@ -977,12 +1008,18 @@ local function eventListener(...)
 	local args = {...}
 	local status, msg = pcall(__eventListener, table.unpack(args))
 	if not status then
-		GMLmessageBox("Blad: " .. msg)
+		GMLmessageBox("Error: " .. msg)
 	end
 end
 
+local newAddress = chooseInterface()
+if type(newAddress) == "string" and newAddress:len() == 0 then
+	newAddress = nil
+elseif type(newAddress) == "nil" then
+	return
+end
+if not loadConfig(newAddress) then return end
 
-if not loadConfig() then return end
 event.listen("sgDialIn", eventListener)
 event.listen("sgIrisStateChange", eventListener)
 event.listen("sgStargateStateChange", eventListener)
