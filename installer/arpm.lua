@@ -63,7 +63,7 @@
 			Tests offline registry (setup-list) for known errors before uploading.
 ]]
 
-local version = "0.3.0"
+local version = "0.3.1"
 
 local component = require("component")
 
@@ -87,6 +87,7 @@ local term = require("term")
 local event = require("event")
 local keyboard = require("keyboard")
 local shell = require("shell")
+local os = require("os")
 
 local resolution = {gpu.getResolution()}
 local args, options = shell.parse(...)
@@ -129,15 +130,19 @@ local function ok()
 end
 
 local function usage()
+	if args[1] and args[1]:len() > 0 then
+		io.stderr:write("Action not found: " .. args[1] .. "\n\n")
+	end
 	local prev = nil
 	prev = textColor(colors.green)
 	print("ARPM - ARPM Repository Package Manager     version " .. version)
 	textColor(colors.cyan)
-	print("Użycie:")
+	print("Usage:")
 	printCommand("list [-r]", "Displays available packages. [r] also displays archived packages.")
 	printCommand("info <package>", "Displays detailed information about specified package.")
 	printCommand("install <package> [-f] [-d]", "Installs selected package. [f] forces installation, [n] disables installation of dependencies.")
 	printCommand("remove <package> [-d]", "Removes specified package. [d] also removes dependencies.")
+	printCommand("refresh", "Forces refresh of the registry (downloads it again from server).")
 	printCommand("test <path>", "Tests offline registry (setup-list) for known errors before uploading.")
 	textColor(prev)
 end
@@ -166,16 +171,20 @@ local function saveAppList(raw)
 	end
 end
 
-local function fetchAppList()
+local function fetchAppList(force)
 	local filename = "/tmp/setup-list"
-	if fs.exists(filename) and not fs.isDirectory(filename) then
-		local f = io.open(filename, "r")
-		if f then
-			local s = serial.unserialize(f:read("*a"))
-			f:close()
-			if s then
-				appList = s
-				return
+	local currentTime = math.floor(os.time() * (1000 / 60 / 60) / 20)
+	if fs.exists(filename) and not fs.isDirectory(filename) and not force then
+		local lastUpdate = tonumber(os.getenv("sl_update"))
+		if lastUpdate ~= nil and lastUpdate + 3600 > currentTime then 
+			local f = io.open(filename, "r")
+			if f then
+				local s = serial.unserialize(f:read("*a"))
+				f:close()
+				if s then
+					appList = s
+					return true
+				end
 			end
 		end
 	end
@@ -183,12 +192,15 @@ local function fetchAppList()
 	if resp then
 		local s, e = serial.unserialize(resp)
 		if not s then
-			io.stderr:write("Couldn'd read the registry: " .. e)
+			io.stderr:write("Couldn't read the registry: " .. e)
+			return false
 		end
 		appList = s
 		saveAppList(resp)
+		os.setenv("sl_update", tostring(currentTime))
 	else
 		io.stderr:write("Couldn't establish internet connection.")
+		return false
 	end
 end
 
@@ -554,9 +566,9 @@ local function installApp(appName, force_install, disable_dep_install)
 		end
 		ok()
 		term.write("\nCopying files:")
-		textColor(colors.silver)
 		for _, t in pairs(list) do
 			local filename = fs.concat(t[3], t[4])
+			textColor(colors.silver)
 			term.write("\n" .. filename)
 			if fs.exists(filename) then
 				local localfile = loadfile(filename)
@@ -566,6 +578,9 @@ local function installApp(appName, force_install, disable_dep_install)
 					textColor(colors.yellow)
 					term.write("\nInstallation aborted.")
 					return
+				elseif version and version:len() > 0 then
+					textColor(colors.green)
+					term.write("   (update: " .. version .. " -> " .. t[5] .. ")")
 				end
 			end
 			local output = io.open(filename, "w")
@@ -684,6 +699,18 @@ local function uninstallApp(appName, deps)
 	print("\nDeinstallation successful.")
 end
 
+local function refreshRegistry()
+	textColor(colors.cyan)
+	print("\nRefreshing the registry...")
+	fetchAppList(true)
+	if not appList then
+		io.stderr:write("Couldn't download the registry.")
+	else
+		textColor(colors.green)
+		print("Update successful")
+	end
+end
+
 local function main()
 	if args[1] == "list" then
 		printAppList(options.r)
@@ -693,6 +720,8 @@ local function main()
 		installApp(args[2], options.f, options.n)
 	elseif args[1] == "remove" then
 		uninstallApp(args[2], options.d)
+	elseif args[1] == "refresh" then
+		refreshRegistry()
 	elseif args[1] == "test" then
 		testRepo(args[2])
 	else
