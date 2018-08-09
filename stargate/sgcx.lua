@@ -5,7 +5,7 @@
 -- ###############################################
 
 
-local version = "0.5.1"
+local version = "0.5.2"
 local startArgs = {...}
 
 if startArgs[1] == "version_check" then return version end
@@ -509,8 +509,8 @@ local function modifyList(action)
 			}
 			table.insert(data.list, l)
 			local list = {}
-			for _, v in pairs(data.list) do
-				table.insert(list, v.name .. " (" .. v.world .. ")")
+			for a, v in pairs(data.list) do
+				table.insert(list, tostring(a) .. ". " .. v.name .. " (" .. v.world .. ")")
 			end
 			element.list:updateList(list)
 			saveConfig()

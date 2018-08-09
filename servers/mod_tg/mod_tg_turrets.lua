@@ -144,7 +144,7 @@
 		}
 ]]
 
-local version = "1.1"
+local version = "1.2"
 local args = {...}
 
 if args[1] == "version_check" then return version end
@@ -175,7 +175,8 @@ local excluded = { -- elementy wykluczone ze skanowania
 	"item%..*",
 	"item%.item%..*",
 	"entity%.opensecurity%..*",
-	"entity.sgcraft.Stargate Iris.name"
+	"entity.sgcraft.Stargate Iris.name",
+	"entity.stargate_iris.name"
 }
 local targetHeight = 0.75 -- wysokość celu
 local attemptDelay = 0.2 -- interwał prób strzału
