@@ -1,75 +1,75 @@
 -- ############################################
 -- #				mod_tg_io				  #
 -- #										  #
--- #  05.2016					by:IlynPayne  #
+-- #  05.2016			  by: Dominik Rzepka  #
 -- ############################################
 
 --[[
-	## Opis programu ##
-		Program mod_tg_io jest modułem używanym na serwerze the_guard (od wersji 2.0).
-		Pozwala na zarządzanie komponentami wejścia/wyjścia.
+	## Description ##
+		The mod_tg_io program is a module used in the_guard server (since 2.0).
+		It allows to manage IO components using IO blocks from "OpenComputers".
+
+		This module allows to create 3 types of devices:
+		* source (id: 1-50) - sends redstone signal
+		* group (id: 101-116) - allows to manage state of multiple sources (limit: 10)
+		* sensor (id: 61-80) - receives restone signal
 		
-		Moduł pozwala na zdefiniowanie 3 typów urządzeń:
-		* odbiorników (id: 1-50) - wysyłają sygnały
-		* grup (id: 101-116)- pozwalają na masowe zarządzanie stanem odbiorników (limit: 10)
-		* czujników (id: 61-80) - odbierają sygnały z otoczenia
+		Every source and sensor can work in one of two modes: simple and complex.
+		First of them is used with plain old redstone circuits from Minecraft. The latter works
+		with bundled cables from "Project Red" mod and allows to set a higher signal strength (up to 255).
 		
-		Każdy odbiornik i czujnik może działać w dwóch trybach: prostym i rozszerzonym.
-		Pierwszy z nich jest używany dla zwykłych obwodów z czerownego kamienia.
-		Z kolei drugi pozwala dodatkowo zdefiniować kolor i większą moc sygnału (do 255)
+	## Actions ##
+		- setOutput(id:number,strength:number) - set output strength of a source
+		- getInput(id:number) - gets current input strength of a sensor
 		
-	## Akcje ##
-		- setOutput(id:number,strength:numer) - ustawia sygnał wyjściowy
-		- getInput(id:number) - pobiera aktualną wartość czujnika
+	## Functions ##
+		* controlling IO devices
+		* creating single sources or groups of sources
+		* creating sensors
+		* support up to 48 sources, 20 sensors and 16 groups
+		* support for manual control
+		* every sensor can trigger up to 3 enable and disable actions on input change.
 		
-	## Funkcje ##
-		* sterowanie wyjściem z urządzeń I/O
-		* tworzenie pojedynczych odbiorników i grup
-		* tworzenie czujników
-		* maksymalnie 48 odbiorników, 16 grup i 20 czujników
-		* każdy czujnik może wywoływać do 3 akcji włączania i 3 akcji wyłączania
-		* możliwość ręcznego sterowania
-		
-	## Schematy ##
-		config { - domyślny plik konfiguracyjny
-			mode:number - tryb GUI (1 - odbiorniki, 2 - grupy, 3 - czujniki)
-			receivers { - odbiorniki
-				[id:number] = { - identyfikator
-					name:string - nazwa
-					address:string - adres
-					side:number - strona
-					color:number or nil - kolor (jeśli nil, odbiornik działa w trybie prostym)
+	## Configuration scheme ##
+		config { - default configuration file
+			mode:number - GUI type (1 - sources, 2 - groups, 3 - sensors)
+			receivers { - sources (keeping the old name for backward compatibility)
+				[id:number] = { - id
+					name:string - source name
+					address:string - address
+					side:number - side (number from 0 to 5 from sides api)
+					color:number or nil - color (nil if source works in simple mode)
 				}
 				...
 			}
-			groups { - grupy
-				[id:number] = { - identyfikator
-					name:string - nazwa
-					members = { - lista odbiorników
+			groups { - groups
+				[id:number] = { - id
+					name:string - group name
+					members = { - list of sources
 						id:number
 						...
 					}
 				}
 			}
-			sensors { - czujniki
-				[id:number] = { - identyfikator
-					name:string - nazwa
-					address:string - adres
-					side:number - strona
-					color:number or nil - kolor (jeśli nil, czujnik działa w trybie prostym)
-					enable { - akcje włączania
+			sensors { - sensors
+				[id:number] = { - id
+					name:string - sensor name
+					address:string - address
+					side:number - side (number from 0 to 5 from sides api) 
+					color:number or nil - color (nil if source works in simple mode)
+					enable { - enable actions
 						{
-							id:number - identyfikator akcji
-							p1:any - parametr 1
-							p2:any - parametr 2
+							id:number - action id
+							p1:any - 1st parameter
+							p2:any - 2nd parameter
 						}
 						...
 					}
-					disable { - akcje wyłaczania
+					disable { - disable actions
 						{
-							id:number - identyfikator akcji
-							p1:any - parametr 1
-							p2:any - parametr 2
+							id:number - action id
+							p1:any - 1st parameter
+							p2:any - 2nd parameter
 						}
 						...
 					}
@@ -78,7 +78,7 @@
 		}
 ]]
 
-local version = "1.0"
+local version = "1.1"
 local args = {...}
 
 if args[1] == "version_check" then return version end
@@ -97,12 +97,12 @@ local elements = {}
 local buttons = {}
 
 local directions = {
-	[0] = "dół",
-	[1] = "góra",
-	[2] = "północ",
-	[3] = "południe",
-	[4] = "zachód",
-	[5] = "wschód"
+	[0] = "top",
+	[1] = "bottom",
+	[2] = "north",
+	[3] = "south",
+	[4] = "west",
+	[5] = "east"
 }
 
 
@@ -141,15 +141,15 @@ local function refreshSelection()
 			side = config.receivers[sel].side
 			color = config.receivers[sel].color
 			name = config.receivers[sel].name
-			mode = config.receivers[sel].color and "rozszerzony" or "prosty"
-			elements[5].text = "Strona: " .. directions[config.receivers[sel].side]
+			mode = config.receivers[sel].color and "complex" or "simple"
+			elements[5].text = "Side: " .. directions[config.receivers[sel].side]
 			if elements[5].hidden then
 				elements[5]:show()
 			else
 				elements[5]:draw()
 			end
 			if config.receivers[sel].color then
-				elements[6].text = "Kolor: " .. colors[config.receivers[sel].color]
+				elements[6].text = "Color: " .. colors[config.receivers[sel].color]
 				if elements[6].hidden then
 					elements[6]:show()
 				else
@@ -163,7 +163,7 @@ local function refreshSelection()
 			buttons[2]:hide()
 		elseif config.mode == 2 and config.groups[sel] then
 			name = config.groups[sel].name
-			mode = "grupa"
+			mode = "group"
 			elements[5]:hide()
 			elements[6]:hide()
 			pcall(function()
@@ -177,15 +177,15 @@ local function refreshSelection()
 			color = config.sensors[sel].color
 			name = config.sensors[sel].name
 			side = config.sensors[sel].side
-			mode = config.sensors[sel].color and "rozszerzony" or "prosty"
-			elements[5].text = "Strona: " .. directions[config.sensors[sel].side]
+			mode = config.sensors[sel].color and "complex" or "simple"
+			elements[5].text = "Side: " .. directions[config.sensors[sel].side]
 			if elements[5].hidden then
 				elements[5]:show()
 			else
 				elements[5]:draw()
 			end
 			if config.sensors[sel].color then
-				elements[6].text = "Kolor: " .. colors[config.receivers[sel].color]
+				elements[6].text = "Color: " .. colors[config.receivers[sel].color]
 				if elements[6].hidden then
 					elements[6]:show()
 				else
@@ -198,12 +198,12 @@ local function refreshSelection()
 			buttons[1]:hide()
 			buttons[2]:show()
 		else
-			name = "<BŁĄD>"
-			elements[3].text = "<BŁĄD>"
+			name = "<ERROR>"
+			elements[3].text = "<ERROR>"
 			for i = 1, 2 do buttons[i]:hide() end
 		end
-		elements[2].text = "Nazwa: " .. name
-		elements[3].text = "Tryb: " .. mode
+		elements[2].text = "Name: " .. name
+		elements[3].text = "Mode: " .. mode
 		if elements[2].hidden then
 			elements[2]:show()
 		else
@@ -231,9 +231,9 @@ local function refreshSelection()
 					level = proxy.getOutput(side)
 				end
 			end
-			elements[4].text = (isSensor and "Wejście: " or "Wyjście: ") .. tostring(level)
+			elements[4].text = (isSensor and "Input: " or "Output: ") .. tostring(level)
 		else
-			elements[4].text = isSensor and "Wejście: -1" or "Wyjście: -1"
+			elements[4].text = isSensor and "Input: -1" or "Output: -1"
 		end
 		if elements[4].hidden then
 			elements[4]:show()
@@ -293,26 +293,26 @@ local function additionTemplate(edit, receiver, filling, id)
 	tgui.style = server.getStyle(mod)
 	local text = ""
 	if edit then
-		text = receiver and "Edycja odbiornika" or "Edycja czujnika"
+		text = receiver and "Edit source" or "Edit sensor"
 	else
-		text = receiver and "Nowy odbiornik" or "Nowy czujnik"
+		text = receiver and "New source" or "New sensor"
 	end
 	tgui:addLabel("center", 1, text:len() + 1, text)
-	tgui:addLabel(3, 9, 6, "Tryb:")
+	tgui:addLabel(3, 9, 6, "Mode:")
 	tgui:addLabel(3, 4, 4, "ID:")
-	tgui:addLabel(3, 5, 7, "Adres:")
-	tgui:addLabel(3, 7, 7, "Nazwa:")
-	tgui:addLabel(3, 11, 8, "Strona:")
+	tgui:addLabel(3, 5, 9, "Address:")
+	tgui:addLabel(3, 7, 7, "Name:")
+	tgui:addLabel(3, 11, 8, "Side:")
 	
 	local lid = tgui:addLabel(12, 4, 6, "")
 	if edit and id then
 		lid.text = tostring(id)
 	else
 		if receiver then
-			lid.text = tostring(freeId(config.receivers, 1, 50)) or "BŁĄD"
+			lid.text = tostring(freeId(config.receivers, 1, 50)) or "ERROR"
 		else
 			lid.text = tostring(count(config.sensors) + 61)
-			lid.text = tostring(freeId(config.sensors, 61, 80)) or "BŁĄD"
+			lid.text = tostring(freeId(config.sensors, 61, 80)) or "ERROR"
 		end
 	end
 	local tmp = tgui:addLabel(12, 5, 38, "")
@@ -332,7 +332,7 @@ local function additionTemplate(edit, receiver, filling, id)
 				t.text = r
 				t:draw()
 			else
-				server.messageBox(mod, "Komponent o takim adresie został już dodany.", {"OK"})
+				server.messageBox(mod, "A component with the same name has been already added.", {"OK"})
 			end
 		end
 	end
@@ -344,7 +344,7 @@ local function additionTemplate(edit, receiver, filling, id)
 		t.text = directions[ret.side]
 		t:draw()
 	end)
-	local lColor = tgui:addLabel(3, 13, 7, "Kolor:")
+	local lColor = tgui:addLabel(3, 13, 7, "Color:")
 	lColor.hidden = not ret.color
 	local color = tgui:addLabel(12, 13, 12, "")
 	color.hidden = not ret.color
@@ -360,31 +360,31 @@ local function additionTemplate(edit, receiver, filling, id)
 		end
 	end
 	
-	tgui:addButton(12, 9, 14, 1, ret.color and "rozszerzony" or "prosty", function(t)
+	tgui:addButton(12, 9, 14, 1, ret.color and "complex" or "simple", function(t)
 		if ret.color then
 			prev_color = ret.color
 			ret.color = nil
-			t.text = "prosty"
+			t.text = "simple"
 			lColor:hide()
 			color:hide()
 		else
 			ret.color = prev_color 
-			t.text = "rozszerzony"
+			t.text = "complex"
 			color.text = colors[ret.color]
 			lColor:show()
 			color:show()
 		end
 		t:draw()
 	end)
-	tgui:addButton(45, 17, 14, 1, "Anuluj", function()
+	tgui:addButton(45, 17, 14, 1, "Cancel", function()
 		ret = filling
 		tgui:close()
 	end)
-	tgui:addButton(29, 17, 14, 1, "Zatwierdź", function()
+	tgui:addButton(29, 17, 14, 1, "Apply", function()
 		if not ret.address then
-			server.messageBox(mod, "Wybierz adres urządzenia.", {"OK"})
+			server.messageBox(mod, "Choose the device's address.", {"OK"})
 		elseif name.text:len() < 1 or name.text:len() > 20 then
-			server.messageBox(mod, "Nazwa urządzenia musi mieć od 1 do 20 znaków", {"OK"})
+			server.messageBox(mod, "Name of the device must have between 1 and 20 characters.", {"OK"})
 		else
 			ret.name = name.text
 			tgui:close()
@@ -402,7 +402,7 @@ local function addReceiver()
 			refreshList()
 		end
 	else
-		server.messageBox(mod, "Dodano już maksymalną liczbę odbiorników.", {"OK"})
+		server.messageBox(mod, "Sources limit has been reached.", {"OK"})
 	end
 end
 
@@ -417,7 +417,7 @@ local function addSensor()
 			end
 		end
 	else
-		server.messageBox(mod, "Dodano już maksymalną liczbę czujników.", {"OK"})
+		server.messageBox(mod, "Sensors limit has been reached.", {"OK"})
 	end
 end
 
@@ -443,17 +443,17 @@ local function addItem(busyIds)
 	local agui = gml.create("center", "center", 36, 16)
 	agui.style = server.getStyle(mod)
 	
-	agui:addLabel("center", 1, 19, "Wybierz odbiornik")
+	agui:addLabel("center", 1, 17, "Choose a source")
 	local l = agui:addListBox(3, 3, 30, 10, list)
 	
-	agui:addButton(3, 14, 14, 1, "Zatwierdź", function()
+	agui:addButton(3, 14, 14, 1, "Apply", function()
 		local sel = tonumber(string.match(l:getSelected() or "", "^(%d+)%."))
 		if sel then
 			ret = sel
 			agui:close()
 		end
 	end)
-	agui:addButton(19, 14, 14, 1, "Anuluj", function() agui:close() end)
+	agui:addButton(19, 14, 14, 1, "Cancel", function() agui:close() end)
 	
 	agui:run()
 	return ret
@@ -468,14 +468,14 @@ local function groupTemplate(fill, id)
 		local sel = tonumber(string.match(ll:getSelected() or "", "^(%d+)%."))
 		if sel and config.receivers[sel] then
 			subs[1]:show()
-			subs[2].text = "Strona: " .. directions[config.receivers[sel].side]
+			subs[2].text = "SIde: " .. directions[config.receivers[sel].side]
 			if subs[2].hidden then
 				subs[2]:show()
 			else
 				subs[2]:draw()
 			end
 			if config.receivers[sel].color then
-				subs[3].text = "Kolor: " .. colors[config.receivers[sel].color]
+				subs[3].text = "Color: " .. colors[config.receivers[sel].color]
 				if subs[3].hidden then
 					subs[3]:show()
 				else
@@ -494,7 +494,7 @@ local function groupTemplate(fill, id)
 			if config.receivers[i] then
 				table.insert(l, tostring(i) .. ". " .. config.receivers[i].name)
 			else
-				table.insert(l, tostring(i) .. ". <BRAK>")
+				table.insert(l, tostring(i) .. ". <NONE>")
 			end
 		end
 		ll:updateList(l)
@@ -504,9 +504,9 @@ local function groupTemplate(fill, id)
 	local ggui = gml.create("center", "center", 65, 20)
 	ggui.style = server.getStyle(mod)
 	
-	ggui:addLabel("center", 1, fill and 13 or 11, fill and "Edycja grupy" or "Nowa grupa")
+	ggui:addLabel("center", 1, fill and 13 or 11, fill and "Edit a group" or "New group")
 	ggui:addLabel(36, 4, 9, "ID: " .. tostring(id or #config.groups + 101))
-	ggui:addLabel(36, 6, 7, "Nazwa:")
+	ggui:addLabel(36, 6, 7, "Name:")
 	local field = ggui:addTextField(38, 7, 20)
 	field.text = fill and fill.name or ""
 	if fill and fill.members then
@@ -515,11 +515,11 @@ local function groupTemplate(fill, id)
 		end
 	end
 	
-	subs[1] = ggui:addLabel(36, 10, 14, "Szczegóły:")
+	subs[1] = ggui:addLabel(36, 10, 14, "Details:")
 	subs[2] = ggui:addLabel(38, 11, 20, "")
 	subs[3] = ggui:addLabel(38, 12, 20, "")
 	
-	ggui:addButton(3, 15, 14, 1, "Dodaj", function()
+	ggui:addButton(3, 15, 14, 1, "Add", function()
 		if #items < 10 then
 			local ret = addItem(items)
 			if ret then
@@ -527,13 +527,13 @@ local function groupTemplate(fill, id)
 				refresh()
 			end
 		else
-			server.messageBox(mod, "Dodano już maksymalną ilość urządzeń do grupy.", {"OK"})
+			server.messageBox(mod, "Device limit of this group has been reached.", {"OK"})
 		end
 	end)
-	ggui:addButton(19, 15, 14, 1, "Usuń", function()
+	ggui:addButton(19, 15, 14, 1, "Remove", function()
 		local sel = tonumber(string.match(ll:getSelected() or "", "^(%d+)%."))
 		if sel and #items > 0 then
-			if server.messageBox(mod, "Czy na pewno chcesz usunąć zaznaczony element?" , {"Tak", "Nie"}) == "Tak" then
+			if server.messageBox(mod, "Are you sure you want to remove the selected element?" , {"Yes", "No"}) == "Yes" then
 				for i, i2 in pairs(items) do
 					if i2 == sel then
 						table.remove(items, i)
@@ -545,15 +545,15 @@ local function groupTemplate(fill, id)
 		end
 	end)
 	
-	ggui:addButton(47, 18, 14, 1, "Anuluj", function()
+	ggui:addButton(47, 18, 14, 1, "Cancel", function()
 		ret = nil
 		ggui:close()
 	end)
-	ggui:addButton(31, 18, 14, 1, "Zatwierdź", function()
+	ggui:addButton(31, 18, 14, 1, "Apply", function()
 		if field.text:len() < 1 or field.text:len() > 20 then
-			server.messageBox(mod, "Nazwa grupy musi mieć od 1 do 20 znaków.", {"OK"})
+			server.messageBox(mod, "Group name must have between 1 and 20 characters.", {"OK"})
 		elseif #items < 2 then
-			server.messageBox(mod, "Grupa musi mieć co najmniej 2 urządzenia.", {"OK"})
+			server.messageBox(mod, "Group must contain at least 2 devices.", {"OK"})
 		else
 			ret = {}
 			ret.name = field.text
@@ -585,7 +585,7 @@ local function addGroup()
 			end
 		end
 	else
-		server.messageBox(mod, "Dodano już maksymalną ilość grup.", {"OK"})
+		server.messageBox(mod, "Group limit has been reached.", {"OK"})
 	end
 end
 
@@ -619,17 +619,17 @@ local function removeEntry()
 	local id = tonumber(sel:match("^(%d+)%."))
 	if not id then return end
 	if config.mode == 1 then
-		if server.messageBox(mod, "Czy na pewno chcesz usunąć zaznaczony odbiornik?", {"Tak", "Nie"}) == "Tak" then
+		if server.messageBox(mod, "Are you sure you want to remove the selected source?", {"Yes", "No"}) == "Yes" then
 			config.receivers[id] = nil
 			refreshList()
 		end
 	elseif config.mode == 2 then
-		if server.messageBox(mod, "Czy na pewno chcesz usunąć zaznaczoną grupę?", {"Tak", "Nie"}) == "Tak" then
+		if server.messageBox(mod, "Are you sure you want to remove the selected group?", {"Yes", "No"}) == "Yes" then
 			config.groups[id] = nil
 			refreshList()
 		end
 	elseif config.mode == 3 then
-		if server.messageBox(mod, "Czy na pewno chcesz usunąć zaznaczony czujnik?", {"Tak", "Nie"}) == "Tak" then
+		if server.messageBox(mod, "Are you sure you want to remove the selected snesor?", {"Yes", "No"}) == "Yes" then
 			config.sensors[id] = nil
 			refreshList()
 		end
@@ -661,16 +661,16 @@ local function setOutput()
 	
 	local sgui = gml.create("center", "center", 40, 7)
 	sgui.style = server.getStyle(mod)
-	sgui:addLabel("center", 1, 15, "Ustaw wyjście")
-	sgui:addLabel(3, 3, 10, "Wyjście:")
+	sgui:addLabel("center", 1, 15, "Set output")
+	sgui:addLabel(3, 3, 10, "Output:")
 	local field = sgui:addTextField(14, 3, 10)
-	sgui:addButton(23, 5, 14, 1, "Anuluj", function() sgui:close() end)
-	sgui:addButton(7, 5, 14, 1, "Zatwierdź", function()
+	sgui:addButton(23, 5, 14, 1, "Cancel", function() sgui:close() end)
+	sgui:addButton(7, 5, 14, 1, "Apply", function()
 		local val = tonumber(field.text)
 		if not val then
-			server.messageBox(mod, "Wprowadzona wartość nie jest liczbą.", {"OK"})
+			server.messageBox(mod, "Entered value is not a number.", {"OK"})
 		elseif val < 0 then
-			server.messageBox(mod, "Wprowadź dodatnią wartość.", {"OK"})
+			server.messageBox(mod, "Enter a positive number.", {"OK"})
 		else
 			if tab.members then
 				for _, t in pairs(tab.members) do
@@ -691,7 +691,7 @@ end
 
 local function resetAll()
 	if config.mode ~= 1 then return end
-	if server.messageBox(mod, "Czy na pewno chcesz zresetować wszystkie odbiorniki?", {"Tak", "Nie"}) == "Nie" then return end
+	if server.messageBox(mod, "Are you sure you want to reset all sources?", {"Yes", "No"}) == "No" then return end
 	for _, t in pairs(config.receivers) do
 		local proxy = component.proxy(t.address)
 		if proxy and proxy.type == "redstone" then
@@ -706,7 +706,7 @@ local function resetAll()
 			end
 		end
 	end
-	server.call(mod, 5201, "Odbiorniki zostały zresetowane.", "IO", true)
+	server.call(mod, 5201, "Sources have been reset.", "IO", true)
 	refreshSelection()
 end
 
@@ -779,10 +779,10 @@ local function setActions()
 	
 		local agui = gml.create("center", "center", 65, 14)
 		agui.style = server.getStyle(mod)
-		agui:addLabel("center", 1, 12, "Lista akcji")
-		agui:addLabel(3, 3, 30, "Nazwa: " .. config.sensors[sel].name)
-		agui:addLabel(3, 5, 20, "Akcje włączania:")
-		agui:addLabel(31, 5, 20, "Akcje wyłączania:")
+		agui:addLabel("center", 1, 12, "Action list")
+		agui:addLabel(3, 3, 30, "Name: " .. config.sensors[sel].name)
+		agui:addLabel(3, 5, 20, "Enable actions:")
+		agui:addLabel(31, 5, 20, "Disable actions:")
 		
 		for i = 1, 3 do
 			local tt = agui:addLabel(4, 5 + i, 3, tostring(i) .. ".")
@@ -803,8 +803,8 @@ local function setActions()
 			int[3 + i].onDoubleClick = exec
 		end
 		
-		agui:addButton(47, 11, 14, 1, "Anuluj", function() agui:close() end)
-		agui:addButton(31, 11, 14, 1, "Zatwierdź", function()
+		agui:addButton(47, 11, 14, 1, "Cancel", function() agui:close() end)
+		agui:addButton(31, 11, 14, 1, "Apply", function()
 			config.sensors[sel].enable = buffer.enable
 			config.sensors[sel].disable = buffer.disable
 			agui:close()
@@ -870,19 +870,19 @@ local actions = {
 	[1] = {
 		name = "setOutput",
 		type = "IO",
-		desc = "Ustawia wyjście",
+		desc = "Sets output strength of a source",
 		p1type = "number",
 		p2type = "number",
-		p1desc = "identyfikator",
-		p2desc = "siła sygnału",
+		p1desc = "id",
+		p2desc = "signal strength",
 		exec = actions_setOutput
 	},
 	[2] = {
 		name = "getInput",
 		type = "IO",
-		desc = "Pobiera stan wejścia",
+		desc = "Gets current input strength of a sensor",
 		p1type = "number",
-		p1desc = "identyfikator",
+		p1desc = "id",
 		exec = actions_getInput
 	}
 }
@@ -896,7 +896,7 @@ mod.actions = actions
 
 mod.setUI = function(window)
 	window:addLabel("center", 1, 9, ">> IO <<")
-	window:addLabel(30, 3, 7, "Widok:")
+	window:addLabel(30, 3, 7, "View:")
 	
 	box = window:addListBox(3, 3, 25, 16, {})
 	box.onDoubleClick = modifyEntry
@@ -909,34 +909,34 @@ mod.setUI = function(window)
 	local tmp = window:addButton(38, 3, 14, 1, "", function(t)
 		if config.mode == 1 then
 			config.mode = 2
-			t.text = "grupy"
+			t.text = "groups"
 		elseif config.mode == 2 then
 			config.mode = 3
-			t.text = "czujniki"
+			t.text = "sensors"
 		else
 			config.mode = 1
-			t.text = "odbiorniki"
+			t.text = "sources"
 		end
 		refreshList()
 		t:draw()
 	end)
-	tmp.text = config.mode == 1 and "odbiorniki" or config.mode == 2 and "grupy" or "czujniki"
-	window:addButton(30, 5, 14, 1, "Dodaj", function()
+	tmp.text = config.mode == 1 and "sources" or config.mode == 2 and "groups" or "sensors"
+	window:addButton(30, 5, 14, 1, "Add", function()
 		if config.mode == 1 then addReceiver()
 		elseif config.mode == 2 then addGroup()
 		else addSensor() end
 	end)
-	window:addButton(48, 5, 14, 1, "Usuń", removeEntry)
-	buttons[1] = window:addButton(30, 7, 14, 1, "Resetuj", resetAll)
-	buttons[2] = window:addButton(48, 7, 14, 1, "Akcje", setActions)
+	window:addButton(48, 5, 14, 1, "Remove", removeEntry)
+	buttons[1] = window:addButton(30, 7, 14, 1, "Reset", resetAll)
+	buttons[2] = window:addButton(48, 7, 14, 1, "Actions", setActions)
 	
 	elements[1] = window:addLabel(39, 11, 7, "")  --id
-	elements[2] = window:addLabel(39, 12, 28, "") --nazwa
-	elements[3] = window:addLabel(39, 13, 18, "") --tryb
-	elements[4] = window:addLabel(39, 14, 15, "") --wyjście/wejście
+	elements[2] = window:addLabel(39, 12, 28, "") --name
+	elements[3] = window:addLabel(39, 13, 18, "") --mode
+	elements[4] = window:addLabel(39, 14, 15, "") --input/output
 	elements[4].onDoubleClick = setOutput
-	elements[5] = window:addLabel(39, 15, 22, "") --strona
-	elements[6] = window:addLabel(39, 16, 18, "") --kolor
+	elements[5] = window:addLabel(39, 15, 22, "") --side
+	elements[6] = window:addLabel(39, 16, 18, "") --color
 	for i = 1, 6 do elements[i].hidden = true end
 	
 	refreshList()
@@ -988,7 +988,7 @@ mod.pullEvent = function(...)
 				server.call(mod, t.id, t.p1, t.p2, true)
 			end
 		end
-		server.call(mod, 5201, "Wykryto zmianę stanu czujnika: " .. sensor.name .. "(" .. tostring(id) .. ") -> " .. tostring(val), "IO", true)
+		server.call(mod, 5201, "Detected a sensor state change: " .. sensor.name .. "(" .. tostring(id) .. ") -> " .. tostring(val), "IO", true)
 		if config.mode == 3 then
 			refreshSelection()
 		end

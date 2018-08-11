@@ -1,17 +1,14 @@
 -- ##########################################
 -- #				mod_tg_auth				#
 -- #										#
--- #  05.2016					by:Aranthor #
+-- #  05.2016			by: Dominik Rzepka  #
 -- ##########################################
 
 --[[
-	## Opis programu ##
-		Program mod_tg_auth jest modułem używanym w serwerze the_guard (od wersji 2.0).
-		Program wymaga do działania zainstalowanego moda "opensecurity"
-		Moduł pozwala na zarządzanie autoryzacją użytkownika. Odbywa się to
-		za pomocą czytników kart i klawiatur numerycznych.
-		Obsługiwane są tylko magnetyczne, obsługa kart RFID nie została wprowadzona
-		(Wymagają one ręcznie uruchamianego skanera).
+	## Program description ##
+		The mod_tg_auth is a module used by the_guard server (since 2.0).
+		It requires the "OpenSecurity" Minecraft mod to be installed.
+		This module allows to manage user authentication using keypads, biometric scanners or magnetic cards.
 		
 	## Akcje ##
 		- lockMag() - blokuje czytniki kart
@@ -20,50 +17,57 @@
 		- unlockBio() - odblokowuje skanery biometryczne
 		- lockKeypad() - blokuje klawiatury
 		- unlockKeypad() - odblokowuje klawiatury
+
+	## Actions ##
+		- lockMag() - locks magnetic card readers (they can't be used)
+		- unlockMag() - unlocks magnetic card readers
+		- lockBio() - locks biometric scanners
+		- unlockBio() - unlocks biometric scanners
+		- lockKeypad() - locks keypads
+		- unlockKeypad() - unlocks keypads
 		
-	## Funkcje ##
-		* wykorzystanie czytników kart i klawiatur do generowania akcji
-		* do każdego zdarzenia można przypisać 3 akcje otwarcia i 3 akcje zamknięcia
-		* możliwość wyboru czasu oczekiwania na uruchomienie akcji zamknięcia
-		* opcjonalne losowanie kolejności klawiszy na klawiaturze po każdym poprawnym kodzie
-		* możliwość włączenia blokady na terminale
+	## Functions ##
+		* using external components (from the "OpenSecurity" mod) to trigger arbitrary set of actions
+		* every event can trigger up to 3 open and 3 close actions
+		* configurable delay between triggering open and close actions
+		* keypads' keys can be shuffled
 		
-	## Schematy ##
-		cards: { - lista zarejestrowanych kart (plik /etc/the_guard/modules/auth/cards.dat)
+	## Configuration scheme ##
+		cards: { - list of registered cards (/etc/the_guard/modules/auth/cards.dat)
 			{
-				id:string - identyfikator karty
-				owner:string - właściciel
-				name:string - nazwa karty
+				id:string - card id
+				owner:string - owner
+				name:string - card name
 			}
 			...
 		}
-		users: { - lista użytkowników mogących używać czytników biometrycznych (plik /etc/the_guard/modules/auth/users.dat)
+		users: { - list of users that can use biometric reader (/etc/the_guard/modules/auth/users.dat)
 			{
-				uuid:string - identyfikator (UUID) użytkownika
-				name:string - nazwa użytkownika
+				uuid:string - user identifier (UUID from Minecraft)
+				name:string - user name
 			}
 			...
 		}
-		devices: { - czytniki i klawiatury (plik /etc/the_guard/modules/auth/devices.dat)
+		devices: { - biometric readers and keyboards (/etc/the_guard/modules/auth/devices.dat)
 			readers: {
 				{
-					name:string - nazwa
-					address:string - adres komponentu
-					delay:number - opóźnienie zamykania
-					disabled:boolean - czy czytnik jest niekatywny
+					name:string - name
+					address:string - address
+					delay:number - delay between triggering open and close actions
+					disabled:boolean - whether this reader is disabled
 					open: {
 						{
-							id:number - identyfikator akcji
-							p1:any - parametr 1
-							p2:any - parametr 2
+							id:number - action id
+							p1:any - 1st parameter
+							p2:any - 2nd parameter
 						}
 						...
 					}
 					close: {
 						{
-							id:number - identyfikator akcji
-							p1:any - parametr 1
-							p2:any - parametr 2
+							id:number - action id
+							p1:any - 1st parameter
+							p2:any - 2nd parameter
 						}
 						...
 					}
@@ -71,16 +75,16 @@
 				...
 			},
 			keypads: {
-				(to samo, co w readers) +
-				shuffle:boolean - czy losować kolejność klawiszy
+				(same as readers) +
+				shuffle:boolean - whether to shuffle keypads' keys order
 			},
 			biometrics: {
-				(to samo, co w readers)
+				(same as readers)
 			}
 		}
 ]]
 
-local version = "1.1"
+local version = "1.2"
 local args = {...}
 
 if args[1] == "version_check" then return version end
@@ -106,25 +110,6 @@ local internalBioEvent = nil
 
 local lbox, rbox = nil, nil
 local element = {}
-
-local messages = {
-	[1] = {
-		"No Empty Slots",
-		"Brak wolnych slotów"
-	},
-	[2] = {
-		"No card in slot", 
-		"Brak karty w slocie"
-	},
-	[3] = {
-		"Data is Null",
-		"Brak danych do zapisania"
-	},
-	[4] = {
-		"Not enough power in OC Network.",
-		"Brak wystarczającej ilości energii"
-	}
-}
 
 local texts = {
 	open = {"open", 2},
@@ -301,10 +286,10 @@ local function newCard()
 
 	local ngui = gml.create("center", "center", 50, 17)
 	ngui.style = server.getStyle(mod)
-	ngui:addLabel("center", 1, 11, "Nowa karta")
-	ngui:addLabel(3, 4, 7, "Nazwa:")
-	ngui:addLabel(3, 6, 13, "Właściciel:")
-	ngui:addLabel(3, 10, 9, "Blokada:")
+	ngui:addLabel("center", 1, 9, "New card")
+	ngui:addLabel(3, 4, 6, "Name:")
+	ngui:addLabel(3, 6, 7, "Owner:")
+	ngui:addLabel(3, 10, 8, "Locked:")
 	local tmp = ngui:addLabel(3, 8, 8, "Kolor:")
 	tmp.onClick = chooseColor
 	
@@ -312,30 +297,30 @@ local function newCard()
 	local owner = ngui:addTextField(17, 6, 20)
 	color = ngui:addLabel(17, 8, 16, "")
 	color.onClick = chooseColor
-	local lock = ngui:addButton(17, 10, 10, 1, "Tak", function(t)
+	local lock = ngui:addButton(17, 10, 10, 1, "Yes", function(t)
 		if t.status then
-			if server.messageBox(mod, "Wyłączenie tej opcji sprawi, że karta będzie\npodatna na modyfikacje.\nCzy chcesz kontynuować?", {"Tak", "Nie"}) == "Tak" then
+			if server.messageBox(mod, "Enabling this option will allow future card\nmodifications (unsafe). Are you sure\nyou want to continue?", {"Yes", "No"}) == "Yes" then
 				t.status = false
-				t.text = "Nie"
+				t.text = "No"
 				t:draw()
 			end
 		else
 			t.status = true
-			t.text = "Tak"
+			t.text = "Yes"
 			t:draw()
 		end
 	end)
 	lock.status = true
 	
-	ngui:addButton(16, 14, 14, 1, "Zapisz", function()
+	ngui:addButton(16, 14, 14, 1, "Save", function()
 		if name.text:len() < 1 or name.text:len() > 16 then
-			server.messageBox(mod, "Nazwa karty powinna mieć od 1 do 16 znaków.", {"OK"})
+			server.messageBox(mod, "Card name should have from 1 to 16 characters.", {"OK"})
 		elseif owner.text:len() == 0 then
-			server.messageBox(mod, "Podaj właściciela karty.", {"OK"})
+			server.messageBox(mod, "Enter the card owner.", {"OK"})
 		elseif owner.text:len() > 32 then
-			server.messageBox(mod, "Maksymalna długość nazwy gracza to 32 znaki.", {"OK"})
+			server.messageBox(mod, "Maximum owner's name length is 32 characters.", {"OK"})
 		elseif not color.color then
-			server.messageBox(mod, "Wybierz kolor karty.", {"OK"})
+			server.messageBox(mod, "Choose color of the card.", {"OK"})
 		else
 			local writer = component.os_cardwriter
 			if writer then
@@ -346,23 +331,17 @@ local function newCard()
 					tab.owner = owner.text
 					tab.name = name.text
 					table.insert(cards, tab)
-					server.messageBox(mod, "Karta została zapisana!", {"OK"})
+					server.messageBox(mod, "Card was written!", {"OK"})
 					ngui:close()
 				else
-					local message = "nieznany błąd"
-					for _, t in pairs(messages) do
-						if t[1]:lower() == msg:lower() then
-							message = t[2]
-						end
-					end
-					server.messageBox(mod, "Zapis nieudany: " ..message, {"OK"})
+					server.messageBox(mod, "Couldn't write card: " .. msg, {"OK"})
 				end
 			else
-				server.messageBox(mod, "Nie odnaleziono czytnika kart.", {"OK"})
+				server.messageBox(mod, "Card writer couldn't be found.", {"OK"})
 			end
 		end
 	end)
-	ngui:addButton(32, 14, 14, 1, "Anuluj", function()
+	ngui:addButton(32, 14, 14, 1, "Cancel", function()
 		ngui:close()
 	end)
 	ngui:run()
@@ -379,20 +358,20 @@ local function cardManager()
 	end
 	local cgui = gml.create("center", "center", 90, 20)
 	cgui.style = server.getStyle(mod)
-	cgui:addLabel("center", 1, 15, "Menedżer kart")
+	cgui:addLabel("center", 1, 13, "Card manager")
 	box = cgui:addListBox(3, 3, 83, 12, {})
-	cgui:addButton(72, 17, 14, 1, "Zamknij", function() cgui:close() end)
-	cgui:addButton(3, 17, 14, 1, "Dodaj", function()
+	cgui:addButton(72, 17, 14, 1, "Close", function() cgui:close() end)
+	cgui:addButton(3, 17, 14, 1, "Add", function()
 		if #cards < 16 then
 			newCard()
 			refresh()
 		else
-			server.messageBox(mod, "Utworzono już maksymalną liczbę kart.", {"OK"})
+			server.messageBox(mod, "Card limit has been reached.", {"OK"})
 		end
 	end)
-	cgui:addButton(19, 17, 14, 1, "Usuń", function()
+	cgui:addButton(19, 17, 14, 1, "Remove", function()
 		local sel = box:getSelected()
-		if sel and server.messageBox(mod, "Czy na pewno chcesz usunąć zaznaczony element?", {"Tak", "Nie"}) == "Tak" then
+		if sel and server.messageBox(mod, "Are you sure you want to remove the selected element?", {"Yes", "No"}) == "Yes" then
 			local num = tonumber(sel:match("^(%d+)%."))
 			if num then
 				table.remove(cards, num)
@@ -436,27 +415,27 @@ local function newUser()
 
 	local ngui = gml.create("center", "center", 75, 14)
 	ngui.style = server.getStyle(mod)
-	ngui:addLabel("center", 1, 31, "Dodawanie nowego użytkownika")
-	ngui:addLabel(2, 3, 63, "Kliknij na dowolny czytnik, aby odczyać swój identyfikator.")
-	ngui:addLabel(2, 5, 28, "Identyfikator czytnika:")
-	ngui:addLabel(2, 6, 28, "Zapisana nazwa czytnika:")
-	ngui:addLabel(2, 7, 28, "Identyfikator użytkownika:")
+	ngui:addLabel("center", 1, 16, "Add a new user")
+	ngui:addLabel(2, 3, 56, "Click on any reader in order to read your identifier.")
+	ngui:addLabel(2, 5, 22, "Reader's identifier:")
+	ngui:addLabel(2, 6, 22, "Saved reader's name:")
+	ngui:addLabel(2, 7, 18, "User identifier:")
 	bioId = ngui:addLabel(31, 5, 37, "")
 	bioName = ngui:addLabel(31, 6, 37, "")
 	userId = ngui:addLabel(31, 7, 37, "")
-	ngui:addLabel(2, 9, 20, "Nazwa użytkownika:")
+	ngui:addLabel(2, 9, 12, "User name:")
 	local userName = ngui:addTextField(24, 9, 30)
-	readAgain = ngui:addButton(2, 12, 20, 1, "Wczytaj ponownie", function()
+	readAgain = ngui:addButton(2, 12, 18, 1, "Read again", function()
 		reloadListener()
 	end)
 	readAgain.visible = false
-	ngui:addButton(27, 12, 14, 1, "Zatwierdź", function() 
+	ngui:addButton(27, 12, 14, 1, "Apply", function() 
 		if bioId.text:len() == 0 then
-			server.messageBox(mod, "Nie zeskanowano żadnego użytkownika.", {"OK"})
+			server.messageBox(mod, "No user was scanned.", {"OK"})
 		elseif userName.text:len() == 0 then
-			server.messageBox(mod, "Podaj wyświetlaną nazwę użytkownika.", {"OK"})
+			server.messageBox(mod, "Enter user display naem.", {"OK"})
 		elseif userName.text:len() > 20 then
-			server.messageBox(mod, "Maksymalna długość nazwy użytkownika to 20 znaków.", {"OK"})
+			server.messageBox(mod, "Maximum user name length is 20 characters.", {"OK"})
 		else
 			local entry = {
 				uuid = userId.text,
@@ -467,7 +446,7 @@ local function newUser()
 			ngui:close()
 		end
 	end)
-	ngui:addButton(44, 12, 14, 1, "Anuluj", function() 
+	ngui:addButton(44, 12, 14, 1, "Cancel", function() 
 		internalBioEvent = nil
 		ngui:close()
 	 end)
@@ -488,20 +467,20 @@ local function userManager()
 
 	local ugui = gml.create("center", "center", 80, 20)
 	ugui.style = server.getStyle(mod)
-	ugui:addLabel("center", 1, 24, "Menedżer użytkowników")
+	ugui:addLabel("center", 1, 18, "User management")
 	box = ugui:addListBox(3, 3, 73, 12, {})
-	ugui:addButton(62, 17, 14, 1, "Zamknij", function() ugui:close() end)
-	ugui:addButton(3, 17, 14, 1, "Dodaj", function()
+	ugui:addButton(62, 17, 14, 1, "Close", function() ugui:close() end)
+	ugui:addButton(3, 17, 14, 1, "Add", function()
 		if #users < 16 then
 			newUser()
 			refresh()
 		else
-			server.messageBox(mod, "Dodano już maksymalną użytkownikó.", {"OK"})
+			server.messageBox(mod, "User limit has been reached.", {"OK"})
 		end
 	end)
-	ugui:addButton(19, 17, 14, 1, "Usuń", function()
+	ugui:addButton(19, 17, 14, 1, "Remove", function()
 		local sel = box:getSelected()
-		if sel and server.messageBox(mod, "Czy na pewno chcesz usunąć zaznaczony element?", {"Tak", "Nie"}) == "Tak" then
+		if sel and server.messageBox(mod, "Are you sure you want to remove the selected element?", {"Yes", "No"}) == "Yes" then
 			local num = tonumber(sel:match("^(%d+)%."))
 			if num then
 				table.remove(users, num)
@@ -516,7 +495,7 @@ end
 local function codeManager()
 	local cgui = gml.create("center", "center", 40, 14)
 	cgui.style = server.getStyle(mod)
-	cgui:addLabel("center", 1, 13, "Lista kodów")
+	cgui:addLabel("center", 1, 10, "PIN list")
 	cgui:addLabel(3, 4, 3, "1.")
 	cgui:addLabel(3, 6, 3, "2.")
 	cgui:addLabel(3, 8, 3, "3.")
@@ -526,25 +505,25 @@ local function codeManager()
 	c1.text = config.codes[1] or ""
 	c2.text = config.codes[2] or ""
 	c3.text = config.codes[3] or ""
-	cgui:addButton(20, 11, 14, 1, "Anuluj", function()
+	cgui:addButton(20, 11, 14, 1, "Cancel", function()
 		cgui:close()
 	end)
-	cgui:addButton(4, 11, 14, 1, "Zatwierdź", function()
+	cgui:addButton(4, 11, 14, 1, "Apply", function()
 		local n1 = tonumber(c1.text)
 		local n2 = tonumber(c2.text)
 		local n3 = tonumber(c3.text)
 		if (c1.text:len() > 0 and not n1) or (c2.text:len() > 0 and not n2) or (c3.text:len() > 0 and not n3) then
-			server.messageBox(mod, "Kod musi być liczbą.", {"OK"})
+			server.messageBox(mod, "PIN must be a number.", {"OK"})
 		elseif c1.text:len() > 8 or c2.text:len() > 8 or c3.text:len() > 8 then
-			server.messageBox(mod, "Kod może mieć maksymalnie 8 znaków.", {"OK"})
+			server.messageBox(mod, "PIN can have 8 characters at most.", {"OK"})
 		else
 			if not n1 and not n2 and not n3 then
 				local msgg = [[
-Niewpisanie żadnego kodu sprawi,
-że klawiatury przestaną działać.
-Czy chcesz kontynuować?
+Not entering any PIN will cause
+keypads to stop working. Are
+you sure you want to continue?
 				]]
-				if server.messageBox(mod, msgg, {"Tak", "Nie"}) == "Nie" then
+				if server.messageBox(mod, msgg, {"Yes", "No"}) == "No" then
 					return
 				end
 			end
@@ -571,65 +550,65 @@ local function messageManager()
 	end
 	local mgui = gml.create("center", "center", 40, 17)
 	mgui.style = server.getStyle(mod)
-	mgui:addLabel("center", 1, 19, "Edytor wiadomości")
-	mgui:addLabel(3, 4, 13, "Wiadomość:")
-	mgui:addLabel(3, 6, 10, "Czerwony:")
-	mgui:addLabel(3, 8, 9, "Zielony:")
-	mgui:addLabel(3, 10, 11, "Niebieski:")
+	mgui:addLabel("center", 1, 16, "Message editor")
+	mgui:addLabel(3, 4, 13, "Message:")
+	mgui:addLabel(3, 6, 10, "Red:")
+	mgui:addLabel(3, 8, 9, "Green:")
+	mgui:addLabel(3, 10, 11, "Blue:")
 	local msg = mgui:addTextField(17, 4, 10)
 	msg.text = config.msg[1] or ""
-	local b1 = mgui:addButton(15, 6, 10, 1, "tak", function(t)
+	local b1 = mgui:addButton(15, 6, 10, 1, "yes", function(t)
 		if t.status then
 			color = bit32.bor(color, 4)
 			t.status = false
-			t.text = "tak"
+			t.text = "no"
 		else
 			color = bit32.band(color, 3)
 			t.status = true
-			t.text = "nie"
+			t.text = "no"
 		end
 		refreshColor()
 		panel:draw()
 		t:draw()
 	end)
 	if bit32.band(color, 4) == 0 then
-		b1.text = "nie"
+		b1.text = "no"
 		b1.status = true
 	end
-	local b2 = mgui:addButton(15, 8, 10, 1, "tak", function(t)
+	local b2 = mgui:addButton(15, 8, 10, 1, "yes", function(t)
 		if t.status then
 			color = bit32.bor(color, 2)
 			t.status = false
-			t.text = "tak"
+			t.text = "yes"
 		else
 			color = bit32.band(color, 5)
 			t.status = true
-			t.text = "nie"
+			t.text = "no"
 		end
 		refreshColor()
 		panel:draw()
 		t:draw()
 	end)
 	if bit32.band(color, 2) == 0 then
-		b2.text = "nie"
+		b2.text = "no"
 		b2.status = false
 	end
-	local b3 = mgui:addButton(15, 10, 10, 1, "tak", function(t)
+	local b3 = mgui:addButton(15, 10, 10, 1, "yes", function(t)
 		if t.status then
 			color = bit32.bor(color, 1)
 			t.status = false
-			t.text = "tak"
+			t.text = "yes"
 		else
 			color = bit32.band(color, 6)
 			t.status = true
-			t.text = "nie"
+			t.text = "no"
 		end
 		refreshColor()
 		panel:draw()
 		t:draw()
 	end)
 	if bit32.band(color, 1) == 0 then
-		b2.text = "nie"
+		b2.text = "no"
 		b2.status = false
 	end
 	panel = server.template(mod, mgui, 30, 6, 2, 5)
@@ -638,12 +617,12 @@ local function messageManager()
 		t.renderTarget.fill(t.gui.posX + t.posX - 1, t.gui.posY + t.posY - 1, t.width, t.height, " ")
 	end
 	refreshColor()
-	mgui:addButton(23, 13, 14, 1, "Anuluj", function()
+	mgui:addButton(23, 13, 14, 1, "Cancel", function()
 		mgui:close()
 	end)
-	mgui:addButton(7, 13, 14, 1, "Zatwierdź", function()
+	mgui:addButton(7, 13, 14, 1, "Apply", function()
 		if msg.text:len() > 8 then
-			server.messageBox(mod, "Wiadomość może mieć maksymalnie 8 znaków.", {"OK"})
+			server.messageBox(mod, "Message can have 8 characters at most.", {"OK"})
 		else
 			config.msg[1] = msg.text
 			config.msg[2] = color
@@ -657,65 +636,65 @@ end
 local function settings()
 	local sgui = gml.create("center", "center", 50, 18)
 	sgui.style = server.getStyle(mod)
-	sgui:addLabel("center", 1, 11, "Ustawienia")
-	sgui:addLabel(2, 4, 6, "Tryb:")
-	sgui:addLabel(2, 5, 44, "(Urządzenia wyświetlane po lewej stronie)")
-	sgui:addLabel(2, 7, 10, "Czytniki:")
-	sgui:addLabel(4, 8, 22, "Identyfikacja gracza:")
-	sgui:addLabel(4, 9, 20, "Tylko zablokowane:")
-	sgui:addLabel(2, 11, 12, "Klawiatury:")
-	sgui:addLabel(4, 12, 17, "Losuj wszystkie:")
-	local bmode = sgui:addButton(10, 4, 15, 1, "", function(t)
+	sgui:addLabel("center", 1, 11, "Settings")
+	sgui:addLabel(2, 4, 6, "Mode:")
+	sgui:addLabel(2, 5, 44, "(Devices displayed at the left side)")
+	sgui:addLabel(2, 7, 10, "Readers:")
+	sgui:addLabel(4, 8, 22, "Identify players:")
+	sgui:addLabel(4, 9, 20, "Locked only:")
+	sgui:addLabel(2, 11, 12, "Keyboards:")
+	sgui:addLabel(4, 12, 17, "Shuffle all:")
+	local bmode = sgui:addButton(10, 4, 16, 1, "", function(t)
 		if t.status then
 			t.status = false
-			t.text = "skanery biometryczne"
+			t.text = "bio readers"
 		else
 			t.status = true
-			t.text = "czytniki kart"
+			t.text = "card readers"
 		end
 	end)
-	bmode.text = config.oldReaders and "czytniki kart" or "skanery biometryczne"
+	bmode.text = config.oldReaders and "card readers" or "biometric readers"
 	bmode.status = config.oldReaders
 	local b1 = sgui:addButton(27, 8, 10, 1, "", function(t)
 		if t.status then
 			t.status = false
-			t.text = "nie"
+			t.text = "no"
 		else
 			t.status = true
-			t.text = "tak"
+			t.text = "yes"
 		end
 		t:draw()
 	end)
-	b1.text = config.identity and "tak" or "nie"
+	b1.text = config.identity and "yes" or "no"
 	b1.status = config.identity
 	local b2 = sgui:addButton(27, 9, 10, 1, "", function(t)
 		if t.status then
 			t.status = false
-			t.text = "nie"
+			t.text = "no"
 		else
 			t.status = true
-			t.text = "tak"
+			t.text = "yes"
 		end
 		t:draw()
 	end)
-	b2.text = config.lockedOnly and "tak" or "nie"
+	b2.text = config.lockedOnly and "yes" or "no"
 	b2.status = config.lockedOnly
 	local b3 = sgui:addButton(27, 12, 10, 1, "", function(t)
 		if t.status then
 			t.status = false
-			t.text = "nie"
+			t.text = "no"
 		else
 			t.status = true
-			t.text = "tak"
+			t.text = "yes"
 		end
 		t:draw()
 	end)
-	b3.text = config.shuffleAll and "tak" or "nie"
+	b3.text = config.shuffleAll and "yes" or "no"
 	b3.status = config.shuffleAll
-	sgui:addButton(33, 15, 14, 1, "Anuluj", function() sgui:close() end)
-	sgui:addButton(17, 15, 14, 1, "Zatwierdź", function()
+	sgui:addButton(33, 15, 14, 1, "Cancel", function() sgui:close() end)
+	sgui:addButton(17, 15, 14, 1, "Apply", function()
 		if config.oldReaders ~= bmode.status then
-			server.mesageBox(mod, "Zmiany zostaną zastosowane po ponownym uruchomieniu serwera", {"OK"})
+			server.mesageBox(mod, "Changes will be applied after server restart.", {"OK"})
 		end
 		config.oldReaders = bmode.status
 		config.identity = b1.status
@@ -754,7 +733,7 @@ local function prepareWindow(mode, edit, initialize)
 		elseif mode == "keypads" then
 			return whenKeypads
 		else
-			error("Niepoprawny tryb: " .. mode)
+			error("Wrong mode: " .. mode)
 		end
 	end
 	
@@ -806,32 +785,32 @@ local function prepareWindow(mode, edit, initialize)
 	sgui.style = server.getStyle(mod)
 	local text = nil
 	if edit then
-		text = choose("Edycja czytnika", "Edycja skanera biometrycznego", "Edycja klawiatury")
+		text = choose("Edit card reader", "Edit biometric reader", "Edit keypad")
 	else
-		text = choose("Nowy czytnik", "Nowy skaner biometryczny", "Nowa klawiatura")
+		text = choose("New card reader", "New biometric reader", "New kaypad")
 	end
 	local title = sgui:addLabel("center", 1, text:len() + 2, text)
 	
-	sgui:addLabel(2, 4, 7, "Adres:")
-	sgui:addLabel(2, 6, 7, "Nazwa:")
-	sgui:addLabel(2, 8, 13, "Opóźnienie:")
+	sgui:addLabel(2, 4, 10, "Address:")
+	sgui:addLabel(2, 6, 7, "Name:")
+	sgui:addLabel(2, 8, 13, "Delay:")
 	sgui:addLabel(2, 10, 8, "Status:")
-	sgui:addLabel(2, 13 + addition, 19, "Akcje włączania:")
-	sgui:addLabel(30, 13 + addition, 20, "Akcje wyłączania:")
+	sgui:addLabel(2, 13 + addition, 19, "Enable actions:")
+	sgui:addLabel(30, 13 + addition, 20, "Disable actions:")
 	
 	if mode == "keys" then
-		sgui:addLabel(2, 12, 11, "Losowanie:")
+		sgui:addLabel(2, 12, 11, "Shuffle:")
 		local tmp = sgui:addButton(15, 12, 10, 1, "", function(t)
 			if rettab.shuffle then
 				rettab.shuffle = false
-				t.text = "nie"
+				t.text = "no"
 			else
 				rettab.shuffle = true
-				t.text = "tak"
+				t.text = "yes"
 			end
 			t:draw()
 		end)
-		tmp.text = rettab.shuffle and "tak" or "nie"
+		tmp.text = rettab.shuffle and "yes" or "no"
 	end
 	for i = 1, 3 do
 		local tt = sgui:addLabel(4, 14 + addition + i, 3, tostring(i) .. ".")
@@ -870,7 +849,7 @@ local function prepareWindow(mode, edit, initialize)
 				rettab.address = a
 				t:draw()
 			else
-				server.messageBox(mod, "Urządzenie o takim adresie zostało już dodane.", {"OK"})
+				server.messageBox(mod, "A device with the same address has been already added.", {"OK"})
 			end
 		end
 	end
@@ -883,28 +862,28 @@ local function prepareWindow(mode, edit, initialize)
 	local tmp = sgui:addButton(15, 10, 14, 1, "", function(t)
 		if rettab.disabled then
 			rettab.disabled = false
-			t.text = "włączony"
+			t.text = "enabled"
 		else
 			rettab.disabled = true
-			t.text = "wyłączony"
+			t.text = "disabled"
 		end
 		t:draw()
 	end)
-	tmp.text = rettab.disabled and "wyłączony" or "włączony"
+	tmp.text = rettab.disabled and "disabled" or "enabled"
 	
-	sgui:addButton(47, 20 + addition, 14, 1, "Anuluj", function()
+	sgui:addButton(47, 20 + addition, 14, 1, "Cancel", function()
 		sgui.ret = initialize
 		sgui:close()
 	end)
-	sgui:addButton(31, 20 + addition, 14, 1, "Zatwierdź", function()
+	sgui:addButton(31, 20 + addition, 14, 1, "Apply", function()
 		local name = int[7].text
 		local delay = tonumber(int[8].text)
 		if name:len() == 0 then
-			server.messageBox(mod, "Podaj nazwę urządzenia.", {"OK"})
+			server.messageBox(mod, "Enter the device name.", {"OK"})
 		elseif not rettab.address then
-			server.messageBox(mod, "Wybierz adresu urządzenia.", {"OK"})
+			server.messageBox(mod, "Choose the device address.", {"OK"})
 		elseif not delay or delay > 20 or delay < 1 then
-			server.messageBox(mod, "Opóźnienie musi być liczbą w przedziale 1-20.", {"OK"})
+			server.messageBox(mod, "Delay must be a number between 1 and 20.", {"OK"})
 		else
 			rettab.name = name:sub(1, 20)
 			rettab.delay = delay
@@ -926,7 +905,7 @@ local function addReader()
 			refreshTables()
 		end
 	else
-		server.messageBox(mod, "Dodano już maksymalną ilość czytników.", {"OK"})
+		server.messageBox(mod, "Card readers limit has been reached.", {"OK"})
 	end
 end
 
@@ -939,7 +918,7 @@ local function addBiometric()
 			refreshTables()
 		end
 	else
-		server.messageBox(mod, "Dodano już maksymalną ilość skanerów biometrycznych.", {"OK"})
+		server.messageBox(mod, "Biometric readers limit has been reached.", {"OK"})
 	end
 end
 
@@ -953,7 +932,7 @@ local function addKeypad()
 			refreshKeypads()
 		end
 	else
-		server.messageBox(mod, "Dodano już maksymalną ilość klawiatur.", {"OK"})
+		server.messageBox(mod, "Keypad limit has been reached.", {"OK"})
 	end
 end
 
@@ -1015,11 +994,11 @@ local actions = {
 	[1] = {
 		name = "lockMag",
 		type = "AUTH",
-		desc = "Blokuje czytniki",
+		desc = "Locks magnetic card readers",
 		exec = function()
 			config.readers = false
 			if config.oldReaders then
-				element[1].text = "wyłączone"
+				element[1].text = "disabled"
 				element[1]:draw()
 			end
 		end
@@ -1027,11 +1006,11 @@ local actions = {
 	[2] = {
 		name = "unlockMag",
 		type = "AUTH",
-		desc = "Odblokocuje czytniki",
+		desc = "Unlocks magnetic card readers",
 		exec = function()
 			config.readers = true
 			if config.oldReaders then
-				element[1].text = "włączone"
+				element[1].text = "enabled"
 				element[1]:draw()
 			end
 		end
@@ -1039,10 +1018,10 @@ local actions = {
 	[3] = {
 		name = "lockKeypad",
 		type = "AUTH",
-		desc = "Blokuje klawiatury",
+		desc = "Locks keypads",
 		exec = function()
 			config.keypads = false
-			element[2].text = "wyłączone"
+			element[2].text = "disabled"
 			element[2]:draw()
 			refreshKeypads()
 		end
@@ -1050,10 +1029,10 @@ local actions = {
 	[4] = {
 		name = "unlockKeypad",
 		type = "AUTH",
-		desc = "Odblokowuje klawiatury",
+		desc = "Unlocks keypads",
 		exec = function()
 			config.keypads = true
-			element[2].text = "właczone"
+			element[2].text = "enabled"
 			element[2]:draw()
 			refreshKeypads()
 		end
@@ -1061,11 +1040,11 @@ local actions = {
 	[5] = {
 		name = "lockBio",
 		type = "AUTH",
-		desc = "Blokuje skanery biometryczne",
+		desc = "Locks biometric readers",
 		exec = function()
 			config.biometrics = false
 			if not config.oldReaders then
-				element[1].text = "wyłączone"
+				element[1].text = "disabled"
 				element[1]:draw()
 			end
 		end
@@ -1073,11 +1052,11 @@ local actions = {
 	[6] = {
 		name = "unlockBio",
 		type = "AUTH",
-		desc = "Odblokowuje skanery biometryczne",
+		desc = "Unlocks biometric readers",
 		exec = function()
 			config.biometrics = true
 			if not config.oldReaders then
-				element[1].text = "włączone"
+				element[1].text = "enabled"
 				element[1]:draw()
 			end
 		end
@@ -1093,8 +1072,8 @@ mod.actions = actions
 
 mod.setUI = function(window)
 	window:addLabel("center", 1, 11, ">> AUTH <<")
-	window:addLabel(3, 3, 10, config.oldReaders and "Czytniki:" or "Skanery:")
-	window:addLabel(36, 3, 12, "Klawiatury:")
+	window:addLabel(3, 3, 12, config.oldReaders and "MAG Readers:" or "BIO Readers:")
+	window:addLabel(36, 3, 12, "Keypads:")
 	
 	lbox = window:addListBox(3, 5, 30, 10, {})
 	rbox = window:addListBox(36, 5, 30, 10, {})
@@ -1105,9 +1084,9 @@ mod.setUI = function(window)
 	element[1] = window:addButton(18, 3, 14, 1, "", function(t)
 		local value = config.oldReaders and config.readers or config.biometrics
 		if value then
-			t.text = "wyłączone"
+			t.text = "disabled"
 		else
-			t.text = "włączone"
+			t.text = "enabled"
 		end
 		if config.oldReaders then
 			config.readers = not value
@@ -1117,48 +1096,48 @@ mod.setUI = function(window)
 		t:draw()
 	end)
 	local value = config.oldReaders and config.readers or config.biometrics
-	element[1].text = value and "włączone" or "wyłączone"
+	element[1].text = value and "enabled" or "disabled"
 	element[2] = window:addButton(52, 3, 14, 1, "", function(t)
 		if config.keypads then
 			config.keypads = false
-			t.text = "wyłączone"
+			t.text = "disabled"
 		else
 			config.keypads = true
-			t.text = "włączone"
+			t.text = "enabled"
 		end
 		refreshKeypads()
 		t:draw()
 	end)
-	element[2].text = config.keypads and "włączone" or "wyłączone"
-	window:addButton(3, 16, 14, 1, "Dodaj", config.oldReaders and addReader or addBiometric)
-	window:addButton(19, 16, 14, 1, "Usuń", function()
+	element[2].text = config.keypads and "enabled" or "disabled"
+	window:addButton(3, 16, 14, 1, "Add", config.oldReaders and addReader or addBiometric)
+	window:addButton(19, 16, 14, 1, "Remove", function()
 		local sel = lbox:getSelected()
 		if sel then
 			local tab = config.oldReaders and readers or biometrics
 			for i, t in pairs(tab) do
-				if t.name == sel and server.messageBox(mod, "Czy na pewno chcesz usunąć zaznaczony element?", {"Tak", "Nie"}) == "Tak" then
+				if t.name == sel and server.messageBox(mod, "Are you sure you want to remove selected element?", {"Yes", "No"}) == "Yes" then
 					table.remove(tab, i)
 					refreshTables()
 				end
 			end
 		end
 	end)
-	window:addButton(36, 16, 14, 1, "Dodaj", addKeypad)
-	window:addButton(52, 16, 14, 1, "Usuń", function()
+	window:addButton(36, 16, 14, 1, "Add", addKeypad)
+	window:addButton(52, 16, 14, 1, "Remove", function()
 		local sel = rbox:getSelected()
 		if sel then
 			for i, t in pairs(keypads) do
-				if t.name == sel and server.messageBox(mod, "Czy na pewno chcesz usunąć zaznaczony element?", {"Tak", "Nie"}) == "Tak" then
+				if t.name == sel and server.messageBox(mod, "Are you sure you want to remove selected element?", {"Yes", "No"}) == "Yes" then
 					table.remove(keypads, i)
 					refreshTables()
 				end
 			end
 		end
 	end)
-	window:addButton(3, 18, 14, 1, config.oldReaders and "Karty" or "Użytkownicy", config.oldReaders and cardManager or userManager)
-	window:addButton(36, 18, 14, 1, "Kody", codeManager)
-	window:addButton(52, 18, 14, 1, "Wiadomość", messageManager)
-	window:addButton(19, 18, 14, 1, "Ustawienia", settings)
+	window:addButton(3, 18, 14, 1, config.oldReaders and "Cards" or "Users", config.oldReaders and cardManager or userManager)
+	window:addButton(36, 18, 14, 1, "PINs", codeManager)
+	window:addButton(52, 18, 14, 1, "Message", messageManager)
+	window:addButton(19, 18, 14, 1, "Settings", settings)
 end
 
 mod.start = function(core)
@@ -1240,7 +1219,7 @@ mod.pullEvent = function(...)
 				end
 			end
 			exec(bio.open)
-			server.call(mod, 5201, "Gracz " .. user.name .. " użył karty w skanerze \"" .. bio.name .. "\".", "AUTH", true)
+			server.call(mod, 5201, "Player " .. user.name .. " was authorized in BIO reader \"" .. bio.name .. "\".", "AUTH", true)
 			event.timer(bio.delay, function()
 				exec(bio.close)
 			end)
@@ -1274,7 +1253,7 @@ mod.pullEvent = function(...)
 					end
 				end
 				exec(dev.open)
-				server.call(mod, 5201, "Gracz " .. e[3] .. " użył karty w czytniku " .. dev.name .. ".", "AUTH", true)
+				server.call(mod, 5201, "Player " .. e[3] .. " used a MAG card in reader " .. dev.name .. ".", "AUTH", true)
 				event.timer(dev.delay, function()
 					exec(dev.close)
 				end)
@@ -1331,7 +1310,7 @@ mod.pullEvent = function(...)
 						proxy.setDisplay(texts.open[1], texts.open[2])
 						exec(dev.open)
 						inputs[e[2]] = nil
-						server.call(mod, 5201, "Użyto klawiatury " .. dev.name .. ".", "AUTH", true)
+						server.call(mod, 5201, "Keypad " .. dev.name .. " was used.", "AUTH", true)
 						event.timer(dev.delay, function()
 							proxy.setDisplay(texts.closed[1], texts.closed[2])
 							exec(dev.close)

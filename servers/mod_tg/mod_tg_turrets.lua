@@ -1,98 +1,96 @@
 -- ############################################
 -- #			mod_tg_turrets				  #
 -- #										  #
--- #  05.2016					by:IlynPayne  #
+-- #  05.2016			   by:Dominik Rzepka  #
 -- ############################################
 
 --[[
-	## Opis programu ##
-		Program mod_tg_turrets jest modułem używanym na serwerze the_guard (od wersji 2.0).
-		Pozwala na zarządzanie wieżyczkami i detektorami ruchu.
+	## Description ##
+		The mod_tg_turrets is a module used by the_guard server (since 2.0).
+		It allows to manage energy turrets and motion detectors (from "OpenSecurity")
 		
-		Wieżyczki pochodzą z moda OpenSecurity.
-		Obsługiwane są 2 typy detektorów ruchu:
-		* 'motion sensor' z moda OpenComputers
-		* 'entity detector' z moda OpenSecurity
+		Two types of motion detectors are supported (both from "OpenSecurity"):
+		* 'motion sensor'
+		* 'entity detector'
 		
-		Pierwszy z nich jest wykorzystywany do wykrywania ruchu
-		i uruchamiania akcji do niego przypisanych.
-		Z kolei drugi służy do skanowania otoczenia w pobliżu wieżyczek.
-		Odstępy pomiędzy poszczególnymi skanami mogą być zmienione (0.5 - 3s).
+		First of them is used to detect movement and trigger actions
+		assigned to it. The latter is used to scan area near security
+		turrets (scan interval is configurable: 0.5 - 3s).
 		
-		Mechanizm wybierania celu może działać w trzech trybach:
-		* 1 (none) - atakowane są wszystkie obiekty w zasięgu
-		* 2 (white) - atakowane są obiekty nie będące na białej liście
-		* 3 (black) - atakowane są obiekty znajdujące się na czarnej liście
+		Target selection mechanism can work in one of three dirrefent modes:
+		* 1 (none) - attacks all entities
+		* 2 (white) - attacks all entities except those on list
+		* 3 (black) - attack only entities from list
 		
-	## Akcje ##
-		- enableTurrets() - włącza wieżyczki
-		- disableTurrent() - wyłącza wieżyczki
-		- enableSensors() - włącza detektory ruchu
-		- disableSensors() - wyłącza detektory ruchu
-		- setTurretsMode(mode:number) - ustawia tryb wieżyczek
-		- setSensorsMode(mode:number) - ustawia tryb sensorów
+	## Actions ##
+		- enableTurrets() - enables turrets
+		- disableTurrent() - disables turrets
+		- enableSensors() - turns on motion detectors
+		- disableSensors() - turns off motion detectors
+		- setTurretsMode(mode:number) - sets turrets mode (ses the description above)
+		- setSensorsMode(mode:number) - sets motion sensors mode (same turrets mode)
 		
-	## Funkcje ##
-		* obsługa wieżyczek (maksymalnie 12)
-		* obsługa sensorów ruchu (maksymalnie 12 każdego rodzaju)
-		* ustawianie czasu aktywacji wieżyczek (15 sekund - 3 minuty)
-		* ustawianie czasu aktywacji sensorów (15 sekund - 3 minuty)
-		* każdy sensor obsługuje do 3 akcji włączania i 3 akcji wyłaczania
-		* zmiana interwału skanowania (1s - 15s)
-		* zmiana zasięgu skanu (5 - 20 bloków)
-		* ustawianie czułości sensorów (0.1 - 10)
+	## Functions ##
+		* energy turret support (up to 12)
+		* motion sensor support (up to 12 of each type)
+		* adjustable turret activation time (15sec - 3min)
+		* adjustable motion sensor activation time (15sec - 3min)
+		* every motion sensor supports up to 3 enable and disable actions
+		* adjustable entity detector scan interval (1s - 15s)
+		* adjustable entity detector scan range (5 - 20 blocks)
+		* adjustable motion sensor sensitivity (0.1 - 10)
 		
-	## Schematy ##
-		config { - domyślny plik konfiguracyjny
-			turretsState:boolean - czy wieżyczki są aktywne
-			sensorsState:boolean - czy sensory są aktywne
-			turretsMode:number - tryb mechanizmu wybierania wieżyczek
-			sensorsMode:number - tryb mechanizmu wybierania detektorów
-			sensitivity:number - czułość sensorów ruchu
-			delay:number - odstęp pomiędzy skanami
-			range:number - zasięg skanowania
-			turretsActive:number - czas aktywacji wieżyczek
-			sensorsActive:number - czas aktywacji sensorów
+	## Configuration scheme ##
+		config { - default configuration file
+			turretsState:boolean - whether turrets are active
+			sensorsState:boolean - whether sensors are active
+			turretsMode:number - turret target selection mode
+			sensorsMode:number - motion sensor target selection mode
+			sensitivity:number - motion sensor sensitivity
+			delay:number - entity detector scan interval
+			range:number - entity detector scan range
+			turretsActive:number - turrets activation time (how long they will work since their activation)
+			sensorsActive:number - sensors activation time (how long they will work since their actication)
 		}
 		
-		Wszystkie dodatkowe pliki konfiguracyjne będą szyfrowane.
+		Every additional configuration files below are encrypted.
 		
-		turrets: { - wieżyczki (plik modules/turrets/turrets.dat)
+		turrets: { - energy turrets (modules/turrets/turrets.dat)
 			{
-				name:string - nazwa urządzenia
-				address:string - adres urządzenia
-				detector:string - adres detektora
-				upside:boolean - czy jest do góry nogami
-				hidden:boolean - czy jest schowana między blokami
-				walls: { - obudowanie ścianami
-					t:boolean - góra
-					b:boolean - dół
-					n:boolean - północ
-					s:boolean - południe
-					e:boolean - wschód
-					w:boolean - zachód
+				name:string - turret name
+				address:string - address
+				detector:string - detector address
+				upside:boolean - whether turret is upside down
+				hidden:boolean - whether turret is hidden in blocks (shaft length purposes)
+				walls: { - walls around turret
+					t:boolean - top
+					b:boolean - bottom
+					n:boolean - north
+					s:boolean - south
+					e:boolean - east
+					w:boolean - west
 				}
 			}
 			...
 		}
 		
-		sensors: { - detektory ruchu (plik modules/turrets/sensors.dat)
+		sensors: { - motion sensors (modules/turrets/sensors.dat)
 			{
-				name:string - nazwa sensora
-				address:string - adres urządzenia
-				enable { - akcje włączania
+				name:string - sensor name
+				address:string - address
+				enable { - enable actions
 					{
-						id:number - identyfikator akcji
-						p1:any - parametr 1
-						p2:any - parametr 2
+						id:number - action id
+						p1:any - 1st parameter
+						p2:any - 2nd parameter
 					}
 					...
 				}
-				disable { - akcje wyłaczania
+				disable { - disable actions
 					{
-						id:number - identyfikator akcji
-						p1:any - parametr 1
-						p2:any - parametr 2
+						id:number - action id
+						p1:any - 1st parameter
+						p2:any - 2nd parameter
 					}
 					...
 				}
@@ -100,39 +98,39 @@
 			...
 		}
 		
-		lists: { - listy (plik modules/turrets/lists.dat)
+		lists: { - target lists (plik modules/turrets/lists.dat)
 			turrets: {
 				black: {
-					[1]:string - nazwa obiektu
+					[1]:string - object name
 					...
 				}
 				white: {
-					[1]:string - nazwa obiektu
+					[1]:string - object name
 				}
 			}
 			sensors: {
 				black: {
-					[1]:string - nazwa obiektu
+					[1]:string - object name
 				}
 				white: {
-					[1]:string - nazwa obiektu
+					[1]:string - object name
 				}
 			}
 		}
 		
 	## Cache ##
-		W celu szybszego wyszukiwania wieżyczek podłączonych do danego
-		detektora, moduł wykorzystuje pamięć podręczną do przechowywania adresów:
+		In order to search turrets connected to specific detector faster, the module
+		uses the following cache schema to store addresses:
 		cache: {
 			{
-				[0]: detektor
-				[1]: { - wieżyczka
+				[0]: detector
+				[1]: { - turret
 					index:number
 					x:number
 					y:number
 					z:number
 				}
-				[2]: { - wieżyczka
+				[2]: { - turret
 					index:number
 					x:number
 					y:number
@@ -144,7 +142,7 @@
 		}
 ]]
 
-local version = "1.2"
+local version = "1.3"
 local args = {...}
 
 if args[1] == "version_check" then return version end
@@ -169,7 +167,7 @@ local timer = nil
 local tamount = nil
 
 
-local excluded = { -- elementy wykluczone ze skanowania
+local excluded = { -- elements (unlocalized names) excluded from entity detector scanning (for turrets)
 	"Kula doświadczenia",
 	"Experience orb",
 	"item%..*",
@@ -178,9 +176,9 @@ local excluded = { -- elementy wykluczone ze skanowania
 	"entity.sgcraft.Stargate Iris.name",
 	"entity.stargate_iris.name"
 }
-local targetHeight = 0.75 -- wysokość celu
-local attemptDelay = 0.2 -- interwał prób strzału
-local maxAttempts = 4 -- maksymalna ilość prób strzału
+local targetHeight = 0.75 -- target height
+local attemptDelay = 0.2 -- interval between turret fire attempts
+local maxAttempts = 4 -- maximum number of fire attempts
 local turretHeight = 0.38
 
 
@@ -225,10 +223,10 @@ local function saveData()
 				f:write(enc)
 				f:close()
 			else
-				server.log(mod, "Nie udało się otworzyć pliku " .. filename)
+				server.log(mod, "Couldn't open file: " .. filename)
 			end
 		else
-			server.log(mod, "Nie udało się zaszyfrować danych " .. filename)
+			server.log(mod, "Couldn't encrypt data to file " .. filename)
 		end
 	end
 	
@@ -244,7 +242,7 @@ local function loadData()
 		local path = fs.concat(dir, filename .. ".dat")
 		if not fs.exists(path) then return {}
 		elseif fs.isDirectory(path) then
-			server.log(mod, "Element " .. path .. " nie może być katalogiem!")
+			server.log(mod, "Element " .. path .. " cannot be a directory!")
 		end
 		local f = io.open(path, "r")
 		if f then
@@ -252,11 +250,11 @@ local function loadData()
 			if d then
 				return d
 			else
-				server.log(mod, "Nie udało się odszyfrować pliku " .. filename)
+				server.log(mod, "Couldn't decrypt file " .. filename)
 				return {}
 			end
 		else
-			server.log(mod, "Nie udało się otworzyć pliku.")
+			server.log(mod, "Couldn't open data file.")
 		end
 	end
 	
@@ -278,7 +276,7 @@ local function rebuildCache()
 			if t.address == t2.detector then
 				local det = server.findComponents(mod, t2.address)
 				if #det > 1 then
-					error("Wystąpił błąd w funkcji findComponents")
+					error("An error occurred in the findComponents function")
 					return
 				elseif #det == 1 and ca(det[1].x) and ca(det[1].y) and ca(det[1].z) then
 					local su = {
@@ -299,9 +297,9 @@ end
 
 local function refreshView()
 	if element[1] and element[2] then
-		element[1].text = config.turretsState and "włączone" or "wyłączone"
+		element[1].text = config.turretsState and "enabled" or "disabled"
 		element[1]:draw()
-		element[2].text = config.sensorsState and "włączone" or "wyłączone"
+		element[2].text = config.sensorsState and "enabled" or "disabled"
 		element[2]:draw()
 	end
 end
@@ -432,7 +430,7 @@ local function getEntities(adr)
 		table.sort(entities, function(a, b) return a.range < b.range end)
 		return entities
 	else
-		server.call(mod, 5204, "Za mało energii, aby kontynuować skanowanie.", "turrets", true)
+		server.call(mod, 5204, "Not enough energy to continue scanning.", "turrets", true)
 		event.cancel(timer)
 		timer = nil
 		disableTurrets()
@@ -444,14 +442,14 @@ end
 local function launch(turret, attempt)
 	if attempt == 0 then
 		if not turret.isReady() then
-			server.call(mod, 5202, "Wieżyczka " .. turret.name .. " ma zbyt wolny czas ochładzania!", "turrets", true)
+			server.call(mod, 5202, "Turret " .. turret.name .. "'s cooldown is too slow!", "turrets", true)
 		end
 		return 
 	end
 	if turret.isOnTarget() and turret.isReady() then
 		local s, r = pcall(turret.fire)
 		if not s and r == "not enough energy" then
-			server.call(mod, 5203, "Brak energii na kontynuację pracy wieżyczek", "turrets", true)
+			server.call(mod, 5203, "Not enough energy to keep turrets enabled.", "turrets", true)
 			disableTurrets()
 			return
 		end
@@ -536,7 +534,7 @@ local function enableTurrets()
 				pcall(proxy.moveTo, 270, 0)
 			end
 		else
-			server.call(mod, 5202, "Wieżyczka " .. t.name .. " jest offline.", "turrets", true)
+			server.call(mod, 5202, "Turret " .. t.name .. " is offline.", "turrets", true)
 		end
 	end
 	local amount = nil
@@ -584,18 +582,18 @@ local function listTemplate(item)
 		local ret = ""
 		local agui = gml.create("center", "center", 40, 7)
 		agui.style = server.getStyle(mod)
-		agui:addLabel("center", 1, 14, "Podaj nazwę:")
+		agui:addLabel("center", 1, 14, "Enter a name:")
 		local field = agui:addTextField("center", 3, 24)
-		agui:addButton(24, 5, 14, 1, "Anuluj", function()
+		agui:addButton(24, 5, 14, 1, "Cancel", function()
 			ret = nil
 			agui:close()
 		end)
-		agui:addButton(8, 5, 14, 1, "Zatwierdź", function()
+		agui:addButton(8, 5, 14, 1, "Apply", function()
 			local n = field.text
 			if n:len() == 0 then
-				server.messageBox(mod, "Wprowadź nazwę.", {"OK"})
+				server.messageBox(mod, "Enter a name.", {"OK"})
 			elseif n:len() > 20 then
-				server.messageBox(mod, "Dlugość nazwy nie może być dłuższa, niż 20 znaków.", {"OK"})
+				server.messageBox(mod, "Name cannot be longer than 20 characters.", {"OK"})
 			else
 				ret = n
 				agui:close()
@@ -606,7 +604,7 @@ local function listTemplate(item)
 	end
 	local function addItem(l)
 		if #l > 12 then
-			server.messageBox(mod, "Dodano już maksymalną liczbę obiektów.", {"OK"})
+			server.messageBox(mod, "Object limit has been reached.", {"OK"})
 			return
 		end
 		local r = addDialog()
@@ -617,7 +615,7 @@ local function listTemplate(item)
 	local function removeItem(l, list)
 		local sel = list:getSelected()
 		if not sel then return end
-		if server.messageBox(mod, "Czy na pewno chcesz usunąć zaznaczony element?", {"Tak", "Nie"}) == "Nie" then return end
+		if server.messageBox(mod, "Are you sure you want to remove the selected elements?", {"Yes", "No"}) == "No" then return end
 		for a, b in pairs(l) do
 			if b == sel then
 				table.remove(l, a)
@@ -629,30 +627,30 @@ local function listTemplate(item)
 	
 	local lgui = gml.create("center", "center", 70, 26)
 	lgui.style = server.getStyle(mod)
-	lgui:addLabel("center", 1, 12, "Edycja list")
-	lgui:addLabel(2, 4, 14, "Czarna lista:")
-	lgui:addLabel(37, 4, 14, "Biała lista:")
+	lgui:addLabel("center", 1, 12, "Edit lists")
+	lgui:addLabel(2, 4, 14, "Black list:")
+	lgui:addLabel(37, 4, 14, "White list:")
 	lb = lgui:addListBox(2, 6, 30, 12, {})
 	rb = lgui:addListBox(37, 6, 30, 12, {})
 	refreshLists()
-	lgui:addButton(2, 19, 14, 1, "Dodaj", function()
+	lgui:addButton(2, 19, 14, 1, "Add", function()
 		addItem(ret.black)
 	end)
-	lgui:addButton(18, 19, 14, 1, "Usuń", function()
+	lgui:addButton(18, 19, 14, 1, "Remove", function()
 		removeItem(ret.black, lb)
 	end)
-	lgui:addButton(37, 19, 14, 1, "Dodaj", function()
+	lgui:addButton(37, 19, 14, 1, "Add", function()
 		addItem(ret.white)
 	end)
-	lgui:addButton(53, 19, 14, 1, "Usuń", function()
+	lgui:addButton(53, 19, 14, 1, "Remove", function()
 		removeItem(ret.white, rb)
 	end)
 	
-	lgui:addButton(53, 23, 14, 1, "Anuluj", function()
+	lgui:addButton(53, 23, 14, 1, "Cancel", function()
 		ret = nil
 		lgui:close()
 	end)
-	lgui:addButton(37, 23, 14, 1, "Zatwierdź", function()
+	lgui:addButton(37, 23, 14, 1, "Apply", function()
 		lgui:close()
 	end)
 	lgui:run()
@@ -680,13 +678,13 @@ local function turretTemplate(item)
 	
 	local tgui = gml.create("center", "center", 66, 20)
 	tgui.style = server.getStyle(mod)
-	tgui:addLabel("center", 1, 18, item and "Edycja wieżyczki" or "Nowa wieżyczka")
-	tgui:addLabel(2, 4, 7, "Nazwa:")
-	tgui:addLabel(2, 6, 7, "Adres:")
-	tgui:addLabel(2, 7, 17, "Adres detektora:")
-	tgui:addLabel(2, 9, 9, "Pozycja:")
-	tgui:addLabel(2, 11, 9, "Ukrycie:")
-	tgui:addLabel(2, 13, 12, "Obudowanie:")
+	tgui:addLabel("center", 1, 18, item and "Edit a turret" or "New turret")
+	tgui:addLabel(2, 4, 7, "Name:")
+	tgui:addLabel(2, 6, 7, "Address:")
+	tgui:addLabel(2, 7, 17, "Detector address:")
+	tgui:addLabel(2, 9, 9, "Position:")
+	tgui:addLabel(2, 11, 9, "Hidden:")
+	tgui:addLabel(2, 13, 12, "Walls:")
 	local name = tgui:addTextField(10, 4, 24)
 	name.text = item and item.name or ""
 	local tmp = tgui:addLabel(10, 6, 38, item and item.address or "")
@@ -703,7 +701,7 @@ local function turretTemplate(item)
 		if not found then
 			local ct = server.findComponents(mod, a)
 			if #ct ~= 1 then
-				error("Wystąpił błąd w funkcji serwera: findComponents() > 1")
+				error("An error occurred in the findComponents() function (>1).")
 				return
 			end
 			ct = ct[1]
@@ -711,10 +709,10 @@ local function turretTemplate(item)
 				return t and type(t) == "number"
 			end
 			if not ct.state then
-				server.messageBox(mod, "Nie można użyć tego komponentu, ponieważ jest wyłączony.", {"OK"})
+				server.messageBox(mod, "Cannot use this component because it's disabled.", {"OK"})
 				return
 			elseif not (cn(ct.x) and cn(ct.y) and cn(ct.z)) then
-				server.messageBox(mod, "Wieżyczka musi mieć określone wszystkie współrzędne!", {"OK"})
+				server.messageBox(mod, "Turret must have all coordinates set!", {"OK"})
 				return
 			end
 			if name.text:len() == 0 then
@@ -725,7 +723,7 @@ local function turretTemplate(item)
 			ret.address = a
 			t:draw()
 		else
-			server.messageBox(mod, "Urządzenie o takim adresie zostało już dodane.", {"OK"})
+			server.messageBox(mod, "Device with such address has been already added.", {"OK"})
 		end
 	end
 	tmp = tgui:addLabel(20, 7, 38, ret.detector or "")
@@ -733,30 +731,30 @@ local function turretTemplate(item)
 		local a = server.componentDialog(mod, "os_entdetector")
 		if not a then return end
 		if #server.findComponents(mod, a) ~= 1 then
-			error("Wystąpiłbłąd w funkcji serwera: findComponents() > 1")
+			error("An error occurred int the findComponents() function (>1)")
 			return
 		end
 		t.text = a
 		ret.detector = a
 		t:draw()
 	end
-	tgui:addButton(12, 9, 14, 1, ret.upside and "odwrócona" or "normalna", function(t)
+	tgui:addButton(12, 9, 14, 1, ret.upside and "upside-down" or "normal", function(t)
 		if ret.upside then
 			ret.upside = false
-			t.text = "normalna"
+			t.text = "normal"
 		else
 			ret.upside = true
-			t.text = "odwrócona"
+			t.text = "upside-down"
 		end
 		t:draw()
 	end)
-	tgui:addButton(12, 11, 10, 1, ret.hidden and "tak" or "nie", function(t)
+	tgui:addButton(12, 11, 10, 1, ret.hidden and "yes" or "no", function(t)
 		if ret.hidden then
 			ret.hidden = false
-			t.text = "nie"
+			t.text = "no"
 		else
 			ret.hidden = true
-			t.text = "tak"
+			t.text = "yes"
 		end
 		t:draw()
 	end)
@@ -791,11 +789,11 @@ local function turretTemplate(item)
 		end
 	end
 	
-	tgui:addButton(48, 17, 14, 1, "Anuluj", function()
+	tgui:addButton(48, 17, 14, 1, "Cancel", function()
 		tgui:close()
 		ret = nil
 	end)
-	tgui:addButton(32, 17, 14, 1, "Zatwierdź", function()
+	tgui:addButton(32, 17, 14, 1, "Apply", function()
 		local n = name.text
 		local found = false
 		for _, t in pairs(turrets) do
@@ -805,17 +803,17 @@ local function turretTemplate(item)
 			end
 		end
 		if config.turretsState then
-			server.messageBox(mod, "Nie można zmodyfikować elementu, gdy wieżyczki są aktywne.", {"OK"})
+			server.messageBox(mod, "Cannot modify this element while turrets are active.", {"OK"})
 		elseif found and not item then
-			server.messageBox(mod, "Wybrana nazwa jest już zajęta.", {"OK"})
+			server.messageBox(mod, "Entered name is aleady occupied.", {"OK"})
 		elseif n:len() > 20 then
-			server.messageBox(mod, "Nazwa urządzenia nie może być dłuższa, niż 20 znaków.", {"OK"})
+			server.messageBox(mod, "Device name cannot be longer than 20 characters.", {"OK"})
 		elseif n:len() == 0 then
-			server.messageBox(mod, "Podaj nazwę dla urządzenia.", {"OK"})
+			server.messageBox(mod, "Enter device name.", {"OK"})
 		elseif not ret.address or ret.address:len() == 0 then
-			server.messageBox(mod, "Wybierz adres urządzenia", {"OK"})
+			server.messageBox(mod, "Choose device address.", {"OK"})
 		elseif not ret.detector or ret.detector:len() == 0 then
-			server.messageBox(mod, "Wybierz adres detektora", {"OK"})
+			server.messageBox(mod, "Choose entity detector address.", {"OK"})
 		else
 			ret.name = n
 			tgui:close()
@@ -828,7 +826,7 @@ end
 local function addTurret()
 	if #turrets < 12 then
 		if config.turretsState then
-			server.messageBox(mod, "Nie można dodać nowego elementu, gdy wieżyczki są aktywne.", {"OK"})
+			server.messageBox(mod, "Cannot add new element while turrets are active.", {"OK"})
 			return
 		end
 		local t = turretTemplate()
@@ -868,10 +866,10 @@ local function removeTurret()
 	local index = getIndex(lbox:getSelected())
 	if not index or not turrets[index] then return end
 	if config.turretsActive then
-		server.messageBox(mod, "Nie można usunąć elementu, gdy wieżyczki są aktywne.", {"OK"})
+		server.messageBox(mod, "Cannot remove this element while turrets are active.", {"OK"})
 		return
 	end
-	if server.messageBox(mod, "Czy na pewno chcesz usunąć zaznaczony element?", {"Tak", "Nie"}) == "Nie" then return end
+	if server.messageBox(mod, "Are you sure you want to remove the selected element?", {"Yes", "No"}) == "No" then return end
 	table.remove(turrets, index)
 	rebuildTable(turrets, lbox)
 	rebuildCache()
@@ -964,11 +962,11 @@ local function sensorTemplate(item)
 	
 	local sgui = gml.create("center", "center", 60, 19)
 	sgui.style = server.getStyle(mod)
-	sgui:addLabel("center", 1, 15, item and "Edycja sensora" or "Nowy sensor")
-	sgui:addLabel(2, 4, 7, "Nazwa:")
-	sgui:addLabel(2, 6, 7, "Adres:")
-	sgui:addLabel(2, 9, 19, "Akcje włączania:")
-	sgui:addLabel(32, 9, 19, "Akcje wyłączania:")
+	sgui:addLabel("center", 1, 15, item and "Edit a sensor" or "new sensor")
+	sgui:addLabel(2, 4, 7, "Name:")
+	sgui:addLabel(2, 6, 9, "Address:")
+	sgui:addLabel(2, 9, 19, "Enable actions:")
+	sgui:addLabel(32, 9, 19, "Disable actions:")
 	local name = sgui:addTextField(10, 4, 22)
 	name.text = ret.name or ""
 	local tmp = sgui:addLabel(10, 6, 38, ret.address or "")
@@ -985,12 +983,12 @@ local function sensorTemplate(item)
 		if not found then
 			local ct = server.findComponents(mod, a)
 			if #ct ~= 1 then
-				error("Wystąpił błąd w funkcji serwera: findComponents() > 1")
+				error("An error occurred in the findComponents() function (>1)")
 				return
 			end
 			ct = ct[1]
 			if not ct.state then
-				server.messageBox(mod, "Nie można użyć tego komponentu, ponieważ jest wyłączony.",{"OK"})
+				server.messageBox(mod, "Cannot use this compoennt, because it's disabled.",{"OK"})
 				return
 			end
 			if name.text:len() == 0 then
@@ -1001,7 +999,7 @@ local function sensorTemplate(item)
 			ret.address = a
 			t:draw()
 		else
-			server.messageBox(mod, "Urządzenie o takim adresie zostało już dodane.", {"OK"})
+			server.messageBox(mod, "Device with the same address has been alread added.", {"OK"})
 		end
 	end
 	for i = 1, 3 do
@@ -1024,11 +1022,11 @@ local function sensorTemplate(item)
 	end
 	refreshActions()
 	
-	sgui:addButton(42, 16, 14, 1, "Anuluj", function()
+	sgui:addButton(42, 16, 14, 1, "Cancel", function()
 		ret = nil
 		sgui:close()
 	end)
-	sgui:addButton(26, 16, 14, 1, "Zatwierdź", function()
+	sgui:addButton(26, 16, 14, 1, "Apply", function()
 		local n = name.text
 		local found = false
 		for _, t in pairs(sensors) do
@@ -1038,15 +1036,15 @@ local function sensorTemplate(item)
 			end
 		end
 		if config.sensorsState then
-			server.messageBox(mod, "Nie można zmodyfikować elementu, gdy sensory są aktywne.", {"OK"})
+			server.messageBox(mod, "Cannot modify this element while motion sensors are active.", {"OK"})
 		elseif found and not item then
-			server.messageBox(mod, "Urządzenie o takiej nazwie zostało już dodane.", {"OK"})
+			server.messageBox(mod, "Device with the same name has been already added.", {"OK"})
 		elseif n:len() == 0 then
-			server.messageBox(mod, "Wprowadź nazwę dla urządzenia.", {"OK"})
+			server.messageBox(mod, "Enter a device name.", {"OK"})
 		elseif n:len() > 20 then
-			server.messageBox(mod, "Długość nazwy nie może przekraczać 20 znaków.", {"OK"})
+			server.messageBox(mod, "Name cannot be longer than 20 characters.", {"OK"})
 		elseif ret.address:len() == 0 then
-			server.messageBox(mod, "Wybierz adres urządzenia.", {"OK"})
+			server.messageBox(mod, "Choose device address.", {"OK"})
 		else
 			ret.name = n
 			sgui:close()
@@ -1059,7 +1057,7 @@ end
 local function addSensor()
 	if #sensors < 12 then
 		if config.sensorsState then
-			server.messageBox(mod, "Nie można dodać elementu, gdy sensory są aktywne.", {"OK"})
+			server.messageBox(mod, "Cannot add element while sensors are active.", {"OK"})
 			return
 		end
 		local t = sensorTemplate()
@@ -1067,7 +1065,7 @@ local function addSensor()
 		table.insert(sensors, t)
 		rebuildTable(sensors, rbox)
 	else
-		server.messageBox(mod, "Dodano już maksymalną liczbę sensorów.", {"OK"})
+		server.messageBox(mod, "Sensor limit has been reached.", {"OK"})
 	end
 end
 
@@ -1096,10 +1094,10 @@ local function removeSensor()
 	local index = getIndex(rbox:getSelected())
 	if not index or not sensors[index] then return end
 	if config.sensorsState then
-		server.messageBox(mod, "Nie można usunąć elemenu, gdy sensory są aktywne.",{"OK"})
+		server.messageBox(mod, "Cannot remove this element while sensors are active.",{"OK"})
 		return
 	end
-	if server.messageBox(mod, "Czy na pewno chcesz usunąć zaznaczony element?", {"Tak", "Nie"}) == "Nie" then return end
+	if server.messageBox(mod, "Are you sure you want to remove the selected element?", {"Yes", "No"}) == "No" then return end
 	table.remove(sensors, index)
 	rebuildTable(sensors, rbox)
 end
@@ -1110,16 +1108,16 @@ local function settings()
 	ret.sensorsMode = config.sensorsMode
 	local sgui = gml.create("center", "center", 55, 22)
 	sgui.style = server.getStyle(mod)
-	sgui:addLabel("center", 1, 11, "Ustawienia")
-	sgui:addLabel(2, 4, 12, "Wieżyczki:")
-	sgui:addLabel(4, 6, 17, "Tryb wykrywania:")
-	sgui:addLabel(4, 7, 29, "Interwał skanowania[1-15s]:")
-	sgui:addLabel(4, 8, 38, "Czas aktywacji wieżyczek[0,15-180s]:")
-	sgui:addLabel(4, 9, 26, "Zasięg skanowania[5-20]:")
-	sgui:addLabel(2, 12, 10, "Sensory:")
-	sgui:addLabel(4, 14, 17, "Tryb wykrywania:")
-	sgui:addLabel(4, 15, 19, "Czułość[0.1-10]:")
-	sgui:addLabel(4, 16, 25, "Czas aktywacji[0,15-180s]:")
+	sgui:addLabel("center", 1, 11, "Settings")
+	sgui:addLabel(2, 4, 12, "Turrets:")
+	sgui:addLabel(4, 6, 17, "Target mode:")
+	sgui:addLabel(4, 7, 29, "Scan interval[1-15s]:")
+	sgui:addLabel(4, 8, 38, "Activation time[0,15-180s]:")
+	sgui:addLabel(4, 9, 26, "Scan range[5-20]:")
+	sgui:addLabel(2, 12, 15, "Motion sensors:")
+	sgui:addLabel(4, 14, 17, "Target mode:")
+	sgui:addLabel(4, 15, 21, "Sensitivity[0.1-10]:")
+	sgui:addLabel(4, 16, 28, "Activation time[0,15-180s]:")
 	
 	local tint = sgui:addTextField(44, 7, 5)
 	local ttim = sgui:addTextField(44, 8, 5)
@@ -1132,7 +1130,7 @@ local function settings()
 	ssen.text = tostring(config.sensitivity)
 	sact.text = tostring(config.sensorsActive)
 	
-	local names = {"wszystko", "biała lista", "czarna lista"}
+	local names = {"everything", "white list", "black list"}
 	sgui:addButton(24, 6, 14, 1, names[ret.turretsMode], function(t)
 		if ret.turretsMode < 3 then
 			ret.turretsMode = ret.turretsMode + 1
@@ -1152,10 +1150,10 @@ local function settings()
 		t:draw()
 	end)
 	
-	sgui:addButton(38, 19, 14, 1, "Anuluj", function() sgui:close() end)
-	sgui:addButton(22, 19, 14, 1, "Zatwierdź", function()
+	sgui:addButton(38, 19, 14, 1, "Cancel", function() sgui:close() end)
+	sgui:addButton(22, 19, 14, 1, "Apply", function()
 		if config.turretsState or config.sensorsState then
-			server.messageBox(mod, "Nie można zapisać ustawień, gdy wieżyczki lub sensory są włączone.", {"OK"})
+			server.messageBox(mod, "Cannot save settings while turrets or sensors are active.", {"OK"})
 			return
 		end
 		ret.delay = tonumber(tint.text)
@@ -1164,15 +1162,15 @@ local function settings()
 		ret.sensitivity = tonumber(ssen.text)
 		ret.sensorsActive = tonumber(sact.text)
 		if not ret.delay or ret.delay < 1 or ret.delay > 15 then
-			server.messageBox(mod, "Interwał skanowania musi być liczbą w zakresie od 1 do 15.", {"OK"})
+			server.messageBox(mod, "Scan interval must be a nubmer between 1 and 15.", {"OK"})
 		elseif not ret.turretsActive or (ret.turretsActive ~= 0 and (ret.turretsActive < 15 or ret.turretsActive > 180)) then
-			server.messageBox(mod, "Czas aktywacji wieżyczek musi być liczbą o wartości 0 lub w zakresie od 15 do 180.", {"OK"})
+			server.messageBox(mod, "Turrets activation time must be a number between 15 and 180 or 0.", {"OK"})
 		elseif not ret.range or ret.range < 5 or ret.range > 20 then
-			server.messageBox(mod, "Zasięg skanowania musi być liczbą w zakresie od 5 do 20.", {"OK"})
+			server.messageBox(mod, "Scan range must be a number between 5 and 20.", {"OK"})
 		elseif not ret.sensitivity or ret.sensitivity < 0.1 or ret.sensitivity > 10 then
-			server.messageBox(mod, "Czułość sensorów musi być liczbą w zakresie od 0.1 do 10.", {"OK"})
+			server.messageBox(mod, "Sensor sensitivity must be a number from 0.1 to 10.", {"OK"})
 		elseif not ret.sensorsActive or (ret.sensorsActive ~= 0 and (ret.sensorsActive < 15 or ret.sensorsActive > 180)) then
-			server.messageBox(mod, "Czas aktywacji sensorów musi być liczbą o wartości 0 lub w zakresie od 15 do 180.", {"OK"})
+			server.messageBox(mod, "Sensor activation time must be a number between 15 and 180 or 0.", {"OK"})
 		else
 			config.delay = ret.delay
 			config.turretsActive = ret.turretsActive
@@ -1191,7 +1189,7 @@ local function setTurretsMode(mode)
 	if mode < 0 or mode < 4 then
 		config.turretsMode = mode
 	else
-		server.call(mod, 5203, "Wartość trybu wykracza poza zakres.", "turrets", true)
+		server.call(mod, 5203, "Turret mode is outside a range.", "turrets", true)
 	end
 	
 end
@@ -1200,7 +1198,7 @@ local function setSensorsMode(mode)
 	if mode > 0 or mode < 4 then
 		config.sensorsMode = mode
 	else
-		server.call(mod, 5203, "Wartość trybu wykracza poza zakres.", "turrets", true)
+		server.call(mod, 5203, "Sensor mode is outside a range..", "turrets", true)
 	end
 end
 
@@ -1208,41 +1206,41 @@ local actions = {
 	[1] = {
 		name = "enableTurrets",
 		type = "TURRETS",
-		desc = "Włącza wieżyczki",
+		desc = "Enables turrets",
 		exec = enableTurrets
 	},
 	[2] = {
 		name = "disableTurrets",
 		type = "TURRETS",
-		desc = "Wyłącza wieżyczki",
+		desc = "Disabled turrets",
 		exec = disableTurrets
 	},
 	[3] = {
 		name = "enableSensors",
 		type = "TURRETS",
-		desc = "Włącza sensory",
+		desc = "Enables sensors",
 		exec = enableSensors
 	},
 	[4] = {
 		name = "disableSensors",
 		type = "TURRETS",
-		desc = "Wyłącza sensory",
+		desc = "Disables sensors",
 		exec = disableSensors
 	},
 	[5] = {
 		name = "setTurretsMode",
 		type = "TURRETS",
-		desc = "Ustawia tryb wieżyczek",
+		desc = "Sets turrets' mode",
 		p1type = "number",
-		p1desc = "tryb [1-3]",
+		p1desc = "mode [1-3]",
 		exec = setTurretsMode
 	},
 	[6] = {
 		name = "setSensorsMode",
 		type = "TURRETS",
-		desc = "Ustawia tryb sensorów",
+		desc = "Sets sensors' mode",
 		p1type = "number",
-		p1desc = "tryb [1-3]",
+		p1desc = "mode [1-3]",
 		exec = setSensorsMode
 	}
 }
@@ -1256,8 +1254,8 @@ mod.actions = actions
 
 mod.setUI = function(window)
 	window:addLabel("center", 1, 14, ">> TURRETS <<")
-	window:addLabel(3, 3, 12, "Wieżyczki:")
-	window:addLabel(36, 3, 9, "Sensory:")
+	window:addLabel(3, 3, 12, "Turrets:")
+	window:addLabel(36, 3, 9, "Sensors:")
 	
 	lbox = window:addListBox(3, 5, 30, 10, {})
 	lbox.onDoubleClick = modifyTurret
@@ -1274,22 +1272,22 @@ mod.setUI = function(window)
 	element[2] = window:addButton(52, 3, 14, 1, "", function(t)
 		if config.sensorsState then
 			disableSensors()
-			t.text = "wyłączone"
+			t.text = "disabled"
 		else
 			enableSensors()
-			t.text = "włączone"
+			t.text = "enabled"
 		end
 		t:draw()
 	end)
 	refreshView()
 	
-	window:addButton(3, 16, 14, 1, "Dodaj", addTurret)
-	window:addButton(19, 16, 14, 1, "Usuń", removeTurret)
-	window:addButton(3, 18, 16, 1, "Listy", turretsLists)
-	window:addButton(36, 16, 14, 1, "Dodaj", addSensor)
-	window:addButton(52, 16, 14, 1, "Usuń", removeSensor)
-	window:addButton(50, 18, 16, 1, "Listy", sensorsLists)
-	window:addButton(26, 18, 16, 1, "Ustawienia", settings)
+	window:addButton(3, 16, 14, 1, "Add", addTurret)
+	window:addButton(19, 16, 14, 1, "Remove", removeTurret)
+	window:addButton(3, 18, 16, 1, "Lists", turretsLists)
+	window:addButton(36, 16, 14, 1, "Add", addSensor)
+	window:addButton(52, 16, 14, 1, "Remove", removeSensor)
+	window:addButton(50, 18, 16, 1, "Lists", sensorsLists)
+	window:addButton(26, 18, 16, 1, "Settings", settings)
 	
 	rebuildTable(turrets, lbox)
 	rebuildTable(sensors, rbox)
@@ -1335,7 +1333,7 @@ mod.start = function(core)
 		if #f1 > 0 and #f2 > 0 then
 			openTurret(t.address)
 		else
-			server.log(mod, "TURRETS: Komponenty rekordu wieżyczki są niedostępne, usuwanie rekordu...")
+			server.log(mod, "TURRETS: Turret record's components are unavailable, removing...")
 			table.insert(removal, a)
 		end
 	end
@@ -1345,7 +1343,7 @@ mod.start = function(core)
 	for a_, t in pairs(sensors) do
 		local f1 = server.findComponents(mod, t.address)
 		if #f1 == 0 then
-			server.log(mod, "TURRETS: Komponent rekordu sensora jest niedostępny, usuwanie rekordu...")
+			server.log(mod, "TURRETS: Sensor record's components is unavailable, removing...")
 			table.insert(removal, a)
 		end
 	end

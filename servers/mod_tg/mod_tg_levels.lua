@@ -5,29 +5,26 @@
 -- ############################################
 
 --[[
-	## Opis programu ##
-		Program mod_tg_levels jest modułem używanym w serwerze the_guard (od wersji 2.0).
-		Pozwala na tworzenie poziomów bezpieczeństwa i odsługę alarmu.
-		Program wprowadza 3 poziomy bezpieczeństwa konfigurowane za pomocą akcji.
-		
-		Włączenie poziomu bezpieczeństwa powoduje wywołanie akcji do niego
-		przypisanych, poziom 0 jest domyślnym poziomem oznaczającym brak zagrożenia.
+	## Description ##
+		The mod_tg_levels program is a module used by the_guard server (since 2.0).
+		It allows to create and manage security levels. Each level can trigger multiple
+		actions when it's turned on or off. This module also supports alarm
+		blocks (from "OpenSecurity"). 
 		
 	## Akcje ##
-		- getLevel() - zwraca obecny poziom bezpieczeństwa
-		- setLevel(level:number) - ustawia nowy poziom bezpieczeństwa
-		- alarm(timeout:number[, level:number]) - aktywuje alarm; poziom alarmu oznacza używany dźwięk
-		- disableAlarm() - wyłącza wcześniej włączony alarm
+		- getLevel() - get current security level (from 0 to 3)
+		- setLevel(level:number) - sets new security level
+		- alarm(timeout:number[, level:number]) - activates alarm; level parameter indicates used sound
+		- disableAlarm() - deactivates alarm
 		
-	## Funkcje ##
-		* definiowanie do 3 poziomów bezpieczeństwa
-		* możliwość przypisania do 10 akcji podczas włączania danego poziomu
-		* możliwość przypisania do 10 akcji podczas wyłączania danego poziomu
-		* manualne włączanie alarmu
-		* ustawienie zasięgu alarmu
+	## Functions ##
+		* managing up to 3 security levels
+		* each level can trigger up to 10 actions when it's turned on or off
+		* manual alarm switching
+		* setting alarm range
 ]]
 
-local version = "1.0"
+local version = "1.1"
 local args = {...}
 
 if args[1] == "version_check" then return version end
@@ -54,7 +51,7 @@ end
 
 local function setLevel(new_level, internal)
 	if internal and config.ask then
-		if server.messageBox(mod, "Czy na pewno chcesz włączyć poziom " .. tostring(new_level) .. "?", {"Tak", "Nie"}) == "Nie" then return end
+		if server.messageBox(mod, "Are you sure you want to switch to level " .. tostring(new_level) .. "?", {"Yes", "No"}) == "No" then return end
 	end
 	for _, t in pairs(config[config.level].disable) do
 		server.call(mod, t.id, t.p1, t.p2, true)
@@ -63,7 +60,7 @@ local function setLevel(new_level, internal)
 		server.call(mod, t.id, t.p1, t.p2, true)
 	end
 	config.level = new_level
-	server.call(mod, 5201, "Włączono poziom " .. tostring(new_level), "LEVELS", true)
+	server.call(mod, 5201, "Switched to level " .. tostring(new_level), "LEVELS", true)
 	for i = 0, 3 do
 		indicator[i]:draw()
 	end
@@ -72,7 +69,7 @@ end
 local function disableAlarm(silent)
 	event.cancel(timerID or 0)
 	timerID = nil
-	lAlarm[1].text = "wyłączony"
+	lAlarm[1].text = "disabled"
 	lAlarm[1]:draw()
 	lAlarm[3].text = "0:00"
 	lAlarm[3]:draw()
@@ -88,7 +85,7 @@ local function disableAlarm(silent)
 		end
 	end
 	if not silent then
-		server.call(mod, 5201, "Alarm został wyłączony", "LEVELS", true)
+		server.call(mod, 5201, "Alarm has been disabled.", "LEVELS", true)
 	end
 end
 
@@ -103,15 +100,15 @@ end
 
 local function enableAlarm(timeout, l)
 	if type(timeout) ~= "number" or timeout > 300 or timeout < 3 then
-		server.call(mod, 5203, "Wprowadzono nieprawidłowy czas alarmu", "LEVELS", true)
+		server.call(mod, 5203, "Entered alarm time is incorrect.", "LEVELS", true)
 		return
 	end
 	local sound = l or config.alarmSound
 	if sound > 2 or sound < 1 then
-		server.call(mod, 5203, "Wprowadzono nieprawidłowy identyfikator dźwięku alarmu", "LEVELS", true)
+		server.call(mod, 5203, "Entered alarm sound ID is incorrect.", "LEVELS", true)
 		return
 	end
-	lAlarm[1].text = "włączony"
+	lAlarm[1].text = "enabled"
 	lAlarm[1]:draw()
 	lAlarm[4].text = "Stop"
 	lAlarm[4]:draw()
@@ -130,14 +127,14 @@ local function enableAlarm(timeout, l)
 			end
 		end
 	elseif not reenable then
-		server.call(mod, 5203, "Nie znaleziono żadnego komponentu alarmu!", "LEVELS", true)
+		server.call(mod, 5203, "No alarm block is connected!", "LEVELS", true)
 	end
 	if not reenable then
 		if timerID then
 			event.cancel(timerID)
 		end
 		timerID = event.timer(1, timerFunc, math.huge)
-		server.call(mod, 5201, "Alarm został włączony", "LEVELS", true)
+		server.call(mod, 5201, "Alarm has been turned on.", "LEVELS", true)
 	end
 end
 
@@ -222,16 +219,16 @@ local function levelSettings(level)
 	local lgui = gml.create("center", "center", 70, 25)
 	lgui.style = server.getStyle(mod)
 	lgui:addLabel("center", 1, 9, "POZIOM " .. tostring(level))
-	lgui:addLabel(2, 3, 15, "Nazwa poziomu:")
+	lgui:addLabel(2, 3, 15, "Level name:")
 	local name = lgui:addTextField(18, 3, 20)
 	name.text = config[level].name or ""
-	lgui:addLabel(4, 5, 17, "Akcje włączania")
-	lgui:addLabel(39, 5, 18, "Akcje wyłączania")
+	lgui:addLabel(4, 5, 17, "Enable actions")
+	lgui:addLabel(39, 5, 18, "Disable actions")
 	lbox = lgui:addListBox(2, 6, 30, 13, {})
 	lbox.onDoubleClick = function() details(true) end
 	rbox = lgui:addListBox(37, 6, 30, 13, {})
 	rbox.onDoubleClick = function() details(false) end
-	lgui:addButton(2, 20, 14, 1, "Dodaj", function()
+	lgui:addButton(2, 20, 14, 1, "Add", function()
 		if #config[level].enable < 11 then
 			local result = server.actionDialog(mod)
 			if result then
@@ -239,12 +236,12 @@ local function levelSettings(level)
 				refresh()
 			end
 		else
-			server.messageBox("Dodano już maksymalną ilość akcji", {"OK"})
+			server.messageBox("Action limit has been reached.", {"OK"})
 		end
 	end)
-	lgui:addButton(18, 20, 14, 1, "Usuń", function()
+	lgui:addButton(18, 20, 14, 1, "Remove", function()
 		if #lbox.list == 0 then return
-		elseif server.messageBox(mod, "Czy na pewno chcesz usunąć zaznaczony element?", {"Tak", "Nie"}) == "Nie" then return end
+		elseif server.messageBox(mod, "Are you sure you want to remove the selected element?", {"Yes", "No"}) == "No" then return end
 		local m1 = lbox:getSelected():match("^(.*) %(")
 		local m2 = lbox:getSelected():match("^%*(%d+)%*$")
 		if m1 then
@@ -261,7 +258,7 @@ local function levelSettings(level)
 			end
 		end
 	end)
-	lgui:addButton(37, 20, 14, 1, "Dodaj", function()
+	lgui:addButton(37, 20, 14, 1, "Add", function()
 		if #config[level].disable < 11 then
 			local result = server.actionDialog(mod)
 			if result then
@@ -269,12 +266,12 @@ local function levelSettings(level)
 				refresh()
 			end
 		else
-			server.messageBox("Dodano już maksymalnąilość akcji", {"OK"})
+			server.messageBox("Action limit has been reached.", {"OK"})
 		end
 	end)
-	lgui:addButton(53, 20, 14, 1, "Usuń", function()
+	lgui:addButton(53, 20, 14, 1, "Remove", function()
 		if #rbox.list == 0 then return
-		elseif server.messageBox(mod, "Czy na pewno chcesz usunąć zaznaczony element?", {"Tak", "Nie"}) == "Nie" then return end
+		elseif server.messageBox(mod, "Are you sure you want to remove the selected element?", {"Yes", "No"}) == "No" then return end
 		local m1 = rbox:getSelected():match("^(.*) %(")
 		local m2 = rbox:getSelected():match("^%*(%d+)%*$")
 		if m1 then
@@ -291,9 +288,9 @@ local function levelSettings(level)
 			end
 		end
 	end)
-	lgui:addButton(53, 23, 14, 1, "Zamknij", function()
+	lgui:addButton(53, 23, 14, 1, "Close", function()
 		if name.text:len() > 16 then
-			server.messageBox(mod, "Nazwa poziomu nie może być dłuższa, niż 16 znaków.", {"OK"})
+			server.messageBox(mod, "Level name cannot be longer than 16 characters.", {"OK"})
 			return
 		end
 		config[level].name = name.text
@@ -306,37 +303,37 @@ end
 local function settings()
 	local sgui = gml.create("center", "center", 40, 19)
 	sgui.style = server.getStyle(mod)
-	sgui:addLabel("center", 1, 11, "USTAWIENIA")
-	sgui:addLabel(2, 3, 7, "Opcje:")
-	sgui:addLabel(4, 4, 9, "Zasięg:")
-	sgui:addLabel(4, 5, 23, "Pytaj o potwierdzenie:")
-	sgui:addLabel(2, 7, 9, "Poziomy:")
+	sgui:addLabel("center", 1, 11, "SETTINGS")
+	sgui:addLabel(2, 3, 9, "Options:")
+	sgui:addLabel(4, 4, 9, "Range:")
+	sgui:addLabel(4, 5, 23, "Ask for confirmation:")
+	sgui:addLabel(2, 7, 9, "Levels:")
 	
 	local tRange = sgui:addTextField(14, 4, 6)
 	tRange.text = tostring(config.range)
 	local ask = sgui:addButton(28, 5, 8, 1, "", function(t)
 		if t.status then
 			t.status = false
-			t.text = "nie"
+			t.text = "no"
 		else
 			t.status = true
-			t.text = "tak"
+			t.text = "yes"
 		end
 		t:draw()
 	end)
 	ask.status = config.ask
-	ask.text = config.ask and "tak" or "nie"
+	ask.text = config.ask and "yes" or "no"
 	
 	sgui:addButton(4, 8, 12, 1, "> 0 <", function() levelSettings(0) end)
 	sgui:addButton(4, 10, 12, 1, "> 1 <", function() levelSettings(1) end)
 	sgui:addButton(4, 12, 12, 1, "> 2 <", function() levelSettings(2) end)
 	sgui:addButton(4, 14, 12, 1, "> 3 <", function() levelSettings(3) end)
 	
-	sgui:addButton(24, 16, 14, 1, "Anuluj", function() sgui:close() end)
-	sgui:addButton(9, 16, 14, 1, "Zatwierdź", function()
+	sgui:addButton(24, 16, 14, 1, "Cancel", function() sgui:close() end)
+	sgui:addButton(9, 16, 14, 1, "Apply", function()
 		local r = tonumber(tRange.text)
 		if not r or r > 150 or r < 15 then
-			server.messageBox(mod, "Zasięg musi być liczbą w zakresie 15-150", {"OK"})
+			server.messageBox(mod, "Range must be a number from 15 to 150.", {"OK"})
 		else
 			config.range = r
 			config.ask = ask.status
@@ -361,38 +358,38 @@ local function synchronize()
 			amount = amount + 1
 		end
 	end
-	server.call(mod, 5201, "Synchronizacja zakończona. Zsynchronizowano " .. tostring(amount) .. " alarmy/ów", "LEVELS", true)
+	server.call(mod, 5201, "Synchronization complete. Synchronized " .. tostring(amount) .. " alarm(s).", "LEVELS", true)
 end
 
 local actions = {
 	[1] = {
 		name = "getLevel",
 		type = "LEVEL",
-		desc = "Aktualny poziom bezpieczeństwa",
+		desc = "Returns current security level",
 		exec = getLevel
 	},
 	[2] = {
 		name = "setLevel",
 		type = "LEVEL",
-		desc = "Ustawia poziom bezpieczeństwa",
+		desc = "Sets new security level",
 		p1type = "number",
-		p1desc = "numer poziomu bezpieczeństwa (0-3)",
+		p1desc = "security level number (0-3)",
 		exec = setLevel
 	},
 	[3] = {
 		name = "alarm",
 		type = "LEVEL",
-		desc = "Włącza alarm",
+		desc = "Enables alarm",
 		p1type = "number",
 		p2type = "number",
-		p1desc = "czas alarmu (3-300)",
-		p2desc = "dźwięk alarmu (1-2)",
+		p1desc = "alarm duration (3-300)",
+		p2desc = "alarm sound id (1-2)",
 		exec = enableAlarm
 	},
 	[4] = {
 		name = "disableAlarm",
 		type = "LEVEL",
-		desc = "Wyłącza alarm",
+		desc = "Disables alarm",
 		exec = disableAlarm
 	}
 }
@@ -410,17 +407,17 @@ mod.setUI = function(window)
 	window:addButton(6, 8, 30, 3, "> 2." .. (config[2].name and config[2].name:sub(1, 16) or "") .. " <", function() setLevel(2, true) end)
 	window:addButton(6, 12, 30, 3, "> 1." .. (config[1].name and config[1].name:sub(1, 16) or "") .. " <", function() setLevel(1, true) end)
 	window:addButton(6, 16, 30, 3, "> 0.".. (config[0].name and config[0].name:sub(1, 16) or "") .. " <", function() setLevel(0, true) end)
-	window:addButton(42, 16, 18, 1, "Ustawienia", settings)
-	window:addButton(42, 18, 18, 1, "Synchronizacja", synchronize)
+	window:addButton(42, 16, 18, 1, "Settings", settings)
+	window:addButton(42, 18, 18, 1, "Synchronize", synchronize)
 	
 	window:addLabel(48, 4, 6, "ALARM")
 	window:addLabel(42, 6, 8, "Status:")
 	lAlarm[1] = window:addLabel(51, 6, 11, "")
-	lAlarm[1].text = config.alarm and "włączony" or "wyłączony"
-	window:addLabel(42, 7, 6, "Czas:")
+	lAlarm[1].text = config.alarm and "enabled" or "disabled"
+	window:addLabel(42, 7, 6, "Time:")
 	lAlarm[2] = window:addTextField(49, 7, 5)
 	lAlarm[2].text = tostring(config.alarmTime)
-	window:addLabel(42, 8, 9, "Dźwięk:")
+	window:addLabel(42, 8, 9, "Sound:")
 	window:addButton(52, 8, 8, 1, tostring(config.alarmSound), function(t)
 		if config.alarmSound == 1 then
 			config.alarmSound = 2
@@ -431,13 +428,13 @@ mod.setUI = function(window)
 		end
 		t:draw()
 	end)
-	window:addLabel(42, 11, 17, "Pozostały czas:")
+	window:addLabel(42, 11, 17, "Remaining time:")
 	lAlarm[3] = window:addLabel(60, 11, 5, config.alarm and string.format("%d:%02d", config.alarm / 300, config.alarm % 300) or "")
 	lAlarm[4] = window:addButton(42, 9, 10, 1, "", function(t)
 		if not config.alarm then
 			local newtime = tonumber(lAlarm[2].text)
 			if not newtime or newtime > 300 or newtime < 3 then
-				server.messageBox(mod, "Czas alarmu musi być liczbą w zakresie 3-300 sekund.", {"OK"})
+				server.messageBox(mod, "Alarm time must be a number between 3 and 300 seconds.", {"OK"})
 				return
 			end
 			enableAlarm(newtime)

@@ -1,27 +1,27 @@
 -- ############################################
 -- #				mod_tg_logs				  #
 -- #										  #
--- #  03.2016					by:IlynPayne  #
+-- #  03.2016			   by:Dominik Rzepka  #
 -- ############################################
 
 --[[
-	## Opis programu ##
-		Program mod_tg_logs jest modułem używanym w serwerze the_guard (od wersji 2.0).
-		Pozwala na tworzenie i zarządzanie logami systemowymi.
+	## Description ##
+		The mod_tg_logs program is a module used by the_guard server (since 2.0).
+		It allows to create and manage action-driven logs.
 		
-	## Akcje ##
-		- logInfo(text:string, source:string) - log informacyjny
-		- logWarning(text:string, source:string) - log ostrzegawczy
-		- logError(text:string, source:string) - log sygnalizujący błąd
-		- logSevere(text:string, source:string) - log oznaczający poważny błąd
+	## Actions ##
+		- logInfo(text:string, source:string) - information log
+		- logWarning(text:string, source:string) - warning log
+		- logError(text:string, source:string) - error log
+		- logSevere(text:string, source:string) - severe error log
 		- logDebug(text:string, source:string) - debug log
 		
-	## Funkcje ##
-		* otwieranie większego okna logów
-		* ustawianie rozmiaru bufora
-		* określanie maksymalnej wielkości pliku
+	## Functions ##
+		* managing action-driven logs
+		* opening detailed log view
+		* adjustable buffer size
 ]]
-local version = "1.0"
+local version = "1.1"
 local args = {...}
 
 if args[1] == "version_check" then return version end
@@ -64,16 +64,16 @@ local levels = {
 }
 
 local formats = {
-	[1] = {"normal", function(time, level, title, text) -- 12:04 DEBUG: tytuł/tekst
+	[1] = {"normal", function(time, level, title, text) -- 12:04 DEBUG: title/text
 		return time .. " " .. levels[level].title .. ": " .. title .. "/" .. text
 	end},
-	[2] = {"short", function(time, level, title, text) -- 12:04 D: tytuł/tekst
+	[2] = {"short", function(time, level, title, text) -- 12:04 D: title/text
 		return time .. " " .. string.sub(levels[level].title, 1, 1) .. ": " .. title .. "/" .. text
 	end},
-	[3] = {"square", function(time, level, title, text) -- 12:04[D] >tytuł<  tekst
+	[3] = {"square", function(time, level, title, text) -- 12:04[D] >title<  text
 		return time .. "[" .. string.sub(levels[level].title, 1, 1) .. "] >" .. title .. "<  " .. text
 	end},
-	[4] = {"pretty", function(time, level, title, text) -- 12:04 /D >> tytuł | tekst
+	[4] = {"pretty", function(time, level, title, text) -- 12:04 /D >> title | text
 		return time .. " /" .. string.sub(levels[level].title, 1, 1) .. " >> " .. title .. " | " .. text
 	end}
 }
@@ -104,7 +104,7 @@ local function flushLog()
 		file:write(text)
 		file:close()
 	else
-		server.log("nie udało się zapisać logów: " .. e)
+		server.log("log file couldn't be saved: " .. e)
 	end
 	buffer = {}
 end
@@ -156,51 +156,51 @@ local actions = {
 	[1] = {
 		name = "logInfo",
 		type = "LOG",
-		desc = "Log informacyjny",
+		desc = "Information log",
 		p1type = "string",
 		p2type = "string",
-		p1desc = "treść logu",
-		p2desc = "źródło logu",
+		p1desc = "log content",
+		p2desc = "log source",
 		exec = logInfo
 	},
 	[2] = {
 		name = "logWarning",
 		type = "LOG",
-		desc = "Log ostrzegawczy",
+		desc = "Warning log",
 		p1type = "string",
 		p2type = "string",
-		p1desc = "treść logu",
-		p2desc = "źródło logu",
+		p1desc = "log content",
+		p2desc = "log source",
 		exec = logWarning
 	},
 	[3] = {
 		name = "logError",
 		type = "LOG",
-		desc = "Log sygnalizujący błąd",
+		desc = "Error log",
 		p1type = "string",
 		p2type = "string",
-		p1desc = "treść logu",
-		p2desc = "źródło logu",
+		p1desc = "log content",
+		p2desc = "log source",
 		exec = logError
 	},
 	[4] = {
 		name = "logSevere",
 		type = "LOG",
-		desc = "Log oznaczający poważny błąd",
+		desc = "Severe error log",
 		p1type = "string",
 		p2type = "string",
-		p1desc = "treść logu",
-		p2desc = "źródło logu",
+		p1desc = "log content",
+		p2desc = "log source",
 		exec = logSevere
 	},
 	[5] = {
 		name = "logDebug",
 		type = "LOG",
-		desc = "DebugLog",
+		desc = "Debug log",
 		p1type = "string",
 		p2type = "string",
-		p1desc = "treść logu",
-		p2desc = "źródło logu",
+		p1desc = "log content",
+		p2desc = "log source",
 		exec = logDebug,
 		hidden = true
 	}
@@ -210,24 +210,24 @@ local actions = {
 local function settings()
 	local sgui = gml.create("center", "center", 55, 11)
 	sgui.style = server.getStyle(mod)
-	sgui:addLabel("center", 1, 11, "Ustawienia")
-	local bl = sgui:addLabel(2, 4, 40, "Maksymalny rozmiar bufora [B](10~120):")
+	sgui:addLabel("center", 1, 11, "Settings")
+	local bl = sgui:addLabel(2, 4, 40, "Maximum buffer size [B](10~120):")
 	bl.hidden = config.nofile
 	local bf = sgui:addTextField(43, 4, 10)
 	bf.hidden = config.nofile
 	bf.visible = false
 	bf.text = tostring(config.buffer)
-	local fl = sgui:addLabel(2, 5, 38, "Maksymalny rozmiar pliku [kB](2~50):")
+	local fl = sgui:addLabel(2, 5, 38, "Maximum log file size [kB](2~50):")
 	fl.hidden = config.nofile
 	local ff = sgui:addTextField(43, 5, 10)
 	ff.hidden = config.nofile
 	ff.visible = false
 	ff.text = tostring(config.file)
-	sgui:addLabel(2, 3, 22, "Zapisuj log do pliku:")
-	local button = sgui:addButton(24, 3, 10, 1, config.nosave and "NIE" or "TAK", function(t)
+	sgui:addLabel(2, 3, 22, "Save log to file:")
+	local button = sgui:addButton(24, 3, 10, 1, config.nosave and "NO" or "YES", function(t)
 		t.status = not t.status
 		if t.status then
-			t.text = "NIE"
+			t.text = "NO"
 			bl:hide()
 			bf.visible = true
 			bf:hide()
@@ -235,7 +235,7 @@ local function settings()
 			ff.visible = true
 			ff:hide()
 		else
-			t.text = "TAK"
+			t.text = "YES"
 			bf.text = tostring(config.buffer)
 			ff.text = tostring(config.file)
 			bl:show()
@@ -246,14 +246,14 @@ local function settings()
 		t:draw()
 	end)
 	button.status = config.nosave
-	sgui:addLabel(2, 7, 13, "Styl logów:")
+	sgui:addLabel(2, 7, 13, "Log style:")
 	local example = sgui:addLabel(4, 8, 30, "")
 	local exbutton = nil
 	local function refreshEx()
 		if exbutton.status > #formats then exbutton.status = 1 end
 		if formats[exbutton.status] then
 			exbutton.text = formats[exbutton.status][1]
-			example.text = formats[exbutton.status][2](os.date():sub(-8), 5, "tytuł", "tekst")
+			example.text = formats[exbutton.status][2](os.date():sub(-8), 5, "title", "text")
 		else
 			example.text = "ERROR"
 		end
@@ -266,14 +266,14 @@ local function settings()
 	end)
 	exbutton.status = config.form
 	refreshEx()
-	sgui:addButton(39, 9, 14, 1, "Anuluj", function() sgui:close() end)
+	sgui:addButton(39, 9, 14, 1, "Cancel", function() sgui:close() end)
 	sgui:addButton(23, 9, 14, 1, "OK", function()
 		local b = tonumber(bf.text)
 		local f = tonumber(ff.text)
 		if not b or b > 120 or b < 10 then
-			server.messageBox(mod, "Rozmiar bufora jest niepoprawny", {"OK"})
+			server.messageBox(mod, "Buffer size is incorrect.", {"OK"})
 		elseif not f or f > 50 or f < 2 then
-			server.messageBox(mod, "rozmiar pliku jest niepoprawny", {"OK"})
+			server.messageBox(mod, "Log file size is incorrect.", {"OK"})
 		else
 			config.form = exbutton.status
 			config.nosave = button.status
@@ -304,19 +304,19 @@ local function logDetails(l)
 	local dgui = gml.create("center", "center", 110, 8)
 	dgui.style = server.getStyle(mod)
 	dgui:addLabel(2, 3, 104, text:sub(1, 102))
-	dgui:addButton(94, 6, 14, 1, "Zamknij", function() dgui:close() end)
+	dgui:addButton(94, 6, 14, 1, "Close", function() dgui:close() end)
 	dgui:run()
 end
 
 local function bigLogs()
 	local bgui = gml.create("center", "center", 90, 28)
 	bgui.style = server.getStyle(mod)
-	bgui:addLabel("center", 1, 5, "LOGI")
+	bgui:addLabel("center", 1, 5, "LOGS")
 	local l = bgui:addListBox(2, 3, 84, 20, {})
 	l.onDoubleClick = function() logDetails(l) end
 	refreshList(l)
-	bgui:addButton(74, 26, 14, 1, "Zamknij", function() bgui:close() end)
-	bgui:addButton(58, 26, 14, 1, "Odśwież", function() refreshList(l) end)
+	bgui:addButton(74, 26, 14, 1, "Close", function() bgui:close() end)
+	bgui:addButton(58, 26, 14, 1, "Refresh", function() refreshList(l) end)
 	bgui:run()
 end
 
@@ -334,8 +334,8 @@ mod.setUI = function(window)
 	window:addLabel(142, 1, 11, ">> LOGS <<")
 	logbox = window:addListBox(1, 1, 135, 8, list)
 	logbox.onDoubleClick = function() logDetails(logbox) end
-	window:addButton(140, 4, 16, 1, "Ustawienia", settings)
-	window:addButton(140, 6, 16, 1, "Okno logów", bigLogs)
+	window:addButton(140, 4, 16, 1, "Settings", settings)
+	window:addButton(140, 6, 16, 1, "Log window", bigLogs)
 end
 
 mod.start = function(core)
