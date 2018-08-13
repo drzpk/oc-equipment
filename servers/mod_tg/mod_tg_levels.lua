@@ -218,7 +218,7 @@ local function levelSettings(level)
 	
 	local lgui = gml.create("center", "center", 70, 25)
 	lgui.style = server.getStyle(mod)
-	lgui:addLabel("center", 1, 9, "POZIOM " .. tostring(level))
+	lgui:addLabel("center", 1, 9, "LEVEL " .. tostring(level))
 	lgui:addLabel(2, 3, 15, "Level name:")
 	local name = lgui:addTextField(18, 3, 20)
 	name.text = config[level].name or ""
@@ -345,8 +345,8 @@ end
 
 local function synchronize()
 	local amount = 0
-	for address, _ in component.list("os_alarm") do
-		local proxy = component.proxy(address)
+	for _, c in pairs(server.getComponentList(mod, "os_alarm")) do
+		local proxy = component.proxy(c.address)
 		if proxy then
 			proxy.setAlarm(alarms[config.alarmSound])
 			proxy.setRange(config.range)
@@ -397,7 +397,7 @@ local actions = {
 mod.name = "levels"
 mod.version = version
 mod.id = 11
-mod.apiLevel = 2
+mod.apiLevel = 3
 mod.shape = "normal"
 mod.actions = actions
 

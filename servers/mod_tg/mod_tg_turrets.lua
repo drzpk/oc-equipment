@@ -58,8 +58,8 @@
 		turrets: { - energy turrets (modules/turrets/turrets.dat)
 			{
 				name:string - turret name
-				address:string - address
-				detector:string - detector address
+				uid:string - turret component uid
+				detectorUid:string - entity detector uid
 				upside:boolean - whether turret is upside down
 				hidden:boolean - whether turret is hidden in blocks (shaft length purposes)
 				walls: { - walls around turret
@@ -77,7 +77,7 @@
 		sensors: { - motion sensors (modules/turrets/sensors.dat)
 			{
 				name:string - sensor name
-				address:string - address
+				uid:string - sensor component uid
 				enable { - enable actions
 					{
 						id:number - action id
@@ -98,7 +98,7 @@
 			...
 		}
 		
-		lists: { - target lists (plik modules/turrets/lists.dat)
+		lists: { - target lists (modules/turrets/lists.dat)
 			turrets: {
 				black: {
 					[1]:string - object name
@@ -179,7 +179,6 @@ local excluded = { -- elements (unlocalized names) excluded from entity detector
 local targetHeight = 0.75 -- target height
 local attemptDelay = 0.2 -- interval between turret fire attempts
 local maxAttempts = 4 -- maximum number of fire attempts
-local turretHeight = 0.38
 
 
 local lbox, rbox, element = nil, nil, {}
@@ -210,6 +209,34 @@ local function decrypt(d)
 		end
 	end
 	return nil
+end
+
+local function syncTurrets()
+	for _, c in pairs(turrets) do
+		local sync = server.getComponent(mod, c.uid, true)
+		local sync2 = server.getComponent(mod, c.detectorUid, true)
+		if sync then
+			c.missing = false
+			c.address = sync.address
+		else
+			c.missing = true
+		end
+		if sync2 then
+			c.detector = sync2.address
+		end
+	end
+end
+
+local function syncSensors()
+	for _, c in pairs(sensors) do
+		local sync = server.getComponent(mod, c.uid)
+		if sync then
+			c.missing = false
+			c.address = sync.address
+		else
+			c.missing = true
+		end
+	end
 end
 
 local function saveData()
@@ -373,12 +400,9 @@ local function calcValues(turret, target)
 	local b = (turret.z + 0.5) - target.z
 	local c = math.sqrt(a * a + b * b)
 	local angle = math.floor(math.atan2(a, b) * 180 / math.pi * 10) / 10
-	local h = (target.y + targetHeight) - (turret.y + (turret.upside and 1 or 0))
-	if turret.hidden and turret.upside then
-		h = h - turretHeight
-	elseif turret.hidden then
-		h = h + turretHeight
-	end
+	local h = target.y + targetHeight
+	local dh = turret.hidden and 1.375 or 1
+	h = h - turret.y - (turret.upside and -dh or dh)
 	local pitch = math.floor(math.atan(h / c) * 180 / math.pi * 10) / 10
 	return angle, pitch
 end
@@ -680,31 +704,36 @@ local function turretTemplate(item)
 	tgui.style = server.getStyle(mod)
 	tgui:addLabel("center", 1, 18, item and "Edit a turret" or "New turret")
 	tgui:addLabel(2, 4, 7, "Name:")
-	tgui:addLabel(2, 6, 7, "Address:")
-	tgui:addLabel(2, 7, 17, "Detector address:")
+	local uidLabel = tgui:addLabel(2, 6, 7, "UID:")
+	local detectorLabel = tgui:addLabel(2, 7, 17, "Detector UID:")
 	tgui:addLabel(2, 9, 9, "Position:")
 	tgui:addLabel(2, 11, 9, "Hidden:")
 	tgui:addLabel(2, 13, 12, "Walls:")
 	local name = tgui:addTextField(10, 4, 24)
 	name.text = item and item.name or ""
-	local tmp = tgui:addLabel(10, 6, 38, item and item.address or "")
-	tmp.onDoubleClick = function(t)
+
+	local uid = tgui:addLabel(10, 6, 38, item and item.uid or "")
+	local comp = server.getComponent(mod, item.uid)
+	if comp then
+		uid.text = item.uid .. "  (" .. comp.name .. ")"
+	end
+
+	local function uidSelector()
 		local a = server.componentDialog(mod, "os_energyturret")
 		if not a then return end
 		local found = false
 		for _, b in pairs(turrets) do
-			if b.address == a then
+			if b.uid == a then
 				found = true
 				break
 			end
 		end
 		if not found then
-			local ct = server.findComponents(mod, a)
-			if #ct ~= 1 then
-				error("An error occurred in the findComponents() function (>1).")
+			local ct = server.getComponent(mod, a)
+			if not ct then
+				error("An error occurred in the getComponent() function (nil).")
 				return
 			end
-			ct = ct[1]
 			local function cn(t)
 				return t and type(t) == "number"
 			end
@@ -719,25 +748,37 @@ local function turretTemplate(item)
 				name.text = ct.name:sub(1, 20)
 				name:draw()
 			end
-			t.text = a
-			ret.address = a
-			t:draw()
+			uid.text = a .. "  (" .. ct.name .. ")"
+			ret.uid = a
+			uid:draw()
 		else
 			server.messageBox(mod, "Device with such address has been already added.", {"OK"})
 		end
 	end
-	tmp = tgui:addLabel(20, 7, 38, ret.detector or "")
-	tmp.onDoubleClick = function(t)
+	uid.onDoubleClick = uidSelector
+	uidLabel.onDoubleClick = uidSelector
+
+	local detector = tgui:addLabel(20, 7, 38, ret and ret.detectorUid or "")
+	comp = server.getComponent(mod, ret.detectorUid)
+	if comp then
+		detector.text = ret.detectorUid .. "  (" .. comp.name .. ")"
+	end
+
+	local function detectorSelector()
 		local a = server.componentDialog(mod, "os_entdetector")
 		if not a then return end
-		if #server.findComponents(mod, a) ~= 1 then
-			error("An error occurred int the findComponents() function (>1)")
+		local dt = server.getComponent(mod, a)
+		if not dt then
+			error("An error occurred int the getComponent() function (nil)")
 			return
 		end
-		t.text = a
-		ret.detector = a
-		t:draw()
+		detector.text = a .. "  (" .. dt.name .. ")"
+		ret.detectorUid = a
+		detector:draw()
 	end
+	detector.onDoubleClick = detectorSelector
+	detectorLabel.onDoubleClick = detectorSelector
+
 	tgui:addButton(12, 9, 14, 1, ret.upside and "upside-down" or "normal", function(t)
 		if ret.upside then
 			ret.upside = false
@@ -810,10 +851,10 @@ local function turretTemplate(item)
 			server.messageBox(mod, "Device name cannot be longer than 20 characters.", {"OK"})
 		elseif n:len() == 0 then
 			server.messageBox(mod, "Enter device name.", {"OK"})
-		elseif not ret.address or ret.address:len() == 0 then
-			server.messageBox(mod, "Choose device address.", {"OK"})
-		elseif not ret.detector or ret.detector:len() == 0 then
-			server.messageBox(mod, "Choose entity detector address.", {"OK"})
+		elseif not ret.uid or ret.uid:len() == 0 then
+			server.messageBox(mod, "Choose device UID.", {"OK"})
+		elseif not ret.detectorUid or ret.detectorUid:len() == 0 then
+			server.messageBox(mod, "Choose entity detector UID.", {"OK"})
 		else
 			ret.name = n
 			tgui:close()
@@ -834,9 +875,10 @@ local function addTurret()
 		table.insert(turrets, t)
 		openTurret(t.address)
 		rebuildTable(turrets, lbox)
+		syncTurrets()
 		rebuildCache()
 	else
-		server.messageBox(mod, "Dodano już maksymalną liczbę wieżyczek.", {"OK"})
+		server.messageBox(mod, "Turret limit has been reached.", {"OK"})
 	end
 end
 
@@ -859,6 +901,7 @@ local function modifyTurret()
 	if not ret then return end
 	turrets[i] = ret
 	rebuildTable(turrets, lbox)
+	syncTurrets()
 	rebuildCache()
 end
 
@@ -962,31 +1005,31 @@ local function sensorTemplate(item)
 	
 	local sgui = gml.create("center", "center", 60, 19)
 	sgui.style = server.getStyle(mod)
-	sgui:addLabel("center", 1, 15, item and "Edit a sensor" or "new sensor")
+	sgui:addLabel("center", 1, 13, item and "Edit a sensor" or "New sensor")
 	sgui:addLabel(2, 4, 7, "Name:")
-	sgui:addLabel(2, 6, 9, "Address:")
+	local uidLabel = sgui:addLabel(2, 6, 9, "UID:")
 	sgui:addLabel(2, 9, 19, "Enable actions:")
 	sgui:addLabel(32, 9, 19, "Disable actions:")
 	local name = sgui:addTextField(10, 4, 22)
 	name.text = ret.name or ""
-	local tmp = sgui:addLabel(10, 6, 38, ret.address or "")
-	tmp.onDoubleClick = function(t)
+
+	local uid = sgui:addLabel(10, 6, 38, ret.uid or "")
+	local function uidSelector()
 		local a = server.componentDialog(mod, "motion_sensor")
 		if not a then return end
 		local found = false
 		for _, b in pairs(sensors) do
-			if b.address == a then
+			if b.uid == a then
 				found = true
 				break
 			end
 		end
 		if not found then
-			local ct = server.findComponents(mod, a)
-			if #ct ~= 1 then
-				error("An error occurred in the findComponents() function (>1)")
+			local ct = server.getComponent(mod, a)
+			if not ct then
+				error("An error occurred in the getComponent() function (nil)")
 				return
 			end
-			ct = ct[1]
 			if not ct.state then
 				server.messageBox(mod, "Cannot use this compoennt, because it's disabled.",{"OK"})
 				return
@@ -995,13 +1038,16 @@ local function sensorTemplate(item)
 				name.text = ct.name:sub(1, 20)
 				name:draw()
 			end
-			t.text = a
-			ret.address = a
-			t:draw()
+			uid.text = a .. "  (" .. ct.name .. ")"
+			ret.uid = a
+			uid:draw()
 		else
 			server.messageBox(mod, "Device with the same address has been alread added.", {"OK"})
 		end
 	end
+	uid.onDoubleClick = uidSelector
+	uidLabel.onDoubleClick = uidSelector
+
 	for i = 1, 3 do
 		local tmp1 = sgui:addLabel(4, 10 + i, 3, tostring(i).. ".")
 		act[i] = sgui:addLabel(8, 10 + i, 22, string.rep("a", 22))
@@ -1043,8 +1089,8 @@ local function sensorTemplate(item)
 			server.messageBox(mod, "Enter a device name.", {"OK"})
 		elseif n:len() > 20 then
 			server.messageBox(mod, "Name cannot be longer than 20 characters.", {"OK"})
-		elseif ret.address:len() == 0 then
-			server.messageBox(mod, "Choose device address.", {"OK"})
+		elseif not ret.uid then
+			server.messageBox(mod, "Choose device UID.", {"OK"})
 		else
 			ret.name = n
 			sgui:close()
@@ -1064,6 +1110,7 @@ local function addSensor()
 		if not t then return end
 		table.insert(sensors, t)
 		rebuildTable(sensors, rbox)
+		syncSensors()
 	else
 		server.messageBox(mod, "Sensor limit has been reached.", {"OK"})
 	end
@@ -1088,6 +1135,7 @@ local function modifySensor()
 	if not ret then return end
 	sensors[i] = ret
 	rebuildTable(sensors, rbox)
+	syncSensors()
 end
 
 local function removeSensor()
@@ -1122,8 +1170,8 @@ local function settings()
 	local tint = sgui:addTextField(44, 7, 5)
 	local ttim = sgui:addTextField(44, 8, 5)
 	local tran = sgui:addTextField(44, 9, 5)
-	local ssen = sgui:addTextField(31, 15, 5)
-	local sact = sgui:addTextField(31, 16, 5)
+	local ssen = sgui:addTextField(44, 15, 5)
+	local sact = sgui:addTextField(44, 16, 5)
 	tint.text = tostring(config.delay)
 	ttim.text = tostring(config.turretsActive)
 	tran.text = tostring(config.range)
@@ -1248,7 +1296,7 @@ local actions = {
 mod.name = "turrets"
 mod.version = version
 mod.id = 36
-mod.apiLevel = 2
+mod.apiLevel = 3
 mod.shape = "normal"
 mod.actions = actions
 
@@ -1323,6 +1371,9 @@ mod.start = function(core)
 	end
 	
 	loadData()
+	syncTurrets()
+	syncSensors()
+
 	server.registerEvent(mod, "component_added")
 	server.registerEvent(mod, "component_removed")
 	
@@ -1343,14 +1394,14 @@ mod.start = function(core)
 	for a_, t in pairs(sensors) do
 		local f1 = server.findComponents(mod, t.address)
 		if #f1 == 0 then
-			server.log(mod, "TURRETS: Sensor record's components is unavailable, removing...")
+			server.log(mod, "TURRETS: Sensor record's components are unavailable, removing...")
 			table.insert(removal, a)
 		end
 	end
 	table.sort(removal, function(a, b) return a > b end)
 	for _, b in pairs(removal) do table.remove(sensors, b) end
 	refreshSensors()
-	
+
 	rebuildCache()
 	if config.turretsState then enableTurrets() end
 	if config.sensorsState then enableSensors() end
@@ -1421,9 +1472,19 @@ mod.pullEvent = function(...)
 			tab.active = nil
 		end)
 	elseif e[1] == "components_changed" then
-		rebuildCache()
+		if e[2] == "os_energyturret" or e[2] == "os_entdetector" then
+			syncTurrets()
+			rebuildCache()
+		elseif e[2] == "motion_sensor" then
+			syncSensors()
+		elseif e[2] == nil then
+			syncTurrets()
+			syncSensors()
+			rebuildCache()
+		end
+		
 		if not config.turretsState then
-			local tag = server.getComponentList(mod, "os_energyturret")
+			local tab = server.getComponentList(mod, "os_energyturret")
 			for _, t in pairs(tab) do
 				openTurret(t.address)
 			end

@@ -52,7 +52,7 @@
 			readers: {
 				{
 					name:string - name
-					address:string - address
+					uid:string - component id
 					delay:number - delay between triggering open and close actions
 					disabled:boolean - whether this reader is disabled
 					open: {
@@ -117,6 +117,18 @@ local texts = {
 	lock = {"locked", 5},
 	wrong = {"wrong", 4}
 }
+
+local function syncComponents(components)
+	for _, c in pairs(components) do
+		local sync = server.getComponent(mod, c.uid, true)
+		if sync then
+			c.missing = false
+			c.address = sync.address
+		else
+			c.missing = true
+		end
+	end
+end
 
 local function decrypt(d)
 	local s, b = pcall(data.decode64, d)
@@ -237,17 +249,17 @@ local function getShuffled()
 end
 
 local function refreshKeypads()
-	local function getInfo(addr)
+	local function getInfo(uid)
 		for _, t in pairs(keypads) do
-			if t.address == addr then return t end
+			if t.uid == uid then return t end
 		end
 		return nil
 	end
-	local comp = server.getComponentList(mod, "os_keypad")
+	local comp = server.getComponentList(mod, "os_keypad", true)
 	for _, t in pairs(comp) do
 		local proxy = component.proxy(t.address)
-		local tab = getInfo(t.address)
-		if proxy and t.state and tab then
+		local tab = getInfo(t.id)
+		if proxy and tab then
 			if tab.shuffle or config.shuffleAll then
 				local tab = getShuffled()
 				for i = 1, 9 do
@@ -262,7 +274,7 @@ local function refreshKeypads()
 				proxy.setKey(11, "0", 7)
 				proxy.setKey(12, "#", 7)
 			end
-			if config.keypads and not tab.disabled then
+			if config.keypads and not (tab.disabled or not t.state) then
 				if not inputs[t.address] then
 					proxy.setDisplay(config.msg[1], config.msg[2])
 				end
@@ -644,14 +656,15 @@ local function settings()
 	sgui:addLabel(4, 9, 20, "Locked only:")
 	sgui:addLabel(2, 11, 12, "Keyboards:")
 	sgui:addLabel(4, 12, 17, "Shuffle all:")
-	local bmode = sgui:addButton(10, 4, 16, 1, "", function(t)
+	local bmode = sgui:addButton(10, 4, 21, 1, "", function(t)
 		if t.status then
 			t.status = false
-			t.text = "bio readers"
+			t.text = "biometric readers"
 		else
 			t.status = true
 			t.text = "card readers"
 		end
+		t:draw()
 	end)
 	bmode.text = config.oldReaders and "card readers" or "biometric readers"
 	bmode.status = config.oldReaders
@@ -787,11 +800,11 @@ local function prepareWindow(mode, edit, initialize)
 	if edit then
 		text = choose("Edit card reader", "Edit biometric reader", "Edit keypad")
 	else
-		text = choose("New card reader", "New biometric reader", "New kaypad")
+		text = choose("New card reader", "New biometric reader", "New keypad")
 	end
 	local title = sgui:addLabel("center", 1, text:len() + 2, text)
 	
-	sgui:addLabel(2, 4, 10, "Address:")
+	local uidLabel = sgui:addLabel(2, 4, 10, "UID:")
 	sgui:addLabel(2, 6, 7, "Name:")
 	sgui:addLabel(2, 8, 13, "Delay:")
 	sgui:addLabel(2, 10, 8, "Status:")
@@ -831,29 +844,33 @@ local function prepareWindow(mode, edit, initialize)
 		int[3 + i].onDoubleClick = exec
 	end
 	
-	local tmp = sgui:addLabel(15, 4, 38, "")
-	tmp.onDoubleClick = function(t)
+	local uid = sgui:addLabel(15, 4, 38, "")
+	local function uidSelector()
 		local eventName = choose("os_magreader", "os_biometric", "os_keypad")
 		local a = server.componentDialog(mod, eventName)
 		if a then
 			local found = false
 			local tab = choose(readers, biometrics, keypads)
 			for _, t in pairs(tab) do
-				if a == t.address then
+				if a == t.uid then
 					found = true
 					break
 				end
 			end
 			if not found then
-				t.text = a
-				rettab.address = a
-				t:draw()
+				local comp = server.getComponent(mod, a, true)
+				local name = comp and ("  (" .. comp.name .. ")") or ""
+				uid.text = a .. name
+				rettab.uid = a
+				uid:draw()
 			else
-				server.messageBox(mod, "A device with the same address has been already added.", {"OK"})
+				server.messageBox(mod, "A device with the same UID has been already added.", {"OK"})
 			end
 		end
 	end
-	tmp.text = rettab.address or ""
+	uid.onDoubleClick = uidSelector
+	uid.text = rettab.uid or ""
+	uidLabel.onDoubleClick = uidSelector
 	
 	int[7] = sgui:addTextField(15, 6, 20)
 	int[8] = sgui:addTextField(15, 8, 10)
@@ -880,14 +897,15 @@ local function prepareWindow(mode, edit, initialize)
 		local delay = tonumber(int[8].text)
 		if name:len() == 0 then
 			server.messageBox(mod, "Enter the device name.", {"OK"})
-		elseif not rettab.address then
-			server.messageBox(mod, "Choose the device address.", {"OK"})
+		elseif not rettab.uid then
+			server.messageBox(mod, "Choose the device UID.", {"OK"})
 		elseif not delay or delay > 20 or delay < 1 then
 			server.messageBox(mod, "Delay must be a number between 1 and 20.", {"OK"})
 		else
 			rettab.name = name:sub(1, 20)
 			rettab.delay = delay
 			sgui.ret = rettab
+			syncComponents(choose(readers, biometrics, keypads))
 			sgui:close()
 		end
 	end)
@@ -1066,7 +1084,7 @@ local actions = {
 mod.name = "auth"
 mod.version = version
 mod.id = 27
-mod.apiLevel = 2
+mod.apiLevel = 3
 mod.shape = "normal"
 mod.actions = actions
 
@@ -1144,6 +1162,9 @@ mod.start = function(core)
 	server = core
 	config = core.loadConfig(mod)
 	loadInternals()
+	syncComponents(readers)
+	syncComponents(keypads)
+	syncComponents(biometrics)
 	
 	if type(config.oldReaders) ~= "boolean" then
 		config.oldReaders = false
@@ -1192,7 +1213,19 @@ end
 
 mod.pullEvent = function(...)
 	local e = {...}
-	if e[1] == "bioReader" then
+	if e[1] == "components_changed" then
+		if e[2] == "os_keypad" then
+			syncComponents(keypads)
+		elseif e[2] == "os_biometric" then
+			syncComponents(biometrics)
+		elseif e[2] == "os_magreader" then
+			syncComponents(readers)
+		elseif e[2] == nil then
+			syncComponents(readers)
+			syncComponents(keypads)
+			syncComponents(biometrics)
+		end
+	elseif e[1] == "bioReader" then
 		if not config.biometrics then return end
 		if internalBioEvent ~= nil then
 			internalBioEvent(e)

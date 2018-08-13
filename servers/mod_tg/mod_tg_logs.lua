@@ -326,7 +326,7 @@ mod = {}
 mod.name = "logs"
 mod.version = version
 mod.id = 52
-mod.apiLevel = 2
+mod.apiLevel = 3
 mod.shape = "landscape"
 mod.actions = actions
 

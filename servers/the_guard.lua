@@ -92,7 +92,7 @@
 		* TURRET - actions defined in the mod_tg_turret module. Related to turrets and sensors.
 
 		Aside from actions, a module can listen for events. Server automatically emits the following events:
-		* {"components_changed"} - when a registered component was added, modified or removed
+		* {"components_changed", "<component_type> or nil"} - when a registered component was added, modified or removed
 
 		In order to receive every other type of event, a component must explicitly register
 		it through the server API.
@@ -118,6 +118,7 @@
 		
 		components: { - list of installed components (/etc/the_guard/components.conf)
 			{
+				id:number - component id
 				address:string - address
 				type: string - component type
 				name:string - name
@@ -150,7 +151,7 @@
 ]]
 
 local version = "2.2"
-local apiLevel = 2
+local apiLevel = 3
 local args = {...}
 
 if args[1] == "version_check" then return version end
@@ -395,15 +396,16 @@ end
 --[[
 Returns table with registered components
 	@mod - calling module
-	@name - component category name
+	@type - component type or nil
+	@force - show even disabled components
 	RET: <table with components>
 ]]
-interface.getComponentList = function(mod, name)
+interface.getComponentList = function(mod, type, force)
 	local ret = {}
 	for _, t in pairs(components) do
 		if t.state then
-			if name then
-				if name:lower() == t.type:lower() then
+			if type then
+				if type == t.type then
 					table.insert(ret, t)
 				end
 			else
@@ -412,6 +414,24 @@ interface.getComponentList = function(mod, name)
 		end
 	end
 	return ret
+end
+
+--[[
+Returns a single component
+	@mod - calling module
+	@uid - uid of a component
+	@force - return even disabled component
+	RET: <component> or nil
+]]
+interface.getComponent = function(mod, uid, force)
+	if not uid then return nil end
+	for _, c in pairs(components) do
+		if c.id == uid then
+			if c.state or force then return c
+			else return nil end
+		end
+	end
+	return nil
 end
 
 --[[
@@ -757,21 +777,21 @@ interface.actionDialog = function(mod, typee, target, fill, hidden)
 end
 
 --[[
-Wyświetla okno dialogowe wyboru komponentu
 Displays component selection dialog window 
 	@mod - calling module
 	@typee - component type filter
-	RET: <component address> or nil
+	@force - include disabled compoennts
+	RET: <component UID> or nil
 ]]
-interface.componentDialog = function(mod, typee)
-	local cl = interface.getComponentList(mod, typee)
-	local box, list, chosen = {}, {}, nil
+interface.componentDialog = function(mod, typee, force)
+	local cl = interface.getComponentList(mod, typee, force)
+	local box, list, chosenAddr, chosenUid = {}, {}, nil, nil
 	local ret = nil
 	
 	local function refreshList()
 		list = {}
 		for _, t in pairs(cl) do
-			local s = string.format("[%s]  %s  %s  (%s, %s, %s)", t.type:upper(), t.address, t.name and t.name:sub(1, 20) or "", t.x and tostring(t.x) or "", t.y and tostring(t.y) or "", t.z and tostring(t.z) or "")
+			local s = string.format("[%s] %s  %s  (%s, %s, %s)", t.id, t.name and t.name:sub(1, 20) or "", t.address, t.x and tostring(t.x) or "", t.y and tostring(t.y) or "", t.z and tostring(t.z) or "")
 			table.insert(list, s)
 		end
 		box:updateList(list)
@@ -779,20 +799,22 @@ interface.componentDialog = function(mod, typee)
 	local function update()
 		local sel = box:getSelected()
 		if sel then
-			local found = sel:match("%x+%-%x+%-%x+%-%x+%-%x+")
-			if found then
-				local amount = #interface.findComponents(mod, found)
-				if amount == 1 then
-					chosen.text = found
+			local first = sel:find("%[")
+			local last = sel:find("%]")
+			if first and last then
+				local found = sel:sub(first + 1, last - 1)
+				local comp = interface.getComponent(mod, found, force)
+				if comp then
+					chosenUid.text = found
+					chosenAddr.text = comp.address
 					ret = found
-				elseif amount > 1 then
-					chosen.text = "<ambiguous>"
-					ret = nil
 				else
-					chosen.text = "<not found>"
+					chosenUid.text = "<not found>"
+					chosenAddr.text = "<not found>"
 					ret = nil
 				end
-				chosen:draw()
+				chosenUid:draw()
+				chosenAddr:draw()
 			end
 		end
 	end
@@ -805,8 +827,10 @@ interface.componentDialog = function(mod, typee)
 		old(...)
 		update()
 	end
-	dgui:addLabel(5, 20, 15, "Chosen address:")
-	chosen = dgui:addLabel(21, 20, 40, "")
+	dgui:addLabel(5, 20, 12, "Chosen UID:")
+	dgui:addLabel(5, 21, 15, "Chosen address:")
+	chosenUid = dgui:addLabel(21, 20, 10, "")
+	chosenAddr = dgui:addLabel(21, 21, 40, "")
 	dgui:addButton(90, 24, 14, 1, "Cancel", function()
 		ret = nil
 		dgui:close()
@@ -1181,6 +1205,29 @@ local function flushLog()
 	end
 end
 
+local function generateUid()
+    local template ='xyxyxy'
+    return string.gsub(template, '[xy]', function (c)
+        local v = (c == 'x') and math.random(0, 0xf) or math.random(8, 0xb)
+        return string.format('%x', v)
+    end)
+end
+
+local function generateComponentUid()
+	while true do
+		local uid = generateUid()
+		local unique = true
+		for _, c in pairs(components) do
+			if c.id == uid then
+				unique = false
+				break
+			end
+		end
+
+		if unique then return uid end
+	end
+end
+
 silentLog = function(source, description, disableTimer, color)
 	local timer = disableTimer and "" or (os.date():sub(-8) .. " - ")
 	local text = timer .. source
@@ -1212,8 +1259,6 @@ end
 local function isPasswordValid(plain)
 	return data.sha256(plain) == passwd
 end
-
-
 
 -- # Configuration
 local save = {}
@@ -1367,10 +1412,14 @@ local function loadConfig()
 		end
 		internalLog("Checked " .. tostring(counter) .. " module(s)", "", true)
 	end
-	
+
 	local function checkComponents()
 		local counter = 0 
 		for i, c in pairs(components) do
+			if type(c["id"]) ~= "string" then
+				internalLog("checkComponents", "wrong id")
+				components[i]["id"] = generateComponentUid()
+			end
 			if type(c["address"]) == "string" then
 				if component.proxy(c["address"]) then
 					if type(c["type"]) ~= "string" then
@@ -1407,7 +1456,7 @@ local function loadConfig()
 			end
 			counter = counter + 1
 		end
-		internalLog("Checked " .. tostring(counter) .. " module(s)", "", true)
+		internalLog("Checked " .. tostring(counter) .. " components(s)", "", true)
 	end
 	
 	local function checkPassword()
@@ -1499,7 +1548,7 @@ local function loadConfig()
 			end
 			f:close()
 		else
-			internalLog("loadConfig", "components file errorbłąd pliku components: " .. e, false, 0xff0000)
+			internalLog("loadConfig", "components file error: " .. e, false, 0xff0000)
 			return false
 		end
 	else
@@ -1563,27 +1612,157 @@ local function passwordPrompt()
 	return status
 end
 
+local function addCreator(address, typee)
+	local uid = generateComponentUid()
+	local agui = gml.create("center", "center", 54, 16)
+	agui.style = gui.style
+	agui:addLabel("center", 1, 24, "New component wizard")
+	agui:addLabel(2, 3, 20, "UID:     " .. uid)
+	agui:addLabel(2, 4, 50, "Address: " .. address)
+	agui:addLabel(2, 5, 48, "Type:    " .. typee)
+	agui:addLabel(2, 6, 7, "Name:")
+	agui:addLabel(2, 7, 9, "Status:")
+	agui:addLabel(2, 9, 17, "X coordinate:")
+	agui:addLabel(2, 10, 17, "Y coordinate:")
+	agui:addLabel(2, 11, 17, "Z coordinate:")
+	local name = agui:addTextField(11, 6, 22)
+	local cx = agui:addTextField(20, 9, 10)
+	local cy = agui:addTextField(20, 10, 10)
+	local cz = agui:addTextField(20, 11, 10)
+	local button = agui:addButton(11, 7, 13, 1, "enabled", function(self)
+		if self.status then
+			self.text = "disabled"
+			self.status = false
+			self:draw()
+		else
+			self.text = "enabled"
+			self.status = true
+			self:draw()
+		end
+	end)
+	button.status = true
+	agui:addButton(20, 14, 14, 1, "Apply", function()
+		local nx = tonumber(cx.text)
+		local ny = tonumber(cy.text)
+		local nz = tonumber(cz.text)
+		if not nx and cx.text:len() > 0 then
+			GMLmessageBox(gui, "The X coordiante is incorrect.", {"OK"})
+		elseif not ny and cy.text:len() > 0 then
+			GMLmessageBox(gui, "The Y coordinate is incorrect.", {"OK"})
+		elseif not nz and cz.text:len() > 0 then
+			GMLmessageBox(gui, "The Z coordinate is incorrect.", {"OK"})
+		elseif name.text:len() > 20 then
+			GMLmessageBox(gui, "Component name cannot be longer than 20 characters.", {"OK"})
+		else
+			local t = {
+				id = uid,
+				address = address,
+				type = typee,
+				name = name.text,
+				state = button.status,
+				x = nx,
+				y = ny,
+				z = nz
+			}
+			table.insert(components, t)
+			save.components(true)
+			agui:close()
+		end
+	end)
+	agui:addButton(36, 14, 14, 1, "Cancel", function() agui:close() end)
+	agui:run()
+end
+
+local function bNewComponent(returnOnly, typeFilter)
+	local selected = nil
+	local ngui, list, tab = nil, nil, nil
+	local function isAdded(address)
+		for _, t in pairs(components) do
+			local matches = typeFilter and t.type == typeFilter or true
+			if t.address == address and matches then return true end
+		end
+		return false
+	end
+	local function reloadList()
+		tab = {}
+		for addr, name in component.list() do
+			if not isAdded(addr) then
+				table.insert(tab, addr .. "   " .. name)
+			end
+		end
+	end
+	local function addComponent()
+		local addr, typ = list:getSelected():match("^(%x+%-%x+%-%x+%-%x+%-%x+)%s%s%s(.+)")
+		if addr and typ then
+			selected = addr
+			if returnOnly then
+				ngui:close()
+			else
+				addCreator(addr, typ)
+				reloadList()
+				list:updateList(tab)
+			end
+		end
+	end
+	reloadList()
+	ngui = gml.create("center", "center", 70, 30)
+	ngui.style = gui.style
+	ngui:addLabel("center", 1, 21, "Add new component")
+	list = ngui:addListBox(2, 3, 64, 23, tab)
+	list.onDoubleClick = addComponent
+	ngui:addButton(36, 28, 14, 1, "Refresh", function()
+		reloadList()
+		list:updateList(tab)
+	end)
+	ngui:addButton(52, 28, 14, 1, "Close", function()
+		selected = nil
+		ngui:close()
+	end)
+	ngui:run()
+
+	return selected
+end
+
 local function componentDetails(t)
+	local shouldRefresh = false
 	local dgui = gml.create("center", "center", 55, 16)
 	dgui.style = gui.style
-	dgui:addLabel("center", 1, 22, "Component details")
-	dgui:addLabel(2, 3, 50, "Address:      " .. t.address)
-	dgui:addLabel(2, 4, 48, "Type:        " .. t.type)
-	dgui:addLabel(2, 5, 7, "Name:")
-	local name = dgui:addTextField(14, 5, 20)
+	dgui:addLabel("center", 1, 18, "Component details")
+	dgui:addLabel(2, 3, 50, "UID:        " .. t.id)
+	local addrLabel = dgui:addLabel(2, 4, 50, "Address:    " .. t.address)
+	dgui:addLabel(2, 5, 48, "Type:       " .. t.type)
+	dgui:addLabel(2, 6, 7, "Name:")
+	local name = dgui:addTextField(14, 6, 20)
 	name.text = t.name or ""
-	dgui:addLabel(2, 6, 9, "Status:")
-	local avail = dgui:addLabel(2, 7, 22, "")
-	dgui:addLabel(2, 9, 17, "X coordinate:")
-	dgui:addLabel(2, 10, 17, "Y coordinate:")
-	dgui:addLabel(2, 11, 17, "Z coordinate:")
-	local cx = dgui:addTextField(20, 9, 10)
-	local cy = dgui:addTextField(20, 10, 10)
-	local cz = dgui:addTextField(20, 11, 10)
+	dgui:addLabel(2, 7, 9, "State:")
+	local avail = dgui:addLabel(2, 8, 22, "")
+	dgui:addLabel(2, 10, 17, "X coordinate:")
+	dgui:addLabel(2, 11, 17, "Y coordinate:")
+	dgui:addLabel(2, 12, 17, "Z coordinate:")
+	local cx = dgui:addTextField(20, 10, 10)
+	local cy = dgui:addTextField(20, 11, 10)
+	local cz = dgui:addTextField(20, 12, 10)
 	cx.text = t.x and tostring(t.x) or ""
 	cy.text = t.y and tostring(t.y) or ""
 	cz.text = t.z and tostring(t.z) or ""
-	local button = dgui:addButton(11, 6, 13, 1, "enabled", function(self)
+
+	addrLabel.onDoubleClick = function()
+		local newAddr = bNewComponent(true, t.type)
+		if newAddr then
+			local proxy = component.proxy(newAddr)
+			if proxy and proxy.type == t.type then
+				addrLabel.newAddr = newAddr
+				addrLabel.text = "Address:    " .. newAddr
+				addrLabel:draw()
+			elseif proxy and proxy.type ~= type then
+				GMLmessageBox(gui, "Component type cannot be changed.", {"OK"})
+			else
+				GMLmessageBox(gui, "Component isn't available.", {"OK"})
+			end
+		end
+	end
+
+	local button = dgui:addButton(11, 7, 13, 1, t.state and "enabled" or "disabled", function(self)
 		if self.status then
 			self.text = "disabled"
 			self.status = false
@@ -1607,8 +1786,8 @@ local function componentDetails(t)
 		avail:draw()
 	end
 	refreshAvail()
-	dgui:addButton(25, 7, 12, 1, "Refresh", refreshAvail)
-	dgui:addButton(4, 14, 14, 1, "Remove", function()
+	dgui:addButton(25, 8, 12, 1, "Refresh", refreshAvail)
+	dgui:addButton(4, 15, 14, 1, "Remove", function()
 		if GMLmessageBox(gui, "Are you sure you want to remove this element?", {"Yes", "No"}) == "Yes" then
 			for i, t2 in pairs(components) do
 				if t.address == t2.address then
@@ -1620,7 +1799,7 @@ local function componentDetails(t)
 			end
 		end
 	end)
-	dgui:addButton(20, 14, 14, 1, "Save", function()
+	dgui:addButton(20, 15, 14, 1, "Save", function()
 		local nx = tonumber(cx.text)
 		local ny = tonumber(cy.text)
 		local nz = tonumber(cz.text)
@@ -1638,12 +1817,16 @@ local function componentDetails(t)
 			t.x = nx
 			t.y = ny
 			t.z = nz
+			if addrLabel.newAddr then t.address = addrLabel.newAddr end
 			save.components(true)
+			computer.pushSignal("components_changed", t.type)
 			dgui:close()
+			shouldRefresh = true
 		end
 	end)
-	dgui:addButton(36, 14, 14, 1, "Cancel", function() dgui:close() end)
+	dgui:addButton(36, 15, 14, 1, "Cancel", function() dgui:close() end)
 	dgui:run()
+	return shouldRefresh
 end
 
 local function bComponentList()
@@ -1652,10 +1835,9 @@ local function bComponentList()
 		local buffer = {}
 		for _, t in pairs(components) do
 			if not buffer[t.type] then buffer[t.type] = {} end
-			local str = t.address .. ", "
-			if t.name and t.name:len() > 0 then
-				str = str .. "[" .. t.name .. "] "
-			end
+			local str = "[" .. t.id .. "] "
+			str = str .. t.name .. " "
+			str = str .. "(" .. t.address:sub(1, 8) .. "...) "
 			str = str .. (t.state and "ON" or "OFF")
 			if t.x then str = str .. "  X:" .. tostring(t.x) end
 			if t.y then str = str .. "  Y:" .. tostring(t.y) end
@@ -1710,18 +1892,21 @@ local function bComponentList()
 		list:updateList(tab)
 	end
 	local function details()
-		local addr = list:getSelected():match("^%s%s%**(%x+%-%x+%-%x+%-%x+%-%x+),.+")
-		if addr then
+		local first = list:getSelected():find("%[")
+		local last = list:getSelected():find("%]")
+		if first and last then
+			local id = list:getSelected():sub(first + 1, last - 1)
 			for _, t in pairs(components) do
-				if t.address == addr then
-					componentDetails(t)
+				if t.id == id then
+					local refresh = componentDetails(t)
+					if refresh then reloadList() end
 					break
 				end
 			end
+			refreshList()
+			list:updateList(tab)
+			computer.pushSignal("components_changed")
 		end
-		refreshList()
-		list:updateList(tab)
-		computer.pushSignal("components_changed")
 	end
 	
 	refreshList()
@@ -1730,6 +1915,7 @@ local function bComponentList()
 	cgui:addLabel("center", 1, 22, "Installed components")
 	list = cgui:addListBox(2, 3, 84, 20, tab)
 	list.onDoubleClick = details
+	cgui:addLabel(4, 23, 32, "Legend: [ID] name (address...)")
 	cgui:addLabel(68, 23, 13, "* - offline")
 	cgui:addButton(3, 25, 21, 1, "Enable all", enableAll)
 	cgui:addButton(3, 27, 21, 1, "Disable all", disableAll)
@@ -1737,102 +1923,6 @@ local function bComponentList()
 	cgui:addButton(54, 27, 14, 1, "Refresh", reloadList)
 	cgui:addButton(70, 27, 14, 1, "Close", function() cgui:close() end)
 	cgui:run()
-end
-
-local function addCreator(address, typee)
-	local agui = gml.create("center", "center", 54, 15)
-	agui.style = gui.style
-	agui:addLabel("center", 1, 24, "New component wizard")
-	agui:addLabel(2, 3, 50, "Address:  " .. address)
-	agui:addLabel(2, 4, 48, "Type:    " .. typee)
-	agui:addLabel(2, 5, 7, "Name:")
-	agui:addLabel(2, 6, 9, "Status:")
-	agui:addLabel(2, 8, 17, "X coordinate:")
-	agui:addLabel(2, 9, 17, "Y coordinate:")
-	agui:addLabel(2, 10, 17, "Z coordinate:")
-	local name = agui:addTextField(11, 5, 22)
-	local cx = agui:addTextField(20, 8, 10)
-	local cy = agui:addTextField(20, 9, 10)
-	local cz = agui:addTextField(20, 10, 10)
-	local button = agui:addButton(11, 6, 13, 1, "enabled", function(self)
-		if self.status then
-			self.text = "disabled"
-			self.status = false
-			self:draw()
-		else
-			self.text = "enabled"
-			self.status = true
-			self:draw()
-		end
-	end)
-	button.status = true
-	agui:addButton(20, 13, 14, 1, "Apply", function()
-		local nx = tonumber(cx.text)
-		local ny = tonumber(cy.text)
-		local nz = tonumber(cz.text)
-		if not nx and cx.text:len() > 0 then
-			GMLmessageBox(gui, "The X coordiante is incorrect.", {"OK"})
-		elseif not ny and cy.text:len() > 0 then
-			GMLmessageBox(gui, "The Y coordinate is incorrect.", {"OK"})
-		elseif not nz and cz.text:len() > 0 then
-			GMLmessageBox(gui, "The Z coordinate is incorrect.", {"OK"})
-		elseif name.text:len() > 20 then
-			GMLmessageBox(gui, "Component name cannot be longer than 20 characters.", {"OK"})
-		else
-			local t = {
-				address = address,
-				type = typee,
-				name = name.text,
-				state = button.status,
-				x = nx,
-				y = ny,
-				z = nz
-			}
-			table.insert(components, t)
-			save.components(true)
-			agui:close()
-		end
-	end)
-	agui:addButton(36, 13, 14, 1, "Cancel", function() agui:close() end)
-	agui:run()
-end
-
-local function bNewComponent()
-	local list, tab = nil, nil
-	local function isAdded(address)
-		for _, t in pairs(components) do
-			if t.address == address then return true end
-		end
-		return false
-	end
-	local function reloadList()
-		tab = {}
-		for addr, name in component.list() do
-			if not isAdded(addr) then
-				table.insert(tab, addr .. "   " .. name)
-			end
-		end
-	end
-	local function addComponent()
-		local addr, typ = list:getSelected():match("^(%x+%-%x+%-%x+%-%x+%-%x+)%s%s%s(.+)")
-		if addr and typ then
-			addCreator(addr, typ)
-			reloadList()
-			list:updateList(tab)
-		end
-	end
-	reloadList()
-	local ngui = gml.create("center", "center", 70, 30)
-	ngui.style = gui.style
-	ngui:addLabel("center", 1, 21, "Add new component")
-	list = ngui:addListBox(2, 3, 64, 23, tab)
-	list.onDoubleClick = addComponent
-	ngui:addButton(36, 28, 14, 1, "Refresh", function()
-		reloadList()
-		list:updateList(tab)
-	end)
-	ngui:addButton(52, 28, 14, 1, "Cancel", function() ngui:close() end)
-	ngui:run()
 end
 
 local function bModuleList()
@@ -1864,11 +1954,11 @@ local function bModuleList()
 			end
 		end
 		if #n > 0 then
-			table.insert(rtab, "  normal")
+			table.insert(rtab, "  NORMAL:")
 			for _, e in pairs(n) do table.insert(rtab, e) end
 		end
 		if #l > 0 then
-			if #n > 0 then table.insert(rtab, "") end
+			if #n > 0 then table.insert(rtab, "  LANDSCAPE:") end
 			for _, e in pairs(l) do table.insert(rtab, e) end
 		end
 		
@@ -2597,6 +2687,8 @@ local function loadModules()
 	end
 	
 	local function loadModule(filename)
+		local name = filename:match("mod_tg_(.+)%.lua")
+		internalLog("  " .. name, "", true, 0xffff00)
 		local m, e = loadfile(filename)
 		if m then
 			local s, buffer = pcall(m)
@@ -2672,7 +2764,6 @@ local function loadModules()
 	for n in fs.list(modulesDir) do
 		local name = n:match("^mod_tg_(.+)%.lua$")
 		if name and not isAdded(fs.concat(modulesDir, n)) then
-			internalLog("  " .. name, "", true, 0xffff00)
 			local buffer = loadModule(fs.concat(modulesDir, n))
 			if buffer then
 				local t = {
@@ -2975,6 +3066,9 @@ local function loadToken()
 end
 
 local function init()
+	if not fs.isDirectory(configDir) then
+		fs.makeDirectory(configDir)
+	end
 	local prev = component.gpu.setForeground(0x00ff00)
 	print("THE GUARD server, version " .. version)
 	component.gpu.setForeground(prev)

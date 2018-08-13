@@ -53,8 +53,8 @@
 			}
 			sensors { - sensors
 				[id:number] = { - id
+					uid:string - component uid
 					name:string - sensor name
-					address:string - address
 					side:number - side (number from 0 to 5 from sides api) 
 					color:number or nil - color (nil if source works in simple mode)
 					enable { - enable actions
@@ -105,6 +105,17 @@ local directions = {
 	[5] = "east"
 }
 
+local function syncComponents(components)
+	for _, c in pairs(components) do
+		local sync = server.getComponent(mod, c.uid, true)
+		if sync then
+			c.missing = false
+			c.address = sync.address
+		else
+			c.missing = true
+		end
+	end
+end
 
 local function freeId(tab, minn, maxx)
 	for i = minn, maxx do
@@ -300,7 +311,7 @@ local function additionTemplate(edit, receiver, filling, id)
 	tgui:addLabel("center", 1, text:len() + 1, text)
 	tgui:addLabel(3, 9, 6, "Mode:")
 	tgui:addLabel(3, 4, 4, "ID:")
-	tgui:addLabel(3, 5, 9, "Address:")
+	local uidLabel = tgui:addLabel(3, 5, 9, "UID:")
 	tgui:addLabel(3, 7, 7, "Name:")
 	tgui:addLabel(3, 11, 8, "Side:")
 	
@@ -315,27 +326,32 @@ local function additionTemplate(edit, receiver, filling, id)
 			lid.text = tostring(freeId(config.sensors, 61, 80)) or "ERROR"
 		end
 	end
-	local tmp = tgui:addLabel(12, 5, 38, "")
-	tmp.text = ret.address or ""
-	tmp.onDoubleClick = function(t)
+
+	local uid = tgui:addLabel(12, 5, 38, "")
+	local function uidChooser()
 		local r = server.componentDialog(mod, "redstone")
 		if r then
 			local found = false
+			local comp = server.getComponent(mod, r)
 			for _, t in pairs(receiver and config.receivers or config.sensors) do
-				if t.address == r then
+				if t.name == comp.name then
 					found = true
 					break
 				end
 			end
 			if not found then
-				ret.address = r
-				t.text = r
-				t:draw()
+				ret.uid = r
+				uid.text = r .. "  (" .. comp.name .. ")"
+				uid:draw()
 			else
 				server.messageBox(mod, "A component with the same name has been already added.", {"OK"})
 			end
 		end
 	end
+	uid.text = ret.uid or ""
+	uid.onDoubleClick = uidChooser
+	uidLabel.onDoubleClick = uidChooser
+
 	local name = tgui:addTextField(12, 7, 20)
 	name.text = ret.name or ""
 	tgui:addButton(12, 11, 12, 1, directions[ret.side], function(t)
@@ -381,8 +397,8 @@ local function additionTemplate(edit, receiver, filling, id)
 		tgui:close()
 	end)
 	tgui:addButton(29, 17, 14, 1, "Apply", function()
-		if not ret.address then
-			server.messageBox(mod, "Choose the device's address.", {"OK"})
+		if not ret.uid then
+			server.messageBox(mod, "Choose the device UID.", {"OK"})
 		elseif name.text:len() < 1 or name.text:len() > 20 then
 			server.messageBox(mod, "Name of the device must have between 1 and 20 characters.", {"OK"})
 		else
@@ -399,6 +415,7 @@ local function addReceiver()
 		local ret = additionTemplate(false, true)
 		if ret then
 			table.insert(config.receivers, ret)
+			syncComponents(config.receivers)
 			refreshList()
 		end
 	else
@@ -413,6 +430,7 @@ local function addSensor()
 			local id = freeId(config.sensors, 61, 80)
 			if id then
 				config.sensors[id] = ret
+				syncComponents(config.sensors)
 				refreshList()
 			end
 		end
@@ -890,7 +908,7 @@ local actions = {
 mod.name = "io"
 mod.version = version
 mod.id = 33
-mod.apiLevel = 2
+mod.apiLevel = 3
 mod.shape = "normal"
 mod.actions = actions
 
@@ -950,6 +968,8 @@ mod.start = function(core)
 	if not config.receivers then config.receivers = {} end
 	if not config.groups then config.groups = {} end
 	if not config.sensors then config.sensors = {} end
+	syncComponents(config.receivers)
+	syncComponents(config.sensors)
 	
 	core.registerEvent(mod, "redstone_changed")
 end
@@ -960,7 +980,10 @@ end
 
 mod.pullEvent = function(...)
 	local e = {...}
-	if e[1] == "redstone_changed" then
+	if e[1] == "components_chagnes" then
+		syncComponents(config.receivers)
+		syncComponents(config.sensors)
+	elseif e[1] == "redstone_changed" then
 		--redstone_changed, address, side
 		local sensor = nil
 		local id = nil
