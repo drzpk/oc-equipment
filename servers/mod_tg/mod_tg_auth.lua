@@ -707,7 +707,7 @@ local function settings()
 	sgui:addButton(33, 15, 14, 1, "Cancel", function() sgui:close() end)
 	sgui:addButton(17, 15, 14, 1, "Apply", function()
 		if config.oldReaders ~= bmode.status then
-			server.mesageBox(mod, "Changes will be applied after server restart.", {"OK"})
+			server.messageBox(mod, "Changes will be applied after server restart.", {"OK"})
 		end
 		config.oldReaders = bmode.status
 		config.identity = b1.status
