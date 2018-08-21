@@ -2399,6 +2399,7 @@ sure you want to continue?
 end
 
 local function bLogs()
+	local lineWidth = 85
 	local ll, list = {}, nil
 	local function refresh()
 		ll = {}
@@ -2417,30 +2418,54 @@ local function bLogs()
 		if line then
 			local buffer = {}
 			local count = 0
-			for i = 1, line:len(), 85 do
-				count = count + 1
-				if i < line:len() then 
-					if count < 10 then
-						local tmp = line:sub(i, i + 85)
-						if count > 1 then
-							tmp = "   " .. tmp
-						end
+
+			for chunk in line:gmatch('[^\r\n]+') do
+				local br = false
+
+				for i = 1, chunk:len(), lineWidth do
+					count = count + 1
+					local tmp = chunk:sub(i, i + lineWidth - 1)
+					if i > 1 then
+						tmp = '    ' .. tmp
+					end
+
+					if count <= 10 then
 						table.insert(buffer, tmp)
 					else
-						table.insert(buffer, "(...)")
+						table.insert(buffer, '(...)')
+						br = true
 						break
 					end
-				else
-					break
 				end
+
+				if br then break end
 			end
-			local dgui = gml.create("center", "center", 110, 6 + #buffer)
+
+			-- for i = 1, line:len(), lineWidth do
+			-- 	count = count + 1
+			-- 	if i < line:len() then 
+			-- 		if count < 10 then
+			-- 			local tmp = line:sub(i, i + lineWidth)
+			-- 			if count > 1 then
+			-- 				tmp = "   " .. tmp
+			-- 			end
+			-- 			table.insert(buffer, tmp)
+			-- 		else
+			-- 			table.insert(buffer, "(...)")
+			-- 			break
+			-- 		end
+			-- 	else
+			-- 		break
+			-- 	end
+			-- end
+
+			local dgui = gml.create("center", "center", lineWidth + 25, 6 + #buffer)
 			dgui.style = gui.style
 			dgui:addLabel("center", 1, 11, "Details")
 			for i = 1, #buffer do
-				dgui:addLabel(2, 2 + i, 90, buffer[i])
+				dgui:addLabel(2, 2 + i, lineWidth + 5, buffer[i])
 			end
-			dgui:addButton(92, 4 + #buffer, 14, 1, "Close", function() dgui:close() end)
+			dgui:addButton(lineWidth + 7, 4 + #buffer, 14, 1, "Close", function() dgui:close() end)
 			dgui:run()
 			refresh()
 			list:updateList(ll)
@@ -2487,11 +2512,20 @@ local function safeCall(fun, ...)
 	return r
 end
 
+local function secureErrorHandler(err)
+	local trace = debug.traceback()
+	trace = trace:gsub('\t', '')
+	silentLog("secureFunction", err .. '\n' .. trace)
+end
+
 local function secureFunction(fun, ...)
-	local s, r = pcall(fun, ...)
+	local args = {...}
+	local call = function()
+		fun(table.unpack(args))
+	end
+	local s, r = xpcall(call, secureErrorHandler)
 	if not s then
 		GMLmessageBox(gui, "An error occurred during module execution.\nFurther details are available in logs.")
-		silentLog("secureFunction", r)
 		gui:draw()
 		return nil
 	end
