@@ -63,7 +63,7 @@
 			Tests offline registry (setup-list) for known errors before uploading.
 ]]
 
-local version = "0.3.1"
+local version = "0.3.2"
 
 local component = require("component")
 
@@ -574,13 +574,14 @@ local function installApp(appName, force_install, disable_dep_install)
 				local localfile = loadfile(filename)
 				local version = localfile and localfile("version_check") or ""
 				if version == t[5] and not force_install then
-					io.stderr:write("\nApplication is already installed!")
-					textColor(colors.yellow)
-					term.write("\nInstallation aborted.")
-					return
-				elseif version and version:len() > 0 then
+					textColor(colors.orange)
+					term.write("   (up-to-date)")
+				elseif type(version) == "string" and version:len() > 0 then
 					textColor(colors.green)
 					term.write("   (update: " .. version .. " -> " .. t[5] .. ")")
+				else
+					textColor(colors.brown)
+					term.write("   (version unknown)")
 				end
 			end
 			local output = io.open(filename, "w")
