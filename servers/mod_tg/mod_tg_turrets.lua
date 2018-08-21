@@ -713,9 +713,11 @@ local function turretTemplate(item)
 	name.text = item and item.name or ""
 
 	local uid = tgui:addLabel(10, 6, 38, item and item.uid or "")
-	local comp = server.getComponent(mod, item.uid)
-	if comp then
-		uid.text = item.uid .. "  (" .. comp.name .. ")"
+	if item then
+		local comp = server.getComponent(mod, item.uid)
+		if comp then
+			uid.text = item.uid .. "  (" .. comp.name .. ")"
+		end
 	end
 
 	local function uidSelector()
@@ -759,9 +761,11 @@ local function turretTemplate(item)
 	uidLabel.onDoubleClick = uidSelector
 
 	local detector = tgui:addLabel(20, 7, 38, ret and ret.detectorUid or "")
-	comp = server.getComponent(mod, ret.detectorUid)
-	if comp then
-		detector.text = ret.detectorUid .. "  (" .. comp.name .. ")"
+	if ret then
+		local comp = server.getComponent(mod, ret.detectorUid)
+		if comp then
+			detector.text = ret.detectorUid .. "  (" .. comp.name .. ")"
+		end
 	end
 
 	local function detectorSelector()
