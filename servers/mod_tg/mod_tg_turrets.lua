@@ -142,7 +142,7 @@
 		}
 ]]
 
-local version = "1.3"
+local version = "1.3.1"
 local args = {...}
 
 if args[1] == "version_check" then return version end

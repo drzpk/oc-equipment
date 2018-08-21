@@ -150,7 +150,7 @@
 		will be disabled.
 ]]
 
-local version = "2.2"
+local version = "2.2.1"
 local apiLevel = 3
 local args = {...}
 
