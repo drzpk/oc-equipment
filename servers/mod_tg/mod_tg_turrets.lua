@@ -142,7 +142,7 @@
 		}
 ]]
 
-local version = "1.3.1"
+local version = "1.3.2"
 local args = {...}
 
 if args[1] == "version_check" then return version end
@@ -752,6 +752,7 @@ local function turretTemplate(item)
 			end
 			uid.text = a .. "  (" .. ct.name .. ")"
 			ret.uid = a
+			ret.address = ct.address
 			uid:draw()
 		else
 			server.messageBox(mod, "Device with such address has been already added.", {"OK"})
@@ -912,7 +913,7 @@ end
 local function removeTurret()
 	local index = getIndex(lbox:getSelected())
 	if not index or not turrets[index] then return end
-	if config.turretsActive then
+	if config.turretsState then
 		server.messageBox(mod, "Cannot remove this element while turrets are active.", {"OK"})
 		return
 	end
