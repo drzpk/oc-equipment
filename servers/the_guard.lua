@@ -9,10 +9,6 @@
 		This program serves as a security system control center. Most of the
 		functionality is acheived by using "OpenSecurity" Minecraft mod.
 		
-		Nowa architektura zakłada podział programu na moduły, które mogą być rozwijane
-		nozależno. Powoduje to zwiększeno bezpieczeństwa - awaria jednego z
-		modułów no powoduje przerwania pracy całego systemu.
-		
 	## Technical description ##
 		Previous version of this server (1.0) used separate computers to communicate
 		with security components - they had the 'micro' program installed. In newer
@@ -268,7 +264,6 @@ interface.loadConfig = function(mod)
 end
 
 --[[
-Zapisuje konfigurację do pliku
 Saves module's primary configuration to file
 	@mod - calling module
 	@tab - table with config

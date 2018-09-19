@@ -9,14 +9,6 @@
 		The mod_tg_auth is a module used by the_guard server (since 2.0).
 		It requires the "OpenSecurity" Minecraft mod to be installed.
 		This module allows to manage user authentication using keypads, biometric scanners or magnetic cards.
-		
-	## Akcje ##
-		- lockMag() - blokuje czytniki kart
-		- unlockMag() - odblokowuje czytniki kart
-		- lockBio() - blokuje skanery biometryczne
-		- unlockBio() - odblokowuje skanery biometryczne
-		- lockKeypad() - blokuje klawiatury
-		- unlockKeypad() - odblokowuje klawiatury
 
 	## Actions ##
 		- lockMag() - locks magnetic card readers (they can't be used)
