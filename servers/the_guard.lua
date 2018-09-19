@@ -146,7 +146,7 @@
 		will be disabled.
 ]]
 
-local version = "2.2.1"
+local version = "2.2.2"
 local apiLevel = 3
 local args = {...}
 
@@ -226,6 +226,7 @@ local mod = {}
 local intlog = ""
 local lastlog = {}
 local loglines = 0
+local internalMod = math.random()
 
 -- # Module interface
 local interface = {}
@@ -2588,6 +2589,34 @@ end
 -- # Loader
 local function initializeActions()
 	actions = {}
+
+	actions["the_guard"] = {
+		[1] = {
+			name = "reflect",
+			type = "CORE",
+			desc = "Invokes function of given component",
+			p1type = "string",
+			p2type = "string",
+			p1desc = "Component UID",
+			p2desc = "Function invocation",
+			hidden = false,
+			exec = function(p1, p2)
+				local comp = interface.getComponent(internalMod, p1, false)
+				if comp then
+					local invocation = "component.proxy('" .. comp.address .. "')." .. p2
+					local fun, err = load(invocation)
+					if fun then
+						fun()
+					else
+						silentLog("reflect", "function invocation failed: " .. err)
+					end
+				else
+					silentLog("reflect", "couldn't find component with id " .. p1)
+				end
+			end
+		}
+	}
+
 	for _, t in pairs(modules) do
 		local mul = mod[t.name].id * 100
 		local buff = {}
