@@ -76,7 +76,7 @@
 		}
 ]]
 
-local version = "1.2.1"
+local version = "1.2.2"
 local args = {...}
 
 if args[1] == "version_check" then return version end
@@ -1177,7 +1177,7 @@ mod.start = function(core)
 	if not config.msg[1] or config.msg[1]:len() > 8 then config.msg[1] = config.msg[1]:sub(1, 8) end
 	if not config.msg[2] or config.msg[2] > 7 or config.msg[2] < 0 then config.msg[2] = 3 end
 	
-	if core.oldReaders then
+	if config.oldReaders then
 		core.registerEvent(mod, "magData") --magdata, devaddr, player, data, id, locked, side
 	else
 		core.registerEvent(mod, "bioReader") --bioreader, devaddr, playeruuid
@@ -1250,7 +1250,7 @@ mod.pullEvent = function(...)
 			end)
 		end
 	elseif e[1] == "magData" then
-		if not config.readers then return end
+		if not config.readers or not config.oldReaders then return end
 		local card = nil
 		for _, t in pairs(cards) do
 			if t.id == e[5] then
@@ -1268,7 +1268,9 @@ mod.pullEvent = function(...)
 			end
 			if dev then
 				if dev.disabled then return
-				elseif config.lockedOnly and not e[6] then return
+				elseif config.lockedOnly and not e[6] then
+					server.call(mod, 5202, "Player " .. e[3] .. " attempted to use unlocked card in reader " .. dev.name .. ".", "AUTH", true)
+					return
 				elseif config.identity then
 					if data.inflate(e[4]) ~= e[3] then return end
 				end
@@ -1282,7 +1284,11 @@ mod.pullEvent = function(...)
 				event.timer(dev.delay, function()
 					exec(dev.close)
 				end)
+			else
+				server.call(mod, 5204, "No device was found", "AUTH", true)
 			end
+		else
+			server.call(mod, 5202, "Player " .. e[3] .. " attempted to use unregistered card in reader " .. dev.name .. ".", "AUTH", true)
 		end
 	elseif e[1] == "keypad" then
 		--keypad, devaddr, keyid, keychar
