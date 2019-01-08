@@ -5,7 +5,7 @@
 -- ###############################################
 
 
-local version = "0.5.2"
+local version = "0.5.3"
 local startArgs = {...}
 
 if startArgs[1] == "version_check" then return version end
@@ -17,6 +17,8 @@ local fs = require("filesystem")
 local shell = require("shell")
 local term = require("term")
 local gml = require("gml")
+local s1 = require("support_v1")
+
 local serial = require("serialization")
 local gpu = component.gpu
 local res = {gpu.getResolution()}
@@ -40,7 +42,7 @@ local sgChunk = {}
 
 local tmp = {}
 local dialDialog = false
-local timerID = nil
+local countdownTimer = nil
 local timerEneriga = nil
 local irisTime = 0
 local irisTimer = nil
@@ -582,10 +584,7 @@ local function dial()
 		end
 	elseif sg.stargateState() == "Connected" or sg.stargateState() == "Dialling" then
 		sg.disconnect()
-		timeToClose = -1
-		if timerID ~= nil then
-			event.cancel(timerID)
-		end
+		countdownTimer:stop()
 	elseif sg.stargateState() ~= "Offline" then
 		GMLmessageBox("Stargate is busy", {"OK"})
 	end
@@ -805,6 +804,8 @@ end
 local function createUI()
 	gui = gml.create(0, 0, res[1], res[2])
 	gui.style = darkStyle
+	countdownTimer = s1.timer(countdown, gui)
+
 	addTitle()
 	gui:addLabel(35, 2, 10, version)["text-color"] = 0x666666
 	addBar(53, 1, 15, false)
@@ -916,18 +917,12 @@ local function main()
 	createUI()
 end
 
-local function countdown()
-	if timeToClose < 0 then
-		sg.disconnect()
-		event.cancel(timerID)
-	else
-		local minutes = tostring(math.floor(timeToClose / 60))
-		local seconds = tostring(60 * ((timeToClose / 60) - math.floor(timeToClose / 60)))
-		if string.len(seconds) == 1 then seconds = "0" .. seconds end
-		element.timeout["text"] = "Remaining time: " .. minutes .. ":" .. seconds
-		element.timeout:draw()
-		timeToClose = timeToClose - 1
-	end
+local function countdown(timer)
+	local minutes = tostring(math.floor(timer.count / 60))
+	local seconds = tostring(60 * ((timer.count / 60) - math.floor(timer.count / 60)))
+	if string.len(seconds) == 1 then seconds = "0" .. seconds end
+	element.timeout["text"] = "Remaining time: " .. minutes .. ":" .. seconds
+	element.timeout:draw()
 end
 
 local function __eventListener(...)
@@ -968,9 +963,7 @@ local function __eventListener(...)
 			element.timeout:hide()
 			element.dial["text"] = "Open a tunnel"
 			element.dial:draw()
-			if timerID then
-				event.cancel(timerID)
-			end
+			countdownTimer:stop()
 			timeToClose = 0
 			element.stargate:draw()
 			element.stargate:lockSymbol(0)
@@ -981,7 +974,7 @@ local function __eventListener(...)
 			element.timeout:show()
 			element.dial["text"] = "Close the tunnel"
 			element.dial:draw()
-			timerID = event.timer(1, countdown, 301)
+			countdownTimer:start(1, 300)
 			element.stargate:draw()
 		end
 	elseif ev[1] == "sgChevronEngaged" then
