@@ -9,10 +9,14 @@
     This library provides various utilities
 
     ## Context ##
+    Some of functions in this library use optional context object.
+    Context allows to detect whether application is running - otherwise
+    these functions won't work. Context is any object that provides
+    field 'running' (such as GML library).
 ]]
 
 
-local version = "1.0"
+local version = "1.1"
 local startArgs = {...}
 
 if startArgs[1] == "version_check" then return version end
@@ -60,25 +64,35 @@ lib.timer = function (callback, context)
         Starts the timer
             @interval - timer interval
             @count - how many times timer should be run
+            @force - stops previously running timer
             RET: whether timer has been started (if not, check if is already running
                 or whether context is running).
         ]]
-        start = function (self, interval, count)
+        start = function (self, interval, count, force)
             lib.checkNumber(1, interval, 0, math.huge, true)
             lib.checkNumber(2, count, 0, math.huge, true)
 
-            if self.running then return false end
+            if self.running then
+                if force then
+                    self:stop()
+                else
+                    return false
+                end
+            end
 
             self.interval = interval
             self.count = count
             self.timerId = event.timer(self.interval, function () tickFunction(self) end, self.count)
+            return true
         end,
         --[[
         Stops the timer
             @silent - if set to true, onStop callback won't be invoked
         ]]
         stop = function (self, silent)
-            event.cancel(self.timerId)
+            if self.timerId then
+                event.cancel(self.timerId)
+            end
             self.running = false
             if not silent and type(self.onStop) == "function" then
                 self.onStop(self)

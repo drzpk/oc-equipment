@@ -17,7 +17,7 @@
 	{"dark-style","none","https://gitlab.com/d_rzepka/oc-equipment/raw/master/lib/dark.gss","Dark GML theme","IlynPayne",nil,true,nil,"dark.gss"},
 	{"hdp","2.1","https://gitlab.com/d_rzepka/oc-equipment/raw/master/lib/hdp.lua","Network protocol (better version)","IlynPayne",nil,true,nil,nil},
 	{"dsapi","2.3","https://gitlab.com/d_rzepka/oc-equipment/raw/master/lib/dsapi.lua","Data server API","IlynPayne",{"hdp"},true,nil,nil},
-	{"support_v1","1.0","https://gitlab.com/d_rzepka/oc-equipment/raw/master/lib/support_v1.lua","Support library v1","IlynPayne",nil,true,nil,nil},
+	{"support_v1","1.1","https://gitlab.com/d_rzepka/oc-equipment/raw/master/lib/support_v1.lua","Support library v1","IlynPayne",nil,true,nil,nil},
 	--programs
 	{"sgcx","0.5.3","https://gitlab.com/d_rzepka/oc-equipment/raw/master/stargate/sgcx.lua","Stargate controller","IlynPayne",{"gml","gfxbuffer","default-style","dark-style", "support_v1"},nil,nil,nil},
 	{"irisAuth","1.8","https://gitlab.com/d_rzepka/oc-equipment/raw/master/stargate/irisAuth.lua","Remote iris authenticator for stargate controller","IlynPayne",nil,nil,nil,nil},
