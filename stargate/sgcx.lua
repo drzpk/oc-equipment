@@ -5,7 +5,7 @@
 -- ###############################################
 
 
-local version = "0.5.3"
+local version = "0.5.4"
 local startArgs = {...}
 
 if startArgs[1] == "version_check" then return version end
@@ -582,7 +582,7 @@ local function dial()
 		else
 			GMLmessageBox(translateResponse(response), {"OK"})
 		end
-	elseif sg.stargateState() == "Connected" or sg.stargateState() == "Dialling" then
+	elseif sg.stargateState() == "Connected" or sg.stargateState() == "Dialing" then
 		sg.disconnect()
 		countdownTimer:stop()
 	elseif sg.stargateState() ~= "Offline" then
@@ -801,10 +801,19 @@ local function coordsCalculator()
 	cgui:run()
 end
 
+local function countdown(timer)
+	local minutes = tostring(math.floor(timer.count / 60))
+	local seconds = tostring(60 * ((timer.count / 60) - math.floor(timer.count / 60)))
+	if string.len(seconds) == 1 then seconds = "0" .. seconds end
+	element.timeout["text"] = "Remaining time: " .. minutes .. ":" .. seconds
+	element.timeout:draw()
+end
+
 local function createUI()
 	gui = gml.create(0, 0, res[1], res[2])
 	gui.style = darkStyle
 	countdownTimer = s1.timer(countdown, gui)
+	countdownTimer.onStop = function () sg.disconnect() end
 
 	addTitle()
 	gui:addLabel(35, 2, 10, version)["text-color"] = 0x666666
@@ -917,14 +926,6 @@ local function main()
 	createUI()
 end
 
-local function countdown(timer)
-	local minutes = tostring(math.floor(timer.count / 60))
-	local seconds = tostring(60 * ((timer.count / 60) - math.floor(timer.count / 60)))
-	if string.len(seconds) == 1 then seconds = "0" .. seconds end
-	element.timeout["text"] = "Remaining time: " .. minutes .. ":" .. seconds
-	element.timeout:draw()
-end
-
 local function __eventListener(...)
 	local ev = {...}
 	if ev[1] == "sgDialIn" then
@@ -976,6 +977,8 @@ local function __eventListener(...)
 			element.dial:draw()
 			countdownTimer:start(1, 300)
 			element.stargate:draw()
+			element.distance.text = "Distance: " .. tostring(computeDistance(sg.remoteAddress()))
+			element.distance:draw()
 		end
 	elseif ev[1] == "sgChevronEngaged" then
 		element.stargate:lockSymbol(ev[3])
@@ -1021,6 +1024,7 @@ event.listen("modem_message", eventListener)
 timerEneriga = event.timer(5, energyRefresh, math.huge)
 main()
 event.cancel(timerEneriga)
+if data.port and modem.isOpen(data.port) then modem.close(data.port) end
 event.ignore("sgDialIn", eventListener)
 event.ignore("sgIrisStateChange", eventListener)
 event.ignore("sgStargateStateChange", eventListener)
