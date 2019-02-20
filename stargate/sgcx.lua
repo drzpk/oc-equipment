@@ -5,7 +5,7 @@
 -- ###############################################
 
 
-local version = "0.5.4"
+local version = "0.5.5"
 local startArgs = {...}
 
 if startArgs[1] == "version_check" then return version end
@@ -18,6 +18,7 @@ local shell = require("shell")
 local term = require("term")
 local gml = require("gml")
 local s1 = require("support_v1")
+local colorGrid = require("color_grid")
 
 local serial = require("serialization")
 local gpu = component.gpu
@@ -255,53 +256,15 @@ local function addBar(x, y, length, isHorizontal)
 end
 
 local function addTitle()
-	local title = {
-		visible = false,
-		hidden = false,
-		gui = gui,
-		style = gui.style,
-		focusable = false,
-		type = "label",
-		renderTarget = gui.renderTarget,
-		horizontal = isHorizontal,
-		posX = 3,
-		posY = 3,
-		width = 28,
-		height = 5
-	}
-	title.contains = GMLcontains
-	title.isHidden = function() return false end
-	title.draw = function(t)
-		t.renderTarget.setBackground(0xff6600)
-		t.renderTarget.fill(4, 3, 3, 1, ' ')--s
-		t.renderTarget.fill(4, 5, 3, 1, ' ')
-		t.renderTarget.fill(4, 7, 3, 1, ' ')
-		t.renderTarget.set(3, 4, ' ')
-		t.renderTarget.set(7, 6, ' ')
-		t.renderTarget.fill(12, 3, 4, 1, ' ')--g
-		t.renderTarget.fill(12, 7, 4, 1, ' ')
-		t.renderTarget.fill(13, 5, 3, 1, ' ')
-		t.renderTarget.set(11, 4, ' ')
-		t.renderTarget.set(10, 5, ' ')
-		t.renderTarget.set(11, 6, ' ')
-		t.renderTarget.set(15, 6, ' ')
-		t.renderTarget.fill(20, 3, 3, 1, ' ')--c
-		t.renderTarget.fill(20, 7, 3, 1, ' ')
-		t.renderTarget.set(19, 4, ' ')
-		t.renderTarget.set(18, 5, ' ')
-		t.renderTarget.set(19, 6, ' ')
-		t.renderTarget.fill(25, 3, 2, 1, ' ')--x
-		t.renderTarget.fill(26, 4, 2, 1, ' ')
-		t.renderTarget.fill(27, 5, 3, 1, ' ')
-		t.renderTarget.fill(26, 6, 2, 1, ' ')
-		t.renderTarget.fill(25, 7, 2, 1, ' ')
-		t.renderTarget.fill(29, 4, 2, 1, ' ')
-		t.renderTarget.fill(30, 3, 2, 1, ' ')
-		t.renderTarget.fill(29, 6, 2, 1, ' ')
-		t.renderTarget.fill(30, 7, 2, 1, ' ')
-	end
-	gui:addComponent(title)
-	return title
+	local grid = colorGrid.grid({
+		["#"] = 0xff6600
+	})
+	grid:line(" ###     ####    ###  ##   ##")
+	grid:line("#       #       #      ## ## ")
+	grid:line(" ###   #  ###  #        ###  ")
+	grid:line("    #   #   #   #      ## ## ")
+	grid:line(" ###     ####    ###  ##   ##")
+	return grid:generateComponent(gui, 3, 3)
 end
 
 local function addStargate(cx, cy)
