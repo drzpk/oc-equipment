@@ -28,7 +28,7 @@ local gfxbuffer=require("gfxbuffer")
 
 local doubleClickThreshold=.25
 
-local gml={VERSION="1.0"}
+local gml={VERSION="1.1"}
 local startArgs = {...}
 if startArgs[1] == "version_check" then return gml.VERSION end
 
@@ -898,7 +898,7 @@ local function runGui(gui)
     end
   end
 
-  gui.running = false
+  gui.running=false
 
   cleanup(gui)
 
@@ -1631,6 +1631,10 @@ end
 
 
 --**********************
+
+gml.api = {
+  baseComponent = baseComponent
+}
 
 defaultStyle=gml.loadStyle("default")
 screen.style=defaultStyle
