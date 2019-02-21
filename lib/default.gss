@@ -139,6 +139,27 @@ label.listbox:selected {
 
 }
 
+combobox {
+  border: true;
+  border-top: true;
+  border-left: true;
+  border-right: true;
+  border-bottom: true;
+
+  button-ch-up: U+25b2;
+  button-ch-down: U+25bc;
+}
+
+listbox.overlay {
+  border-ch-topleft: U+2560;
+  border-ch-topright: U+2563;
+  border-right: true;
+}
+
+listbox.nooverlay {
+  border-right: true;
+}
+
 
 /*one-bit styles*/
 *!1 {

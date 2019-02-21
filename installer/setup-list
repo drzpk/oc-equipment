@@ -10,7 +10,7 @@
 	--library
 	{"rtpo","2.0","https://gitlab.com/d_rzepka/oc-equipment/raw/master/archive/rtpo.lua","Network protocol","IlynPayne",nil,true,nil,nil,true},
 	{"ds-api","1.3","https://gitlab.com/d_rzepka/oc-equipment/raw/master/archive/ds-api.lua","Data server API","IlynPayne",{"rtpo"},nil,nil,nil,true},
-	{"gml","1.0","https://gitlab.com/d_rzepka/oc-equipment/raw/master/lib/gml.lua","GUI library","Gopher",{"gfxbuffer","default-style"},true,nil,nil},
+	{"gml","1.2","https://gitlab.com/d_rzepka/oc-equipment/raw/master/lib/gml.lua","GUI library","Gopher",{"gfxbuffer","default-style"},true,nil,nil},
 	{"gfxbuffer","none","https://gitlab.com/d_rzepka/oc-equipment/raw/master/lib/gfxbuffer.lua","GML dependency","Gopher",nil,true,nil,nil},
 	{"colorutils","none","https://gitlab.com/d_rzepka/oc-equipment/raw/master/lib/colorutils.lua","Color conversion tools (old dependency of gfxbuffer, currently not used)","Gopher",nil,true,nil,nil},
 	{"default-style","none","https://gitlab.com/d_rzepka/oc-equipment/raw/master/lib/default.gss","Default GML theme","Gopher",nil,true,nil,"default.gss"},

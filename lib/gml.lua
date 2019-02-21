@@ -28,7 +28,7 @@ local gfxbuffer=require("gfxbuffer")
 
 local doubleClickThreshold=.25
 
-local gml={VERSION="1.1"}
+local gml={VERSION="1.2"}
 local startArgs = {...}
 if startArgs[1] == "version_check" then return gml.VERSION end
 
@@ -47,6 +47,7 @@ local validElements = {
   scrollbar=true, --scroll bar, scrolls. Can be horizontal or vertical.
   textbox=true,   --multi-line text input, line wraps, scrolls up-down, has scroll bar if needed
   listbox=true,   --list, vertical stack of labels with a scrollbar
+  combobox=true,  --drop-down list
 }
 
 local validStates = {
@@ -230,6 +231,20 @@ local function mergeStyles(t1, t2)
 end
 
 
+local function filterDown(nodes,key)
+  local newNodes={}
+  for i=1,#nodes do
+    if key~="*" and nodes[i][key] then
+      newNodes[#newNodes+1]=nodes[i][key]
+    end
+    if nodes[i]["*"] then
+      newNodes[#newNodes+1]=nodes[i]["*"]
+    end
+  end
+  return newNodes
+end
+
+
 function getAppliedStyles(element)
   local styleRoot=element.style
   assert(styleRoot)
@@ -238,22 +253,22 @@ function getAppliedStyles(element)
   local depth,state,class,elementType=element.renderTarget.getDepth(),element.state or "*",element.class or "*", element.type
 
   local nodes={styleRoot}
-  local function filterDown(nodes,key)
-    local newNodes={}
-    for i=1,#nodes do
-      if key~="*" and nodes[i][key] then
-        newNodes[#newNodes+1]=nodes[i][key]
-      end
-      if nodes[i]["*"] then
-        newNodes[#newNodes+1]=nodes[i]["*"]
-      end
-    end
-    return newNodes
-  end
   nodes=filterDown(nodes,depth)
   nodes=filterDown(nodes,state)
   nodes=filterDown(nodes,class)
   nodes=filterDown(nodes,elementType)
+  return nodes
+end
+
+
+function queryStyles(gui,query)
+  local depth,state,class,type=query.depth or "*",query.state or "*",query.class or "*",query.type or "*"
+
+  local nodes={gui.style}
+  nodes=filterDown(nodes,depth)
+  nodes=filterDown(nodes,state)
+  nodes=filterDown(nodes,class)
+  nodes=filterDown(nodes,type)
   return nodes
 end
 
@@ -420,6 +435,34 @@ local function correctForBorder(element,px,py)
   px=px-(element.bodyX and element.bodyX-element.posX or 0)
   py=py-(element.bodyY and element.bodyY-element.posY or 0)
   return px,py
+end
+
+local function dumpFrame(renderTarget,screenX,screenY,width,height)
+  local grid={}
+
+  for ey=1,height do
+    local row={}
+    for ex=1,width do
+      local entry=table.pack(renderTarget.get(screenX+ex-1,screenY+ey-1))
+      table.insert(row,entry)
+    end
+    table.insert(grid,row)
+  end
+
+  return {screenX,screenY,grid}
+end
+
+local function applyFrame(renderTarget, frame)
+  local sx,sy,g=table.unpack(frame)
+
+  for y=1,#g do
+    for x=1,#g[y] do
+      local c,fg,bg=table.unpack(g[y][x])
+      renderTarget.setForeground(fg)
+      renderTarget.setBackground(bg)
+      renderTarget.set(sx+x-1,sy+y-1,c)
+    end
+  end
 end
 
 local function frameAndSave(element)
@@ -766,7 +809,7 @@ local function runGui(gui)
     end
   end
   if gui.focusElement and gui.focusElement.gotFocus then
-    gui.focusElement.gotFocus()
+    gui.focusElement:gotFocus()
   end
 
   loadHandlers(gui)
@@ -777,6 +820,11 @@ local function runGui(gui)
   end
 
   local function getComponentAt(tx,ty)
+    -- focused components have higher priority
+    if gui.focusElement then
+      if not gui.focusElement:isHidden() and gui.focusElement:contains(tx,ty) then return gui.focusElement end
+    end
+
     for i=1,#gui.components do
       local c=gui.components[i]
       if not c:isHidden() and c:contains(tx,ty) then
@@ -941,6 +989,14 @@ local function baseComponent(gui,x,y,width,height,type,focusable)
   c.contains=contains
 
   return c
+end
+
+
+local function createLabel(gui,x,y,width,labelText)
+  local label=baseComponent(gui,x,y,width,1,"label",false)
+  label.text=labelText
+  label.draw=drawLabel
+  return label
 end
 
 
@@ -1383,6 +1439,20 @@ local function compositeBase(gui,x,y,width,height,objType,focusable)
     obj.components[#obj.components+1]=component
   end
 
+  function comp.removeComponent(obj,component)
+    local pos=0
+    for i,comp in pairs(obj.components) do
+      if obj.components[i]==comp then
+        pos=i
+        break
+      end
+    end
+
+    if pos > 0 then
+      return table.remove(obj.components,pos)
+    end
+  end
+
   return comp
 end
 
@@ -1546,6 +1616,178 @@ local function addListBox(gui,x,y,width,height,list)
 end
 
 
+local function drawComboBox(cb)
+  if not cb:isHidden() then
+    if (not cb.expanded) or (cb.expanded and cb.overlay) then
+      local styles=getAppliedStyles(cb)
+      drawBorder(cb,styles)
+
+      cb.label:draw()
+      local gpu=cb.renderTarget
+      local screenX,screenY=cb:getScreenPosition()
+      local borderBg,borderFg=extractProperties(cb,styles,"border-color-bg","border-color-fg")
+
+      cb:updateButtonLabel()
+      gpu.setBackground(borderBg)
+      gpu.setForeground(borderFg)
+      gpu.set(screenX+cb.width-2,screenY+1,cb.buttonLabel)
+    end
+
+    if cb.expanded then
+      local fakeElement=baseComponent(cb.gui,cb.posX,cb.expandStart,cb.width,cb.listLimit+2,"listbox",false)
+      fakeElement.class=cb.overlay and "overlay" or "nooverlay"
+
+      local styles=getAppliedStyles(fakeElement)
+      drawBorder(fakeElement,styles)
+  
+      for i=1,#cb.labels do cb.labels[i]:draw() end
+    end
+  end
+  cb.visible=true
+end
+
+
+local function collapseComboBox(cb)
+  if not cb.expanded then return end
+  cb.expanded=false
+  applyFrame(cb.renderTarget,cb.savedFrame)
+  cb.savedFrame=nil
+  cb.labels=nil
+  cb.posY=cb.savedPosY
+  cb:draw()
+end
+
+
+local function updateComboBoxList(cb,newList)
+  if cb.expanded then collapseComboBox(cb) end
+  cb.list=newList
+  cb.selectedElement=#newList>0 and 1 or 0
+
+  cb.label.text=cb.selectedElement>0 and cb.list[cb.selectedElement] or ""
+  cb.label:draw()
+end
+
+
+local function setComboBoxActiveItem(cb,newPos,broadcast)
+  if cb.expanded then collapseComboBox(cb) end
+  cb.selectedElement=newPos
+  cb.label.text=cb.selectedElement>0 and cb.list[cb.selectedElement] or ""
+  cb.label:draw()
+
+  if broadcast then
+    cb:onSelected(cb.selectedElement,cb.list[cb.selectedElement],cb.list)
+  end
+end
+
+
+local function expandComboBox(cb)
+  if cb.expanded or not cb.list or #cb.list==0 then return end
+  cb.expanded=true
+  cb.justExpanded=true
+  cb.savedPosY=cb.posY
+
+  local maxHeight=cb.gui.bodyH-cb.posY-cb.height+1
+  if #cb.list+1 > maxHeight then
+    local screenX,screenY=cb:getScreenPosition()
+    cb.listLimit=math.min(#cb.list,cb.gui.bodyH-2)
+    cb.expandStart=math.max(1,cb.posY-math.floor((cb.listLimit+2)/2))
+    cb.posY=cb.expandStart
+    cb.overlay = false
+    screenY=screenY-cb.height+cb.expandStart
+    cb.totalHeight=cb.listLimit+2
+  else
+    cb.listLimit=#cb.list
+    cb.expandStart=cb.posY+2
+    cb.overlay = true
+    cb.totalHeight=cb.listLimit+1+cb.height
+  end
+
+
+  cb.labels={}
+  for i=1,cb.listLimit do
+    cb.labels[i]=createLabel(cb.gui,cb.posX+1,cb.expandStart+i,cb.width-2,cb.list[i])
+    if i==cb.selectedElement then
+      cb.labels[i].class="listbox"
+      cb.labels[i].state="selected"
+    end
+  end
+
+  local screenX,screenY=cb:getScreenPosition()
+  cb.savedFrame=dumpFrame(cb.renderTarget,screenX,screenY,cb.width,cb.totalHeight)
+  cb:draw()
+end
+
+
+local function clickComboBox(cb,relativeX,relativeY)
+  if cb.state=="focus" and not cb.expanded then
+    expandComboBox(cb) 
+    return
+  end
+
+  if not cb.expanded then return end
+  if cb.overlay and relativeY==2 and relativeX>1 and relativeY<cb.width then
+    if not cb.justExpanded then
+      collapseComboBox(cb)
+    else
+      cb.justExpanded=false
+    end
+    return
+  elseif cb.justExpanded then
+    cb.justExpanded=false
+    return
+  end
+
+  local offset=cb.overlay and 2 or 0
+  if relativeX>1 and relativeX<cb.width and relativeY>1+offset and relativeY<cb.totalHeight then
+    local selectedPos=relativeY-offset-1
+    setComboBoxActiveItem(cb,selectedPos,true)
+  end
+end
+
+
+local function addComboBox(gui,x,y,width,list)
+  local cb=compositeBase(gui,x,y,width,3,"combobox",true)
+  cb.list=list
+  cb.selectedElement=0
+  cb.expanded=false
+
+  cb.label=createLabel(gui,x+1,y+1,width-3,"")
+  cb.label.focusable=false
+  cb.label.contains=function() return false end
+
+  local styles=queryStyles(gui,{type="scrollbar"})
+  local buttonChCollapsed,buttonChExpanded=extractProperties(gui,styles,"button-ch-down", "button-ch-up")
+  cb.updateButtonLabel=function(cb)
+    cb.buttonLabel=cb.expanded and buttonChExpanded or buttonChCollapsed
+  end
+  cb:updateButtonLabel()
+  updateComboBoxList(cb,list)
+
+  cb.contains=function(element,x,y)
+    local result=nil
+    if element.expanded then
+      local ex,ey,ew,eh=element.posX,element.expandStart,element.width,element.totalHeight
+      result=x>=ex and x<=ex+ew-1 and y>=ey and y<=ey+eh-1
+    else
+      result=contains(element,x,y)
+    end
+    
+    if not result then collapseComboBox(element) end
+    return result
+  end
+
+  cb.updateList=updateComboBoxList
+  cb.select=setComboBoxActiveItem
+  cb.draw=drawComboBox
+  cb.gotFocus=expandComboBox
+  cb.lostFocus=collapseComboBox
+  cb.onClick=clickComboBox
+
+  gui:addComponent(cb)
+  return cb
+end
+
+
 function gml.create(x,y,width,height,renderTarget)
 
   local newGui=compositeBase(screen,x,y,width,height,"gui",false)
@@ -1563,6 +1805,20 @@ function gml.create(x,y,width,height,renderTarget)
     if obj.focusElement==nil and component.focusable then
       component.state="focus"
       obj.focusElement=component
+    end
+  end
+
+  function newGui.removeComponent(obj,component)
+    local pos=0
+    for i,comp in pairs(newGui.components) do
+      if newGui.components[i]==comp then
+        pos=i
+        break
+      end
+    end
+
+    if pos > 0 then
+      return table.remove(newGui.components,pos)
     end
   end
 
@@ -1585,7 +1841,7 @@ function gml.create(x,y,width,height,renderTarget)
     if gui.focusElement then
       gui.focusElement.state=nil
       if gui.focusElement.lostFocus then
-        gui.focusElement.lostFocus()
+        gui.focusElement:lostFocus()
       elseif not gui.hidden then
         gui.focusElement:draw()
       end
@@ -1593,7 +1849,7 @@ function gml.create(x,y,width,height,renderTarget)
     gui.focusElement=target
     target.state="focus"
     if target.gotFocus then
-      target.gotFocus()
+      target:gotFocus()
     elseif not gui.hidden then
       target:draw()
     end
@@ -1607,6 +1863,7 @@ function gml.create(x,y,width,height,renderTarget)
   newGui.addScrollBarV=addScrollBarV
   newGui.addScrollBarH=addScrollBarH
   newGui.addListBox=addListBox
+  newGui.addComboBox=addComboBox
   newGui.draw=function(gui)
       local styles=getAppliedStyles(gui)
       local bodyX,bodyY,bodyW,bodyH=drawBorder(gui,styles)
