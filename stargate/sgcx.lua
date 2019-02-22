@@ -4,8 +4,44 @@
 -- #   12.2014                   by: IlynPayne   #
 -- ###############################################
 
+--[[
+	## Description ##
+	Allows to control SGCraft's Stargates.
 
-local version = "0.5.5"
+	## Data storage format ##
+	Main configuration file
+	/etc/sgcx.cfg {
+		version = 2, -- data storage format version
+		address = "string", -- Stargate component address
+		port = 0, -- remote iris authentication port
+		autoIris = false, -- automatic iris status
+		codes = { -- remote iris authentication codes
+			"string",
+			...
+		},
+		groups = { -- order of groups (names of group files)
+			"string",
+			...
+		}
+	}
+
+	Files containing address groups
+	/etc/sgcx.d/* {
+		version = 2, -- data storage version
+		name = "string", -- group name
+		group = {
+			[1] = { -- address entry
+				name = "string",
+				world = "string",
+				address = "string",
+			},
+			...
+		}
+	}
+]]
+
+local version = "0.6.0"
+local dataStorageVersion = 2
 local startArgs = {...}
 
 if startArgs[1] == "version_check" then return version end
@@ -36,10 +72,16 @@ local modem = component.modem
 local gui = nil
 local darkStyle = nil
 local element = {}
-local data = {}
 local sg = nil
 local irisTimeout = 11
 local sgChunk = {}
+
+-- Loaded configuration data
+local data = {
+	config = {}, -- script-wide configuration
+	groups = {},  -- address groups
+	activeGroup = nil
+}
 
 local tmp = {}
 local dialDialog = false
@@ -91,18 +133,74 @@ local function chooseInterface()
 end
 
 local function saveConfig()
-	local plik = io.open("/etc/sg.cfg", "w")
-	plik:write(serial.serialize(data))
-	plik:close()
+	local file = io.open("/etc/sgcx.cfg", "w")
+	file:write(serial.serialize(data.config))
+	file:close()
+
+	if not fs.isDirectory("/etc/sgcx.d") then
+		fs.makeDirectory("/etc/sgcx.d")
+	end
+
+	-- remove unused group files
+	for f in fs.list("/etc/sgcx.d") do
+		if f:sub(-1) ~= "/" then
+			local found = false
+			for _, g in pairs(data.config.groups) do
+				if g == f then 
+					found = true
+					break
+				end
+			end
+			if not found then
+				fs.remove(fs.concat("/etc/sgcx.d", f))
+			end
+		end
+	end
+
+	-- save the rest of groups
+	for i, g in pairs(data.config.groups) do
+		local file = io.open(fs.concat("/etc/sgcx.d", g), "w")
+		file:write(serial.serialize(data.groups[i]))
+		file:close()
+	end
+end
+
+-- Storage format version 2
+local function migrateStorageTo2()
+	local oldFile = io.open("/etc/sg.cfg", "r")
+	local oldData = serial.unserialize(oldFile:read())
+	oldFile:close()
+
+	data.config.version = 2
+	data.config.address = oldData.address
+	data.config.port = oldData.port
+	data.config.portStatus = oldData.portStatus
+	data.config.codes = {tostring(oldData.irisCode)}
+	data.config.autoIris = oldData.autoIris
+	data.config.groups = {"default.cfg"}
+
+	data.groups[1] = {
+		version = 2,
+		name = "default",
+		group = {}
+	}
+	for _, oldEntry in pairs(oldData.list) do
+		table.insert(data.groups[1].group, oldEntry)
+	end
 end
 
 local function loadConfig(overrideAddress)
-	if not fs.exists("/etc/sg.cfg") then
+	if fs.exists("/etc/sg.cfg") and not fs.exists("/etc/sgcx.cfg") then
+		migrateStorageTo2()
+		saveConfig()
+	end
+
+	if not fs.exists("/etc/sgcx.cfg") then
 		if not overrideAddress then
 			io.stderr:write("Configuration file not found. In order to create one, type 'sgcx init'")
 			return false
 		end
-		data.address = overrideAddress
+		data.config.address = overrideAddress
 		sg = component.proxy(overrideAddress)
 		if not sg then
 			io.stderr:write("Wrong stargate interface address. Type 'sgcx init' to choose a new one.")
@@ -112,11 +210,12 @@ local function loadConfig(overrideAddress)
 			return false
 		end
 	else
-		local plik = io.open("/etc/sg.cfg", "r")
-		data = serial.unserialize(plik:read()) or {}
-		if overrideAddress then data.address = overrideAddress end
-		plik:close()
-		sg = component.proxy(data.address or "")
+		local file = io.open("/etc/sgcx.cfg", "r")
+		data.config = serial.unserialize(file:read()) or {}
+		if overrideAddress then data.config.address = overrideAddress end
+		file:close()
+
+		sg = component.proxy(data.config.address or "")
 		if not sg then
 			io.stderr:write("Stargate component not found. Check connection with Stargate interface or run 'sgcx init' command to choose new interface.")
 			return false
@@ -125,10 +224,47 @@ local function loadConfig(overrideAddress)
 			return false
 		end
 	end
-	data.list = data.list or {}
-	data.port = data.port or math.random(10000, 50000)
-	data.irisCode = data.irisCode or math.random(1000, 9999)
-	if data.portStatus then modem.open(data.port) end
+
+	-- default values
+	data.config.groups = data.config.groups or {}
+	data.config.port = data.config.port or math.random(10000, 50000)
+	data.config.iris = data.config.iris or {math.random(1000, 9999)}
+	if data.config.portStatus then modem.open(data.config.port) end
+
+	-- first load defined groups
+	local loadedGroups = {}
+	for _, g in pairs(data.config.groups) do
+		local path = fs.concat("/etc/sgcx.d", g)
+		if fs.exists(path) then
+			local groupFile = io.open(path, "r")
+			table.insert(data.groups, serial.unserialize(groupFile:read()))
+			table.insert(loadedGroups, g)
+			groupFile:close()
+		end
+	end
+	data.config.groups = loadedGroups
+
+	-- load new groups
+	for file in fs.list("/etc/sgcx.d") do
+		if file:sub(-1) ~= "/" then
+			local loaded = false
+			for _, name in pairs(data.config.groups) do
+				if name == file then
+					loaded = true
+					break
+				end
+			end
+			if not loaded then
+				local groupFile = io.open(file, "r")
+				table.insert(data.groups, serial.unserialize(groupFile:read()))
+				groupFile:close()
+				table.insert(data.config.groups, file)
+			end
+		end
+	end
+
+	data.activeGroup = data.groups[1]
+	
 	return true
 end
 
@@ -458,7 +594,7 @@ local function modifyList(action)
 		elseif not sg.energyToDial(element.address["text"]) then
 			GMLmessageBox("Address is incorrect or does not exist", {"OK"})
 		else
-			for _, v in pairs(data.list) do
+			for _, v in pairs(data.activeGroup.group) do
 				if v.name == element.name["text"] then
 					GMLmessageBox("Address with given name is already on the list", {"OK"})
 					return
@@ -472,9 +608,9 @@ local function modifyList(action)
 				world = element.world["text"],
 				address = element.address["text"]:upper()
 			}
-			table.insert(data.list, l)
+			table.insert(data.activeGroup.group, l)
 			local list = {}
-			for a, v in pairs(data.list) do
+			for a, v in pairs(data.activeGroup.group) do
 				table.insert(list, tostring(a) .. ". " .. v.name .. " (" .. v.world .. ")")
 			end
 			element.list:updateList(list)
@@ -491,13 +627,13 @@ local function modifyList(action)
 		else
 			if GMLmessageBox("Are you sure you want to modify this entry", {"Yes", "No"}) == "Yes" then
 				local selected = element.list:getSelected()
-				for a, v in pairs(data.list) do
+				for a, v in pairs(data.activeGroup.group) do
 					if selected == tostring(a) .. ". " .. v.name .. " (" .. v.world .. ")" then
 						v.name = element.name["text"]
 						v.world = element.world["text"]
 						v.address = element.address["text"]:upper()
 						local list = {}
-						for a, v in pairs(data.list) do
+						for a, v in pairs(data.activeGroup.group) do
 							table.insert(list, tostring(a) .. ". " .. v.name .. " (" .. v.world .. ")")
 						end
 						element.list:updateList(list)
@@ -511,11 +647,11 @@ local function modifyList(action)
 	elseif action == "remove" and element.list:getSelected() then
 		if GMLmessageBox("Are you sure you want to remove selected entry?", {"Yes", "No"}) == "Yes" then
 			local selected = element.list:getSelected()
-			for k, v in pairs(data.list) do
+			for k, v in pairs(data.activeGroup.group) do
 				if selected == tostring(k) .. ". " .. v.name .. " (" .. v.world .. ")" then
-					table.remove(data.list, k)
+					table.remove(data.activeGroup.group, k)
 					local list = {}
-					for a, v in pairs(data.list) do
+					for a, v in pairs(data.activeGroup.group) do
 						table.insert(list, tostring(a) .. ". " .. v.name .. " (" .. v.world .. ")")
 					end
 					element.list:updateList(list)
@@ -796,7 +932,7 @@ local function createUI()
 	element.timeout:hide()
 	gui:addLabel(3, 20, 16, "Address list:")
 	local list = {}
-	for a, v in pairs(data.list) do
+	for a, v in pairs(data.activeGroup.group) do
 		table.insert(list, tostring(a) .. ". " .. v.name .. " (" .. v.world .. ")")
 	end
 	element.list = gui:addListBox(3, 21, 40, 24, list)
@@ -804,12 +940,12 @@ local function createUI()
 		local sel = listBox:getSelected()
 		if not sel then return end
 		local index = tonumber(sel:match("^(%d+)%.%s"))
-		if not index or not data.list[index] then return end
-		element.name["text"] = data.list[index].name
+		if not index or not data.activeGroup.group[index] then return end
+		element.name["text"] = data.activeGroup.group[index].name
 		element.name:draw()
-		element.world["text"] = data.list[index].world
+		element.world["text"] = data.activeGroup.group[index].world
 		element.world:draw()
-		element.address["text"] = data.list[index].address
+		element.address["text"] = data.activeGroup.group[index].address
 		element.address:draw()
 		local clear = clearAddress(element.address.text)
 		if clear then
@@ -838,44 +974,45 @@ local function createUI()
 	end)
 	element.irisButton["text"] = sg.irisState() == "Closed" and "Open the iris" or (sg.irisState() == "Open" and "Close the iris" or "Switch the iris")
 	element.autoIris = gui:addLabel(45, 44, 7, "Mode:")
-	gui:addButton(52, 44, 18, 1, data.autoIris and "automatic" or "manual", function(self)
-		data.autoIris = not data.autoIris
-		self["text"] = data.autoIris and "automatic" or "manual"
+	gui:addButton(52, 44, 18, 1, data.config.autoIris and "automatic" or "manual", function(self)
+		data.config.autoIris = not data.config.autoIris
+		self["text"] = data.config.autoIris and "automatic" or "manual"
 		self:draw()
 		updateCounter()
 	end)
 	gui:addLabel(110, 5, 7, "Port:")
-	gui:addButton(120, 5, 15, 1, data.portStatus and "Open" or "Closed", function(self)
-		if data.portStatus then
-			modem.close(data.port)
+	gui:addButton(120, 5, 15, 1, data.config.portStatus and "Open" or "Closed", function(self)
+		if data.config.portStatus then
+			modem.close(data.config.port)
 			self["text"] = "Closed"
 			self["text-color"] = 0xff0000
 		else
-			modem.open(data.port)
+			modem.open(data.config.port)
 			self["text"] = "Open"
 			self["text-color"] = 0x00ff00
 		end
-		data.portStatus = not data.portStatus
+		data.config.portStatus = not data.config.portStatus
 		self:draw()
 		updateCounter()
-	end)["text-color"] = data.portStatus and 0x00ff00 or 0xff0000
+	end)["text-color"] = data.config.portStatus and 0x00ff00 or 0xff0000
 	gui:addLabel(110, 6, 10, "Channel:")
-	gui:addButton(120, 6, 15, 1, tostring(data.port), function(self)
-		local isOpen = modem.isOpen(data.port)
-		if isOpen then modem.close(data.port) end
-		data.port = math.random(10000, 50000)
-		self["text"] = tostring(data.port)
+	gui:addButton(120, 6, 15, 1, tostring(data.config.port), function(self)
+		local isOpen = modem.isOpen(data.config.port)
+		if isOpen then modem.close(data.config.port) end
+		data.config.port = math.random(10000, 50000)
+		self["text"] = tostring(data.config.port)
 		self:draw()
-		if isOpen then modem.open(data.port) end
+		if isOpen then modem.open(data.config.port) end
 		updateCounter()
 	end)
 	gui:addLabel(110, 7, 6, "Code:")
-	gui:addButton(120, 7, 15, 1, tostring(data.irisCode), function(self)
-		data.irisCode = math.random(1000, 9999)
-		self["text"] = tostring(data.irisCode)
+	gui:addButton(120, 7, 15, 1, tostring(data.config.codes[1]), function(self)
+		data.config.codes[1] = math.random(1000, 9999)
+		self["text"] = tostring(data.config.codes[1])
 		self:draw()
 	end)
 	gui:addButton(110, 9, 25, 1, "Address calculator", function() coordsCalculator() end)
+	gui:addLabel(3, 10, 16, "Address groups:")
 	tmp.GMLbgcolor = GMLextractProperty(gui, GMLgetAppliedStyles(gui), "fill-color-bg")
 	gui:run()
 end
@@ -892,7 +1029,7 @@ end
 local function __eventListener(...)
 	local ev = {...}
 	if ev[1] == "sgDialIn" then
-		if data.autoIris then
+		if data.config.autoIris then
 			event.timer(5, function()
 				sg.closeIris()
 			end)
@@ -917,7 +1054,7 @@ local function __eventListener(...)
 		element.status["text"] = "Status: " .. sg.stargateState()
 		element.status:draw()
 		if ev[3] == "Idle" then
-			if data.autoIris then
+			if data.config.autoIris then
 				event.timer(2, function()
 					sg.openIris()
 				end)
@@ -946,8 +1083,8 @@ local function __eventListener(...)
 	elseif ev[1] == "sgChevronEngaged" then
 		element.stargate:lockSymbol(ev[3])
 	elseif ev[1] == "modem_message" then
-		if ev[4] == data.port then
-			if ev[7] == data.irisCode then
+		if ev[4] == data.config.port then
+			if ev[7] == data.config.irisCode then
 				os.sleep(0.1)
 				modem.send(ev[3], ev[6], serial.serialize({true, "Iris open", irisTimeout}))
 				if sg.irisState() == "Closed" then
@@ -987,7 +1124,7 @@ event.listen("modem_message", eventListener)
 timerEneriga = event.timer(5, energyRefresh, math.huge)
 main()
 event.cancel(timerEneriga)
-if data.port and modem.isOpen(data.port) then modem.close(data.port) end
+if data.config.port and modem.isOpen(data.config.port) then modem.close(data.config.port) end
 event.ignore("sgDialIn", eventListener)
 event.ignore("sgIrisStateChange", eventListener)
 event.ignore("sgStargateStateChange", eventListener)
