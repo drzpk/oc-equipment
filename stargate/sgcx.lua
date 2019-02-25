@@ -233,6 +233,7 @@ local function loadConfig(overrideAddress)
 
 	-- first load defined groups
 	local loadedGroups = {}
+	data.groups = {}
 	for _, g in pairs(data.config.groups) do
 		local path = fs.concat("/etc/sgcx.d", g)
 		if fs.exists(path) then
@@ -263,6 +264,24 @@ local function loadConfig(overrideAddress)
 		end
 	end
 
+	-- normalize ordering in groups
+	for _, group in pairs(data.groups) do
+		local normalized = {}
+		for _, list in pairs(group.group) do
+			table.insert(normalized, list)
+		end
+		group.group = normalized
+	end
+
+	if #data.groups == 0 then
+		local default = {
+			name = "default",
+			version = dataStorageVersion,
+			group = {}
+		}
+		data.groups = {default}
+		data.config.groups = {"default.cfg"}
+	end
 	data.activeGroup = data.groups[1]
 	
 	return true
@@ -312,7 +331,7 @@ function GMLextractProperty(element, styles, property)
 end
 
 function GMLmessageBox(message, buttons)
-  local buttons = buttons or {"cancel", "ok"}
+  local buttons = buttons or {"OK"}
   local choice
   local lines = {}
   message:gsub("([^\n]+)", function(line) lines[#lines+1] = line end)
@@ -586,6 +605,9 @@ local function irisTimerFunction()
 end
 
 local function modifyList(action)
+	local function isSelected()
+		return element.list.selectedLabel ~= nil
+	end
 	if action == "add" then
 		if element.name["text"] == "" or element.world["text"] == "" or element.address["text"] == "" then
 			GMLmessageBox("Fill all fields", {"OK"})
@@ -609,15 +631,11 @@ local function modifyList(action)
 				address = element.address["text"]:upper()
 			}
 			table.insert(data.activeGroup.group, l)
-			local list = {}
-			for a, v in pairs(data.activeGroup.group) do
-				table.insert(list, tostring(a) .. ". " .. v.name .. " (" .. v.world .. ")")
-			end
-			element.list:updateList(list)
+			element.list:refreshList()
 			saveConfig()
 			GMLmessageBox("Address has been added to the list", {"OK"})
 		end
-	elseif action == "modify" and element.list:getSelected() then
+	elseif action == "modify" and isSelected() then
 		if element.name["text"] == "" or element.world["text"] == "" or element.address["text"] == "" then
 			GMLmessageBox("Fill all fields", {"OK"})
 		elseif element.name["text"]:len() > 20 or element.world["text"]:len() > 20 then
@@ -632,11 +650,7 @@ local function modifyList(action)
 						v.name = element.name["text"]
 						v.world = element.world["text"]
 						v.address = element.address["text"]:upper()
-						local list = {}
-						for a, v in pairs(data.activeGroup.group) do
-							table.insert(list, tostring(a) .. ". " .. v.name .. " (" .. v.world .. ")")
-						end
-						element.list:updateList(list)
+						element.list:refreshList()
 						saveConfig()
 						GMLmessageBox("The entry has been modified", {"OK"})
 						break
@@ -644,23 +658,232 @@ local function modifyList(action)
 				end
 			end
 		end
-	elseif action == "remove" and element.list:getSelected() then
+	elseif action == "remove" and isSelected() then
 		if GMLmessageBox("Are you sure you want to remove selected entry?", {"Yes", "No"}) == "Yes" then
 			local selected = element.list:getSelected()
 			for k, v in pairs(data.activeGroup.group) do
 				if selected == tostring(k) .. ". " .. v.name .. " (" .. v.world .. ")" then
 					table.remove(data.activeGroup.group, k)
-					local list = {}
-					for a, v in pairs(data.activeGroup.group) do
-						table.insert(list, tostring(a) .. ". " .. v.name .. " (" .. v.world .. ")")
-					end
-					element.list:updateList(list)
+					element.list:refreshList()
 					saveConfig()
 					GMLmessageBox("The entry has been removed", {"OK"})
 					break
 				end
 			end
 		end
+	elseif action == "up" and isSelected() then
+		if element.list.selectedLabel > 1 then
+			local ag = data.activeGroup.group
+			local i = element.list.selectedLabel
+			local tmp = ag[i]
+			ag[i] = ag[i - 1]
+			ag[i - 1] = tmp
+			element.list:refreshList()
+			element.list:select(i - 1)
+			saveConfig()
+		end
+	elseif action == "down" and isSelected() then
+		if element.list.selectedLabel < #data.activeGroup.group then
+			local ag = data.activeGroup.group
+			local i = element.list.selectedLabel
+			local tmp = ag[i]
+			ag[i] = ag[i + 1]
+			ag[i + 1] = tmp
+			element.list:refreshList()
+			element.list:select(i + 1)
+			saveConfig()
+		end
+	elseif action == "to" and isSelected() then
+		local selectedGroup = nil
+		local options = {}
+		for _, g in pairs(data.groups) do
+			if g.name ~= data.activeGroup.name then
+				table.insert(options, g.name)
+			end
+		end
+		local text = "Move the address '" .. data.activeGroup.group[element.list.selectedLabel].name .. "' to the group:"
+		local mgui = gml.create("center", "center", 64, 25)
+		mgui.style = darkStyle
+		mgui:addLabel("center", 1, 17, "Move the address")
+		mgui:addLabel(3, 19, 15, "Selected group:")
+		local selected = mgui:addLabel(20, 19, 30, "")
+		mgui:addLabel(3, 3, text:len(), text)
+		local listbox = mgui:addListBox(9, 4, 44, 14, options)
+		listbox.onChange = function(lb, prev, index)
+			selectedGroup = options[index]
+			selected.text = selectedGroup
+			selected:draw()
+		end
+		mgui:addButton(48, 23, 12, 1, "Cancel", function() mgui:close() end)
+		mgui:addButton(32, 23, 12, 1, "Move", function()
+			if selectedGroup == nil then
+				GMLmessageBox("No target group was selected")
+			else
+				local targetGroup = nil
+				for _, g in pairs(data.groups) do
+					if g.name == selectedGroup then
+						targetGroup = g
+						break
+					end
+				end
+				if targetGroup ~= nil then
+					local entry = table.remove(data.activeGroup.group, element.list.selectedLabel)
+					table.insert(targetGroup.group, entry)
+					element.list:refreshList()
+					saveConfig()
+				end
+				mgui:close()
+			end
+		end)
+		mgui:run()
+	end
+end
+
+local function manageGroups()
+	local ggui = gml.create("center", "center", 70, 31)
+	local groupsUpdated = false
+	ggui.style = darkStyle
+
+	ggui:addLabel("center", 1, 13, "Edit groups")
+	ggui:addButton(56, 29, 10, 1, "Close", function () ggui:close() end)
+
+	ggui:addLabel(39, 4, 6, "Name:")
+	local name = ggui:addTextField(39, 5, 25)
+	ggui:addLabel(39, 7, 14, "Address count:")
+	local addressCount = ggui:addLabel(54, 7, 3, "")
+
+	-- Listbox
+	local list = {}
+	local function refreshList()
+		list = {}
+		for _, group in pairs(data.groups) do
+			local found = 0
+			for _, n in pairs(list) do
+				if n == group.name then
+					found = found + 1
+				end
+			end
+			if found > 0 then
+				group.name = group.name .. "_" .. tostring(found)
+				groupsUpdated = true
+			end
+
+			table.insert(list, group.name)
+		end
+	end
+	refreshList()
+	local listbox = ggui:addListBox(3, 4, 30, 20, list)
+	listbox.onChange = function (lb, prev, index)
+		name.text = data.groups[index].name
+		name:draw()
+		addressCount.text = tostring(#data.groups[index].group)
+		addressCount:draw()
+	end
+	----------------------------
+
+	-- Buttons
+	local function updated()
+		groupsUpdated = true
+		refreshList()
+		listbox:updateList(list)
+		listbox:draw()
+	end
+	local function groupExists(name)
+		for _, g in pairs(data.groups) do
+			if g.name == name then return true end
+		end
+		return false
+	end
+	local function sanitizeGroupFile(name)
+		local sanitized = ""
+		for i = 1, name:len() do
+			local code = string.byte(name:sub(i, i))
+			if code >= 65 and code <= 90 or code >= 97 and code <= 122 or code >= 48 and code <= 57 then
+				sanitized = sanitized .. name:sub(i, i)
+			end
+		end
+		return sanitized .. ".cfg"
+	end
+	ggui:addButton(3, 25, 12, 2, "Add", function ()
+		if name.text:len() == 0 then
+			GMLmessageBox("Group name cannot be empty")
+		elseif name.text:len() > 20 then
+			GMLmessageBox("Group name cannot be longer than 20 characters")
+		elseif groupExists(name.text) then
+			GMLmessageBox("Group with the same name already exists")
+		elseif #data.groups > 25 then
+			GMLmessageBox("Maximum number of groups (25) has been reached")
+		else
+			local group = {
+				name = name.text,
+				version = dataStorageVersion,
+				group = {}
+			}
+			table.insert(data.groups, group)
+			table.insert(data.config.groups, sanitizeGroupFile(name.text))
+			updated()
+		end
+	end)
+	ggui:addButton(21, 25, 12, 2, "Delete", function ()
+		if not listbox.selectedLabel then return end
+		if #data.groups < 2 then
+			GMLmessageBox("Cannot delete this group: at least one must exist")
+			return
+		end
+		local toRemove = data.groups[listbox.selectedLabel]
+		if #toRemove.group > 0 then
+			if GMLmessageBox("Group is not empty. Do you want to delete it with all contained addresses?", {"Yes", "No"}) == "No" then return end
+		end
+		table.remove(data.groups, listbox.selectedLabel)
+		table.remove(data.config.groups, listbox.selectedLabel)
+		updated()
+	end)
+	ggui:addButton(54, 25, 12, 2, "Update", function ()
+		if not listbox.selectedLabel then return end
+		if name.text:len() == 0 then
+			GMLmessageBox("Group name cannot be empty")
+		elseif name.text:len() > 20 then
+			GMLmessageBox("Group name cannot be longer than 20 characters")
+		else
+			local group = data.groups[listbox.selectedLabel]
+			group.name = name.text
+			list[listbox.selectedLabel] = name.text
+			listbox:updateList(list)
+			data.config.groups[listbox.selectedLabel] = sanitizeGroupFile(name.text)
+			groupsUpdated = true
+		end
+	end)
+	ggui:addButton(3, 28, 12, 1, "Move up", function ()
+		local i = listbox.selectedLabel
+		if not i or i < 2 then return end
+		local tmp = data.groups[i]
+		data.groups[i] = data.groups[i - 1]
+		data.groups[i - 1] = tmp
+		listbox:select(i - 1)
+		tmp = data.config.groups[i]
+		data.config.groups[i] = data.config.groups[i - 1]
+		data.config.groups[i - 1] = tmp
+		updated()
+	end)
+	ggui:addButton(21, 28, 12, 1, "Move down", function ()
+		local i = listbox.selectedLabel
+		if not i or i == #data.groups then return end
+		local tmp = data.groups[i]
+		data.groups[i] = data.groups[i + 1]
+		data.groups[i + 1] = tmp
+		listbox:select(i + 1)
+		tmp = data.cnofig.groups[i]
+		data.config.groups[i] = data.config.groups[i + 1]
+		data.config.groups[i + 1] = tmp
+		udpated()
+	end)
+	----------------------------
+
+	ggui:run()
+	if groupsUpdated then
+		element.list:refreshList()
+		element.groupSelector:refresh()
+		saveConfig()
 	end
 end
 
@@ -909,11 +1132,14 @@ local function countdown(timer)
 end
 
 local function createUI()
+	------------------------
 	gui = gml.create(0, 0, res[1], res[2])
 	gui.style = darkStyle
 	countdownTimer = s1.timer(countdown, gui)
 	countdownTimer.onStop = function () sg.disconnect() end
+	------------------------
 
+	-- Common elements
 	addTitle()
 	gui:addLabel(35, 2, 10, version)["text-color"] = 0x666666
 	addBar(53, 1, 15, false)
@@ -930,6 +1156,9 @@ local function createUI()
 	element.remoteAddress:hide()
 	element.timeout = gui:addLabel(56, 13, 30, "")
 	element.timeout:hide()
+	------------------------
+
+	-- Address list
 	gui:addLabel(3, 20, 16, "Address list:")
 	local list = {}
 	for a, v in pairs(data.activeGroup.group) do
@@ -953,9 +1182,25 @@ local function createUI()
 			element.distance:draw()
 		end
 	end
-	gui:addButton(4, 46, 10, 2, "Add", function() modifyList("add") end)
-	gui:addButton(15, 46, 10, 2, "Remove", function() modifyList("remove") end)
-	gui:addButton(27, 46, 15, 2, "Modify", function() modifyList("modify") end)
+	element.list.refreshList = function ()
+		local list = {}
+		for a, v in pairs(data.activeGroup.group) do
+			local f = element.addressFilter.text
+			if not f or f:len() == 0 or v.name:find(f, nil, true) then
+				table.insert(list, tostring(a) .. ". " .. v.name .. " (" .. v.world .. ")")
+			end
+		end
+		element.list:updateList(list)
+	end
+	------------------------
+
+	-- Address list management
+	gui:addButton(4, 45, 10, 2, "Add", function() modifyList("add") end)
+	gui:addButton(15, 45, 10, 2, "Delete", function() modifyList("remove") end)
+	gui:addButton(27, 45, 15, 2, "Update", function() modifyList("modify") end)
+	gui:addButton(4, 48, 15, 1, "Move up", function () modifyList("up") end)
+	gui:addButton(27, 48, 15, 1, "Move down", function() modifyList("down") end)
+	gui:addButton(48, 48, 15, 1, "Move to", function() modifyList("to") end)
 	gui:addLabel(45, 22, 7, "Name:")["text-color"] = 0x999999
 	gui:addLabel(45, 25, 9, "World:")["text-color"] = 0x999999
 	gui:addLabel(45, 29, 11, "Address:")["text-color"] = 0x999999
@@ -980,6 +1225,9 @@ local function createUI()
 		self:draw()
 		updateCounter()
 	end)
+	------------------------
+
+	-- Remote iris authentication
 	gui:addLabel(110, 5, 7, "Port:")
 	gui:addButton(120, 5, 15, 1, data.config.portStatus and "Open" or "Closed", function(self)
 		if data.config.portStatus then
@@ -1011,8 +1259,39 @@ local function createUI()
 		self["text"] = tostring(data.config.codes[1])
 		self:draw()
 	end)
+	------------------------
+
+	-- Address calculator
 	gui:addButton(110, 9, 25, 1, "Address calculator", function() coordsCalculator() end)
+	------------------------
+
+	-- Address groups
 	gui:addLabel(3, 10, 16, "Address groups:")
+	element.groupSelector = gui:addComboBox(3, 11, 40, {})
+	element.groupSelector.onSelected = function (gs, pos, value)
+		data.activeGroup = data.groups[pos]
+		element.list:refreshList()
+	end
+	element.groupSelector.refresh = function (gs)
+		local groups = {}
+		for _, g in pairs(data.groups) do
+			table.insert(groups, g.name)
+		end
+
+		gs:updateList(groups)
+	end
+	element.groupSelector:refresh()
+	gui:addButton(33, 10, 10, 1, "Edit", manageGroups)
+	------------------------
+
+	-- Address search
+	gui:addLabel(3, 16, 20, "Search for address:")
+	element.addressFilter = gui:addTextField(3, 17, 25)
+	gui:addButton(32, 17, 10, 1, "Filter", function ()
+		element.list:refreshList()
+	end)
+	------------------------
+
 	tmp.GMLbgcolor = GMLextractProperty(gui, GMLgetAppliedStyles(gui), "fill-color-bg")
 	gui:run()
 end
