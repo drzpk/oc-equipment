@@ -28,7 +28,7 @@ local gfxbuffer=require("gfxbuffer")
 
 local doubleClickThreshold=.25
 
-local gml={VERSION="1.2"}
+local gml={VERSION="1.2.1"}
 local startArgs = {...}
 if startArgs[1] == "version_check" then return gml.VERSION end
 
@@ -1521,6 +1521,14 @@ local function listBoxSelect(lb,index)
   else
     if prevSelected>=scrollIndex and prevSelected<=scrollIndex+lb.bodyH-1 then
       local pl=lb.labels[prevSelected-scrollIndex+1]
+
+      -- Something's wrong with the gfxbuffer because when listbox
+      -- gains focus, highlighted element doesn't change. Due to
+      -- the lack of time resources required to analyze this case
+      -- more thoroughly, the "temporary" fix is to flush buffer
+      -- when changing selected item.
+      pl.renderTarget.flush()
+
       pl.state=nil
       pl:draw()
     end
@@ -1541,6 +1549,15 @@ local function getListBoxSelected(lb)
 end
 
 local function updateListBoxList(lb,newList)
+  for i=1,#lb.labels do
+    if lb.labels[i].state=="selected" then
+      -- Similar case like the one described above
+      lb.renderTarget.flush()
+      lb.labels[i].state=nil
+      lb.labels[i]:draw()
+      break
+    end
+  end
   lb.list=newList
   lb.scrollBar.scrollPos=1
   lb.scrollBar.scrollMax=math.max(1,#newList-lb.bodyH+1)
@@ -1555,6 +1572,7 @@ end
 local function addListBox(gui,x,y,width,height,list)
   local lb=compositeBase(gui,x,y,width,height,"listbox",true)
   lb.list=list
+  if #list>0 then lb.selectedLabel=1 end
 
   lb.scrollBar=addScrollBarV(lb,lb.bodyW,lb.bodyY,lb.bodyH,math.max(1,#list-lb.bodyH+1),scrollListBox)
   lb.scrollBar.class="listbox"
@@ -1564,7 +1582,6 @@ local function addListBox(gui,x,y,width,height,list)
   lb.scrollBar.height=lb.height
   lb.scrollBar.length=lb.height
 
-  lb.selectedLabel=1
   updateScrollBarGrip(lb.scrollBar)
 
   lb.labels={}
@@ -1574,10 +1591,12 @@ local function addListBox(gui,x,y,width,height,list)
   lb.onDrop=function(lb,...) lb.scrollBar:onDrop(...) end
 
   for i=1,lb.bodyH do
-    lb.labels[i]=addLabel(lb,1,i,lb.bodyW-1,list[i] or "")
+    lb.labels[i]=createLabel(lb,1,i,lb.bodyW-1,list[i] or "")
     lb.labels[i].class="listbox"
   end
-  lb.labels[1].state="selected"
+  if #list>0 then
+    lb.labels[1].state="selected"
+  end
 
   lb.select=listBoxSelect
   lb.getSelected=getListBoxSelected
@@ -1605,6 +1624,7 @@ local function addListBox(gui,x,y,width,height,list)
       drawBorder(lb,styles)
       lb.scrollBar:draw()
       for i=1,#lb.labels do
+        lb.labels[i].state=lb.selectedLabel==i and "selected" or nil
         lb.labels[i]:draw()
       end
 	  lb.visible=true
@@ -1670,11 +1690,12 @@ end
 
 local function setComboBoxActiveItem(cb,newPos,broadcast)
   if cb.expanded then collapseComboBox(cb) end
+  local oldSelected=cb.selectedElement
   cb.selectedElement=newPos
   cb.label.text=cb.selectedElement>0 and cb.list[cb.selectedElement] or ""
   cb.label:draw()
 
-  if broadcast then
+  if broadcast and oldSelected~=cb.selectedElement then
     cb:onSelected(cb.selectedElement,cb.list[cb.selectedElement],cb.list)
   end
 end
@@ -1683,7 +1704,6 @@ end
 local function expandComboBox(cb)
   if cb.expanded or not cb.list or #cb.list==0 then return end
   cb.expanded=true
-  cb.justExpanded=true
   cb.savedPosY=cb.posY
 
   local maxHeight=cb.gui.bodyH-cb.posY-cb.height+1
@@ -1719,21 +1739,14 @@ end
 
 
 local function clickComboBox(cb,relativeX,relativeY)
-  if cb.state=="focus" and not cb.expanded then
+  if not cb.expanded then
     expandComboBox(cb) 
     return
   end
 
   if not cb.expanded then return end
   if cb.overlay and relativeY==2 and relativeX>1 and relativeY<cb.width then
-    if not cb.justExpanded then
-      collapseComboBox(cb)
-    else
-      cb.justExpanded=false
-    end
-    return
-  elseif cb.justExpanded then
-    cb.justExpanded=false
+    collapseComboBox(cb)
     return
   end
 
@@ -1766,7 +1779,7 @@ local function addComboBox(gui,x,y,width,list)
   cb.contains=function(element,x,y)
     local result=nil
     if element.expanded then
-      local ex,ey,ew,eh=element.posX,element.expandStart,element.width,element.totalHeight
+      local ex,ey,ew,eh=element.posX,element.posY,element.width,element.totalHeight
       result=x>=ex and x<=ex+ew-1 and y>=ey and y<=ey+eh-1
     else
       result=contains(element,x,y)
@@ -1779,7 +1792,6 @@ local function addComboBox(gui,x,y,width,list)
   cb.updateList=updateComboBoxList
   cb.select=setComboBoxActiveItem
   cb.draw=drawComboBox
-  cb.gotFocus=expandComboBox
   cb.lostFocus=collapseComboBox
   cb.onClick=clickComboBox
 
