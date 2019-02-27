@@ -40,7 +40,7 @@
 	}
 ]]
 
-local version = "0.6.0"
+local version = "0.6.1"
 local dataStorageVersion = 2
 local startArgs = {...}
 
@@ -230,6 +230,7 @@ local function loadConfig(overrideAddress)
 	data.config.port = data.config.port or math.random(10000, 50000)
 	data.config.iris = data.config.iris or {math.random(1000, 9999)}
 	if data.config.portStatus then modem.open(data.config.port) end
+	data.config.codes = data.config.codes or {math.random(1000,9999)}
 
 	-- first load defined groups
 	local loadedGroups = {}
