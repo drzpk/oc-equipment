@@ -40,7 +40,7 @@
 	}
 ]]
 
-local version = "0.6.1"
+local version = "0.6.2"
 local dataStorageVersion = 2
 local startArgs = {...}
 
@@ -100,8 +100,15 @@ local MC = 279937
 local PC = 93563
 local QC = 153742
 
+local function hasArg(arg)
+	for i, v in pairs(startArgs) do
+		if v == arg then return true end
+	end
+	return false
+end
+
 local function chooseInterface()
-	if startArgs[1] ~= "init" then return "" end
+	if not hasArg("init") then return "" end
 	print(">> Choose new stargate interface address (type q to quit) <<")
 	local componentList = component.list('stargate')
 	local list = {}
@@ -239,9 +246,22 @@ local function loadConfig(overrideAddress)
 		local path = fs.concat("/etc/sgcx.d", g)
 		if fs.exists(path) then
 			local groupFile = io.open(path, "r")
-			table.insert(data.groups, serial.unserialize(groupFile:read()))
-			table.insert(loadedGroups, g)
+			local status, fileData = pcall(serial.unserialize, groupFile:read())
 			groupFile:close()
+			if not status and not hasArg("force_load") then
+				print(">> ERROR <<")
+				print("Couldn't load file '" .. path .. "' due to a parsing error")
+				print("File has invalid format. Delete it manually or run script with the 'force_load' parameter to ignore invalid files.")
+				print("Warning! Corrupted data will be lost!")
+				print("Example: sgcx force_load")
+				require("os").exit()
+			elseif not status and hasArg("force_load") then
+				fs.remove(path)
+				print("Removed invalid file " .. path)
+			else
+				table.insert(data.groups, fileData)
+				table.insert(loadedGroups, g)
+			end
 		end
 	end
 	data.config.groups = loadedGroups
