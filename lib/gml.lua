@@ -28,7 +28,7 @@ local gfxbuffer=require("gfxbuffer")
 
 local doubleClickThreshold=.25
 
-local gml={VERSION="1.2.1"}
+local gml={VERSION="1.2.2"}
 local startArgs = {...}
 if startArgs[1] == "version_check" then return gml.VERSION end
 
@@ -1496,7 +1496,7 @@ local function listBoxSelect(lb,index)
   end
   local prevSelected=lb.selectedLabel
   if index==prevSelected then
-    if lb.lastChangeTrigger~=index then
+    if lb.lastChangeTrigger~=index and lb.onChange then
       lb:onChange(prevSelected,index)
       lb.lastChangeTrigger=index
     end
