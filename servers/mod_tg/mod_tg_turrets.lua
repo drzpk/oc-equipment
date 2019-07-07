@@ -142,7 +142,7 @@
 		}
 ]]
 
-local version = "1.3.2"
+local version = "1.3.3"
 local args = {...}
 
 if args[1] == "version_check" then return version end
@@ -359,7 +359,7 @@ local function openTurret(addr)
 	local proxy = component.proxy(addr)
 	if not proxy then return end
 	proxy.powerOn()
-	pcall(proxy.moveTo, 0, 0)
+	server.pcall(mod, proxy.moveTo, 0, 0)
 	proxy.extendShaft(0)
 	proxy.setArmed(false)
 end
@@ -367,7 +367,7 @@ end
 local function closeTurret(addr)
 	local proxy = component.proxy(addr)
 	if not proxy then return end
-	pcall(proxy.moveTo, 0, 0)
+	server.pcall(mod, proxy.moveTo, 0, 0)
 	proxy.extendShaft(1)
 	event.timer(1.5, function() proxy.powerOff() end)
 end
@@ -455,6 +455,7 @@ local function getEntities(adr)
 		return entities
 	else
 		server.call(mod, 5204, "Not enough energy to continue scanning.", "turrets", true)
+		server.call(mod, 5205, "Actual error message: " .. entities, "turrets", true)
 		event.cancel(timer)
 		timer = nil
 		disableTurrets()
@@ -473,12 +474,17 @@ local function launch(turret, attempt)
 	if turret.isOnTarget() and turret.isReady() then
 		local s, r = pcall(turret.fire)
 		if not s and r == "not enough energy" then
-			server.call(mod, 5203, "Not enough energy to keep turrets enabled.", "turrets", true)
+			if r == "not enough energy" then
+				server.call(mod, 5203, "Not enough energy to keep turrets enabled.", "turrets", true)
+			else
+				server.call(mod, 5202, "Error while firing a turret: " .. r, "turrets", true)
+			end
 			disableTurrets()
 			return
 		end
 	else
-		event.timer(attemptDelay, function() launch(turret, attempt - 1) end)
+		local launchFunction = function() launch(turret, attempt - 1) end
+		event.timer(attemptDelay, server.errorHandler(launchFunction))
 	end
 end
 
@@ -519,13 +525,16 @@ local function turretsLoop()
 					for j = 1, #entities do
 						local angle, pitch = calcValues(pointer, entities[j])
 						if checkYaw(angle, turret) and checkPitch(pitch, turret) then
-							--server.call(mod, 5201, "wykryto: " .. entities[j].name, "turretsLoop", true)
+							server.call(mod, 5205, "Detected: " .. entities[j].name, "turretsLoop", true)
 							if not proxy.isPowered() then
 								proxy.powerOn()
 							end
 							proxy.setArmed(true)
+							local message =  "Aiming " .. turret.name .. " at " .. tostring(angle) .. ", " .. tostring(pitch)
+							server.call(mod, 5205, message, "turretsLoop", true)
 							pcall(proxy.moveTo, angle, pitch)
-							event.timer(attemptDelay, function() launch(proxy, maxAttempts) end)
+							local launchFunction = function() launch(proxy, maxAttempts) end
+							event.timer(attemptDelay, server.errorHandler(mod, launchFunction))
 							break
 						end
 					end
@@ -549,13 +558,13 @@ local function enableTurrets()
 			end
 			proxy.setArmed(true)
 			if not t.walls.n then
-				pcall(proxy.moveTo, 0, 0)
+				server.pcall(mod, proxy.moveTo, 0, 0)
 			elseif not t.walls.s then
-				pcall(proxy.moveTo, 180, 0)
+				server.pcall(mod, proxy.moveTo, 180, 0)
 			elseif not t.walls.e then
-				pcall(proxy.moveTo, 90, 0)
+				server.pcall(mod, proxy.moveTo, 90, 0)
 			elseif not t.walls.w then
-				pcall(proxy.moveTo, 270, 0)
+				server.pcall(mod, proxy.moveTo, 270, 0)
 			end
 		else
 			server.call(mod, 5202, "Turret " .. t.name .. " is offline.", "turrets", true)
@@ -567,7 +576,7 @@ local function enableTurrets()
 	else
 		amount = math.ceil(config.turretsActive / config.delay)
 	end
-	timer = event.timer(config.delay, turretsLoop, math.huge)
+	timer = event.timer(config.delay, server.errorHandler(mod, turretsLoop), math.huge)
 	tamount = amount
 	config.turretsState = true
 	refreshView()
@@ -1301,7 +1310,7 @@ local actions = {
 mod.name = "turrets"
 mod.version = version
 mod.id = 36
-mod.apiLevel = 3
+mod.apiLevel = 4
 mod.shape = "normal"
 mod.actions = actions
 

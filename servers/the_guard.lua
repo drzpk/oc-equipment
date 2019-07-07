@@ -146,8 +146,8 @@
 		will be disabled.
 ]]
 
-local version = "2.2.2"
-local apiLevel = 3
+local version = "2.3.0"
+local apiLevel = 4
 local args = {...}
 
 if args[1] == "version_check" then return version end
@@ -550,6 +550,45 @@ Adds new log
 ]]
 interface.log = function(mod, msg)
 	silentLog(mod.name, msg)
+end
+
+--[[
+Similar to pcall but automatically logs error
+message in the system logs.
+	SINCE: API.4
+]]
+interface.pcall = function(mod, ...)
+	local s, r = pcall(...)
+	if not s then
+		silentLog(mod.name, r)
+	end
+
+	return s, r
+end
+
+--[[
+Returns function wrapped in an error handler
+that will automatically add proper error
+message to the system logs.
+	@mod - calling module
+	@fun - function to wrap
+	RET: function wrapped in an error handler
+	SINCE: API.4
+]]
+interface.errorHandler = function(mod, fun)
+	return function ()
+		local s, r = interface.pcall(mod, fun)
+		return r
+	end
+end
+
+--[[
+Redirect this call to event.timer but first
+wraps the callback in an interface.errorHandler
+	SINCE: API.4
+]]
+interface.timer = function(mod, interval, callback, times)
+	return event.timer(interval, interface.errorHandler(mod, callback), times)
 end
 
 --[[
@@ -2707,7 +2746,7 @@ local function loadModules()
 		elseif type(mo.apiLevel) ~= "number" then
 			internalLog(dvn, "missing api level")
 			return false
-		elseif mo.apiLevel < apiLevel then
+		elseif mo.apiLevel > apiLevel then
 			internalLog(dvn, "too old server version")
 			return false
 		elseif type(mo.shape) ~= "string" then
@@ -2843,7 +2882,10 @@ backgroundListener = function(...)
 	for m, t in pairs(events) do
 		for _, n in pairs(t) do
 			if params[1] == n and mod[m] then
-				mod[m].pullEvent(...)
+				local s, r = pcall(function () mod[m].pullEvent(table.unpack(params)) end)
+				if not s then
+					silentLog(mod[m].name .. ".event", r)
+				end
 			end
 		end
 	end

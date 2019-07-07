@@ -76,7 +76,7 @@
 		}
 ]]
 
-local version = "1.2.2"
+local version = "1.2.3"
 local args = {...}
 
 if args[1] == "version_check" then return version end
@@ -897,7 +897,6 @@ local function prepareWindow(mode, edit, initialize)
 			rettab.name = name:sub(1, 20)
 			rettab.delay = delay
 			sgui.ret = rettab
-			syncComponents(choose(readers, biometrics, keypads))
 			sgui:close()
 		end
 	end)
@@ -913,6 +912,7 @@ local function addReader()
 		if sgui.ret then
 			table.insert(readers, sgui.ret)
 			refreshTables()
+			syncComponents(readers)
 		end
 	else
 		server.messageBox(mod, "Card readers limit has been reached.", {"OK"})
@@ -926,6 +926,7 @@ local function addBiometric()
 		if sgui.ret then
 			table.insert(biometrics, sgui.ret)
 			refreshTables()
+			syncComponents(biometrics)
 		end
 	else
 		server.messageBox(mod, "Biometric readers limit has been reached.", {"OK"})
@@ -940,6 +941,7 @@ local function addKeypad()
 			table.insert(keypads, sgui.ret)
 			refreshTables()
 			refreshKeypads()
+			syncComponents(keypads)
 		end
 	else
 		server.messageBox(mod, "Keypad limit has been reached.", {"OK"})
@@ -963,6 +965,7 @@ local function modifyReader()
 			if sgui.ret then
 				readers[index] = sgui.ret
 				refreshTables()
+				syncComponents(readers)
 			end
 		end
 	end
@@ -978,6 +981,7 @@ local function modifyBiometric()
 			if sgui.ret then
 				biometrics[index] = sgui.ret
 				refreshTables()
+				syncComponents(biometrics)
 			end
 		end
 	end
@@ -994,6 +998,7 @@ local function modifyKeypad()
 				keypads[index] = sgui.ret
 				refreshTables()
 				refreshKeypads()
+				syncComponents(keypads)
 			end
 		end
 	end

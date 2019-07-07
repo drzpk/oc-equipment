@@ -21,7 +21,7 @@
 		* opening detailed log view
 		* adjustable buffer size
 ]]
-local version = "1.1"
+local version = "1.2"
 local args = {...}
 
 if args[1] == "version_check" then return version end
@@ -42,20 +42,20 @@ local mod = nil
 -- # Logi
 local levels = {
 	[1] = {
-		title = "INFO",
-		color = 0x000000
+		title = "SEVERE",
+		color = 0xff00cc
 	},
 	[2] = {
-		title = "WARNING",
-		color = 0xffff00
-	},
-	[3] = {
 		title = "ERROR",
 		color = 0xff0000
 	},
+	[3] = {
+		title = "WARNING",
+		color = 0xffff00
+	},
 	[4] = {
-		title = "SEVERE",
-		color = 0xff00cc
+		title = "INFO",
+		color = 0x000000
 	},
 	[5] = {
 		title = "DEBUG",
@@ -78,7 +78,7 @@ local formats = {
 	end}
 }
 
--- # Obsługa akcji
+-- # Action handling
 local function flushLog()
 	if config.nosave then
 		buffer = {}
@@ -120,6 +120,7 @@ local function refreshList(l)
 end
 
 local function doLog(level, text, source)
+	if config.level < level then return end
 	if #list >= max_items then
 		pcall(table.remove, list, 1)
 		pcall(table.remove, lc, 1)
@@ -132,19 +133,19 @@ local function doLog(level, text, source)
 	refreshList(logbox)
 end
 
-local function logInfo(text, source)
+local function logSevere(text, source)
 	return doLog(1, text, source)
 end
 
-local function logWarning(text, source)
+local function logError(text, source)
 	return doLog(2, text, source)
 end
 
-local function logError(text, source)
+local function logWarning(text, source)
 	return doLog(3, text, source)
 end
 
-local function logSevere(text, source)
+local function logInfo(text, source)
 	return doLog(4, text, source)
 end
 
@@ -206,9 +207,9 @@ local actions = {
 	}
 }
 
--- # Funkcje GUI
+-- # GUI functions
 local function settings()
-	local sgui = gml.create("center", "center", 55, 11)
+	local sgui = gml.create("center", "center", 55, 13)
 	sgui.style = server.getStyle(mod)
 	sgui:addLabel("center", 1, 11, "Settings")
 	local bl = sgui:addLabel(2, 4, 40, "Maximum buffer size [B](10~120):")
@@ -246,8 +247,14 @@ local function settings()
 		t:draw()
 	end)
 	button.status = config.nosave
-	sgui:addLabel(2, 7, 13, "Log style:")
-	local example = sgui:addLabel(4, 8, 30, "")
+	sgui:addLabel(2, 7, 13, "Log level:")
+	sgui:addLabel(2, 8, 13, "Log style:")
+	sgui:addButton(16, 7, 12, 1, tostring(config.level) .. ". " .. levels[config.level].title, function (t)
+		config.level = config.level < #levels and config.level + 1 or 1
+		t.text = tostring(config.level) .. ". " .. levels[config.level].title
+		t:draw()
+	end)
+	local example = sgui:addLabel(4, 9, 30, "")
 	local exbutton = nil
 	local function refreshEx()
 		if exbutton.status > #formats then exbutton.status = 1 end
@@ -260,14 +267,14 @@ local function settings()
 		exbutton:draw()
 		example:draw()
 	end
-	exbutton = sgui:addButton(16, 7, 12, 1, formats[config.form][1], function(t)
+	exbutton = sgui:addButton(16, 8, 12, 1, formats[config.form][1], function(t)
 		t.status = t.status + 1
 		refreshEx()
 	end)
 	exbutton.status = config.form
 	refreshEx()
-	sgui:addButton(39, 9, 14, 1, "Cancel", function() sgui:close() end)
-	sgui:addButton(23, 9, 14, 1, "OK", function()
+	sgui:addButton(39, 11, 14, 1, "Cancel", function() sgui:close() end)
+	sgui:addButton(23, 11, 14, 1, "OK", function()
 		local b = tonumber(bf.text)
 		local f = tonumber(ff.text)
 		if not b or b > 120 or b < 10 then
@@ -320,7 +327,7 @@ local function bigLogs()
 	bgui:run()
 end
 
--- # Tablica modułu
+-- # Module table
 mod = {}
 
 mod.name = "logs"
@@ -353,6 +360,9 @@ mod.start = function(core)
 	end
 	if type(config.nosave) ~= "nil" or type(config.nosave) ~= "boolean" then
 		config.nosave = false
+	end
+	if type(config.level) ~= "number" or config.level < 1 or config.level > 5 then
+		config.level = 4
 	end
 end
 
