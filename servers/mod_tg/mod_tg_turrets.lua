@@ -123,7 +123,12 @@
 		uses the following cache schema to store addresses:
 		cache: {
 			{
-				[0]: detector
+				[0]: { - detector
+					address:string
+					x:number
+					y:number
+					z:number
+				}
 				[1]: { - turret
 					index:number
 					x:number
@@ -142,7 +147,7 @@
 		}
 ]]
 
-local version = "1.3.3"
+local version = "1.3.4"
 local args = {...}
 
 if args[1] == "version_check" then return version end
@@ -174,7 +179,8 @@ local excluded = { -- elements (unlocalized names) excluded from entity detector
 	"item%.item%..*",
 	"entity%.opensecurity%..*",
 	"entity.sgcraft.Stargate Iris.name",
-	"entity.stargate_iris.name"
+	"entity.stargate_iris.name",
+	"Energy Bolt"
 }
 local targetHeight = 0.75 -- target height
 local attemptDelay = 0.2 -- interval between turret fire attempts
@@ -298,7 +304,13 @@ local function rebuildCache()
 		return a and type(a) == "number"
 	end
 	for _, t in pairs(detectors) do
-		local d = {t.address}
+		local detectorData = {
+			address = t.address,
+			x = t.x or 0,
+			y = t.y or 0,
+			z = t.z or 0
+		}
+		local d = {detectorData}
 		for a, t2 in pairs(turrets) do
 			if t.address == t2.detector then
 				local det = server.findComponents(mod, t2.address)
@@ -399,7 +411,7 @@ local function calcValues(turret, target)
 	local a = target.x - (turret.x + 0.5)
 	local b = (turret.z + 0.5) - target.z
 	local c = math.sqrt(a * a + b * b)
-	local angle = math.floor(math.atan2(a, b) * 180 / math.pi * 10) / 10
+	local angle = 90 - (math.floor(math.atan2(b, a) * 180 / math.pi * 10) / 10)
 	local h = target.y + targetHeight
 	local dh = turret.hidden and 1.375 or 1
 	h = h - turret.y - (turret.upside and -dh or dh)
@@ -407,11 +419,27 @@ local function calcValues(turret, target)
 	return angle, pitch
 end
 
-local function getEntities(adr)
-	local proxy = component.proxy(adr or "")
+local function getEntities(detector)
+	local proxy = component.proxy(detector.address or "")
 	if not proxy then return end
-	local s, entities = pcall(proxy.scanEntities, config.range)
-	if s then
+
+	local entities = {}
+	local status = nil
+	local scanResult = nil
+	if config.scanPlayers then
+		status, scanResult = pcall(proxy.scanPlayers, config.range)
+		if status then
+			for _, b in pairs(scanResult) do table.insert(entities, b) end
+		end
+	end
+	if status and config.scanEntities then
+		status, scanResult = pcall(proxy.scanEntities, config.range)
+		if status then
+			for _, b in pairs(scanResult) do table.insert(entities, b) end
+		end
+	end
+
+	if status then
 		local removal = {}
 		for a, t in pairs(entities) do
 			for _, s in pairs(excluded) do
@@ -424,7 +452,7 @@ local function getEntities(adr)
 		table.sort(removal, function(a, b) return a > b end)
 		for _, b in pairs(removal) do table.remove(entities, b) end
 		removal = {}
-		if config.turretsMode == 2 then
+		if config.turretsMode == 2 and lists.turrets and lists.turrets.white then
 			--white
 			for a, t in pairs(entities) do
 				for _, w in pairs(lists.turrets.white) do
@@ -434,7 +462,7 @@ local function getEntities(adr)
 					end
 				end
 			end
-		elseif config.turretsMode == 3 then
+		elseif config.turretsMode == 3 and lists.turrets and lists.turrets.black then
 			--black
 			for a, t in pairs(entities) do
 				local found = false
@@ -452,10 +480,15 @@ local function getEntities(adr)
 		table.sort(removal, function(a, b) return a > b end)
 		for _, b in pairs(removal) do table.remove(entities, b) end
 		table.sort(entities, function(a, b) return a.range < b.range end)
+		for _, b in pairs(entities) do
+			b.x = detector.x + b.x
+			b.y = detector.y + b.y
+			b.z = detector.z + b.z
+		end
 		return entities
 	else
 		server.call(mod, 5204, "Not enough energy to continue scanning.", "turrets", true)
-		server.call(mod, 5205, "Actual error message: " .. entities, "turrets", true)
+		server.call(mod, 5205, "Actual error message: " .. scanResult, "turrets", true)
 		event.cancel(timer)
 		timer = nil
 		disableTurrets()
@@ -1168,24 +1201,28 @@ local function settings()
 	local ret = {}
 	ret.turretsMode = config.turretsMode
 	ret.sensorsMode = config.sensorsMode
+	ret.scanPlayers = config.scanPlayers
+	ret.scanEntities = config.scanEntities
 	local sgui = gml.create("center", "center", 55, 22)
 	sgui.style = server.getStyle(mod)
 	sgui:addLabel("center", 1, 11, "Settings")
 	sgui:addLabel(2, 4, 12, "Turrets:")
 	sgui:addLabel(4, 6, 17, "Target mode:")
-	sgui:addLabel(4, 7, 29, "Scan interval[1-15s]:")
-	sgui:addLabel(4, 8, 38, "Activation time[0,15-180s]:")
-	sgui:addLabel(4, 9, 26, "Scan range[5-20]:")
-	sgui:addLabel(2, 12, 15, "Motion sensors:")
-	sgui:addLabel(4, 14, 17, "Target mode:")
-	sgui:addLabel(4, 15, 21, "Sensitivity[0.1-10]:")
-	sgui:addLabel(4, 16, 28, "Activation time[0,15-180s]:")
+	sgui:addLabel(4, 7, 14, "Scan players:")
+	sgui:addLabel(4, 8, 14, "Scan entites:")
+	sgui:addLabel(4, 9, 29, "Scan interval[1-15s]:")
+	sgui:addLabel(4, 10, 38, "Activation time[0,15-180s]:")
+	sgui:addLabel(4, 11, 26, "Scan range[5-20]:")
+	sgui:addLabel(2, 14, 15, "Motion sensors:")
+	sgui:addLabel(4, 16, 17, "Target mode:")
+	sgui:addLabel(4, 17, 21, "Sensitivity[0.1-10]:")
+	sgui:addLabel(4, 18, 28, "Activation time[0,15-180s]:")
 	
-	local tint = sgui:addTextField(44, 7, 5)
-	local ttim = sgui:addTextField(44, 8, 5)
-	local tran = sgui:addTextField(44, 9, 5)
-	local ssen = sgui:addTextField(44, 15, 5)
-	local sact = sgui:addTextField(44, 16, 5)
+	local tint = sgui:addTextField(44, 9, 5)
+	local ttim = sgui:addTextField(44, 10, 5)
+	local tran = sgui:addTextField(44, 11, 5)
+	local ssen = sgui:addTextField(44, 17, 5)
+	local sact = sgui:addTextField(44, 18, 5)
 	tint.text = tostring(config.delay)
 	ttim.text = tostring(config.turretsActive)
 	tran.text = tostring(config.range)
@@ -1202,7 +1239,17 @@ local function settings()
 		t.text = names[ret.turretsMode]
 		t:draw()
 	end)
-	sgui:addButton(24, 14, 14, 1, names[ret.sensorsMode], function(t)
+	sgui:addButton(24, 7, 10, 1, ret.scanPlayers and "yes" or "no", function(t)
+		ret.scanPlayers = not ret.scanPlayers
+		t.text = ret.scanPlayers and "yes" or "no"
+		t:draw()
+	end)
+	sgui:addButton(24, 8, 10, 1, ret.scanEntities and "yes" or "no", function(t)
+		ret.scanEntities = not ret.scanEntities
+		t.text = ret.scanEntities and "yes" or "no"
+		t:draw()
+	end)
+	sgui:addButton(24, 16, 14, 1, names[ret.sensorsMode], function(t)
 		if ret.sensorsMode < 3 then
 			ret.sensorsMode = ret.sensorsMode + 1
 		else
@@ -1212,8 +1259,8 @@ local function settings()
 		t:draw()
 	end)
 	
-	sgui:addButton(38, 19, 14, 1, "Cancel", function() sgui:close() end)
-	sgui:addButton(22, 19, 14, 1, "Apply", function()
+	sgui:addButton(38, 21, 14, 1, "Cancel", function() sgui:close() end)
+	sgui:addButton(22, 21, 14, 1, "Apply", function()
 		if config.turretsState or config.sensorsState then
 			server.messageBox(mod, "Cannot save settings while turrets or sensors are active.", {"OK"})
 			return
@@ -1241,6 +1288,8 @@ local function settings()
 			config.sensorsActive = ret.sensorsActive
 			config.turretsMode = ret.turretsMode
 			config.sensorsMode = ret.sensorsMode
+			config.scanPlayers = ret.scanPlayers
+			config.scanEntities = ret.scanEntities
 			sgui:close()
 		end
 	end)
@@ -1382,6 +1431,12 @@ mod.start = function(core)
 	end
 	if check(config.sensorsActive, 15, 180) then
 		config.sensorsActive = 15
+	end
+	if type(config.scanPlayers) ~= "boolean" then
+		config.scanPlayers = true
+	end
+	if type(config.scanEntities) ~= "boolean" then
+		config.scanEntities = true
 	end
 	
 	loadData()
