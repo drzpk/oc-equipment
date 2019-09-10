@@ -40,7 +40,7 @@
 	}
 ]]
 
-local version = "0.6.3"
+local version = "0.6.4"
 local dataStorageVersion = 2
 local startArgs = {...}
 
@@ -125,7 +125,7 @@ local function chooseInterface()
 	print()
 	local selection = nil
 	while selection == nil do
-		io.write("Choose interface: ")
+		io.write("Choose the interface: ")
 		selection = io.read()
 		if selection:sub(1, 1) == "q" then return nil end
 		selection = tonumber(selection)
@@ -1408,7 +1408,7 @@ local function __eventListener(...)
 			element.timeout:show()
 			element.dial["text"] = "Close the tunnel"
 			element.dial:draw()
-			countdownTimer:start(1, 300)
+			countdownTimer:start(1, timeToClose)
 			element.stargate:draw()
 			element.distance.text = "Distance: " .. tostring(computeDistance(sg.remoteAddress()))
 			element.distance:draw()

@@ -16,7 +16,7 @@
 ]]
 
 
-local version = "1.1"
+local version = "1.2"
 local startArgs = {...}
 
 if startArgs[1] == "version_check" then return version end
@@ -55,8 +55,8 @@ lib.timer = function (callback, context)
         if self.count <= 0 or (self.context and not self.context.running) then
             self:stop()
         else
-            self.callback(self)
             self.count = self.count - 1
+            self.callback(self)
         end
     end
     return {
@@ -82,7 +82,7 @@ lib.timer = function (callback, context)
 
             self.interval = interval
             self.count = count
-            self.timerId = event.timer(self.interval, function () tickFunction(self) end, self.count)
+            self.timerId = event.timer(self.interval, function () tickFunction(self) end, math.huge)
             return true
         end,
         --[[
