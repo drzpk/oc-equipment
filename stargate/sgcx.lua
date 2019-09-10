@@ -40,7 +40,7 @@
 	}
 ]]
 
-local version = "0.6.2"
+local version = "0.6.3"
 local dataStorageVersion = 2
 local startArgs = {...}
 
@@ -568,15 +568,6 @@ local function addStargate(cx, cy)
 	end
 	gui:addComponent(stargate)
 	return stargate
-end
-
-local function updateCounter()
-	if not tmp.counter or tmp.counter >= 5 then
-		tmp.counter = 0
-		saveConfig()
-	else
-		tmp.counter = tmp.counter + 1
-	end
 end
 
 local function separateAddress(addr)
@@ -1144,6 +1135,52 @@ local function coordsCalculator()
 	cgui:run()
 end
 
+local function channelCodeChooser(isChannel)
+	local what = isChannel and "the channel port" or "the security code"
+	local rangeFrom = isChannel and 10000 or 1000
+	local rangeTo = isChannel and 50000 or 9999
+
+	local cgui = gml.create("center", "center", 40, 10)
+	cgui.style = darkStyle
+
+	cgui:addLabel("center", 1, 25, "Choose " .. what)
+	local number = cgui:addTextField(4, 4, 12)
+	number.text = tostring(isChannel and data.config.port or data.config.codes[1])
+	cgui:addButton(23, 4, 10, 1, "Random", function()
+		number.text = tostring(math.random(rangeFrom, rangeTo))
+		number:draw()
+	end)
+	cgui:addLabel(4, 5, 32, "Value boundaries: [" .. tostring(rangeFrom) .. "," .. tostring(rangeTo) .. "]")
+
+	cgui:addButton(6, 8, 12, 1, "OK", function()
+		local newVal = tonumber(number.text)
+		if number.text:len() == 0 then
+			GMLmessageBox("Value cannot be empty")
+		elseif not newVal then
+			GMLmessageBox("Entered value is not a number")			
+		elseif newVal < rangeFrom or newVal > rangeTo then
+			GMLmessageBox("Entered value is not within the boundaries")
+		else
+			if isChannel then
+				local isOpen = modem.isOpen(data.config.port)
+				if isOpen then modem.close(data.config.port) end
+				data.config.port = newVal
+				if isOpen then modem.open(data.config.port) end
+				saveConfig()
+			else
+				-- todo: support of multiple iris codes in the future
+				data.config.codes[1] = newVal
+				saveConfig()
+				cgui:close()
+			end
+		end
+	end)
+	cgui:addButton(21, 8, 12, 1, "Cancel", function()
+		cgui:close()
+	end)
+	cgui:run()
+end
+
 local function countdown(timer)
 	local minutes = tostring(math.floor(timer.count / 60))
 	local seconds = tostring(60 * ((timer.count / 60) - math.floor(timer.count / 60)))
@@ -1244,7 +1281,7 @@ local function createUI()
 		data.config.autoIris = not data.config.autoIris
 		self["text"] = data.config.autoIris and "automatic" or "manual"
 		self:draw()
-		updateCounter()
+		saveConfig()
 	end)
 	------------------------
 
@@ -1262,22 +1299,18 @@ local function createUI()
 		end
 		data.config.portStatus = not data.config.portStatus
 		self:draw()
-		updateCounter()
+		saveConfig()
 	end)["text-color"] = data.config.portStatus and 0x00ff00 or 0xff0000
 	gui:addLabel(110, 6, 10, "Channel:")
 	gui:addButton(120, 6, 15, 1, tostring(data.config.port), function(self)
-		local isOpen = modem.isOpen(data.config.port)
-		if isOpen then modem.close(data.config.port) end
-		data.config.port = math.random(10000, 50000)
-		self["text"] = tostring(data.config.port)
+		channelCodeChooser(true)
+		self.text = tostring(data.config.port)
 		self:draw()
-		if isOpen then modem.open(data.config.port) end
-		updateCounter()
 	end)
 	gui:addLabel(110, 7, 6, "Code:")
 	gui:addButton(120, 7, 15, 1, tostring(data.config.codes[1]), function(self)
-		data.config.codes[1] = math.random(1000, 9999)
-		self["text"] = tostring(data.config.codes[1])
+		channelCodeChooser(false)
+		self.text = tostring(data.config.codes[1])
 		self:draw()
 	end)
 	------------------------
@@ -1384,7 +1417,13 @@ local function __eventListener(...)
 		element.stargate:lockSymbol(ev[3])
 	elseif ev[1] == "modem_message" then
 		if ev[4] == data.config.port then
-			if ev[7] == data.config.irisCode then
+			local matches = false
+			if type(data.config.codes) == "table" then
+				for _, code in pairs(data.config.codes) do
+					matches = matches or code == ev[7]
+				end
+			end
+			if matches then
 				os.sleep(0.1)
 				modem.send(ev[3], ev[6], serial.serialize({true, "Iris open", irisTimeout}))
 				if sg.irisState() == "Closed" then
