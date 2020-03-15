@@ -40,7 +40,9 @@
 	}
 ]]
 
-local version = "0.6.4"
+package.loaded.sgcx_graphics = nil
+
+local version = "0.7.0"
 local dataStorageVersion = 2
 local startArgs = {...}
 
@@ -55,6 +57,7 @@ local term = require("term")
 local gml = require("gml")
 local s1 = require("support_v1")
 local colorGrid = require("color_grid")
+local graphics = require("sgcx_graphics")
 
 local serial = require("serialization")
 local gpu = component.gpu
@@ -352,6 +355,7 @@ function GMLextractProperty(element, styles, property)
 end
 
 function GMLmessageBox(message, buttons)
+  element.stargate:suspendDrawing()
   local buttons = buttons or {"OK"}
   local choice
   local lines = {}
@@ -395,6 +399,7 @@ function GMLmessageBox(message, buttons)
 
   gui:changeFocusTo(buttonObjs[#buttonObjs])
   gui:run()
+  element.stargate:activateDrawing()
   return choice
 end
 
@@ -441,133 +446,6 @@ local function addTitle()
 	grid:line("    #   #   #   #      ## ## ")
 	grid:line(" ###     ####    ###  ##   ##")
 	return grid:generateComponent(gui, 3, 3)
-end
-
-local function addStargate(cx, cy)
-	local stargate = {
-		visible = false,
-		hidden = false,
-		gui = gui,
-		style = gui.style,
-		focusable = false,
-		type = "label",
-		renderTarget = gpu,
-		horizontal = isHorizontal,
-		posX = 95,
-		posY = 25,
-		width = 40,
-		height = 20,
-		color = 0x333333,
-		symbolIndex = 0
-	}
-	stargate.contains = GMLcontains
-	stargate.isHidden = function() return false end
-	stargate.draw = function(t)
-		if not t.visible then
-			local subdraw = function(x, y, vx, vy)
-				for i = 0, 3 do
-					t.renderTarget.set(x, y + 6 * vy + i * vy, ' ')
-					t.renderTarget.set(x + 1 * vx, y + 6 * vy + i * vy, ' ')
-				end
-				t.renderTarget.set(x + 1 * vx, y + 5 * vy, ' ')
-				t.renderTarget.set(x + 2 * vx, y + 5 * vy, ' ')
-				t.renderTarget.set(x + 2 * vx, y + 4 * vy, ' ')
-				t.renderTarget.set(x + 3 * vx, y + 4 * vy, ' ')
-				t.renderTarget.set(x + 3 * vx, y + 3 * vy, ' ')
-				t.renderTarget.set(x + 4 * vx, y + 3 * vy, ' ')
-				t.renderTarget.set(x + 5 * vx, y + 3 * vy, ' ')
-				t.renderTarget.set(x + 5 * vx, y + 2 * vy, ' ')
-				t.renderTarget.set(x + 6 * vx, y + 2 * vy, ' ')
-				t.renderTarget.set(x + 7 * vx, y + 2 * vy, ' ')
-				for i = 0, 4 do
-					t.renderTarget.set(x + 7 * vx + i * vx, y + 1 * vy, ' ')
-				end
-				for i = 0, 8 do
-					t.renderTarget.set(x + 11 * vx + i * vx, y, ' ')
-				end
-			end
-			t.renderTarget.setBackground(0x333333)
-			subdraw(t.posX, t.posY, 1, 1)
-			subdraw(t.posX + t.width - 1, t.posY, -1, 1)
-			subdraw(t.posX, t.posY + t.height - 1, 1, -1)
-			subdraw(t.posX + t.width - 1, t.posY + t.height - 1, -1, -1)
-			t.visible = true
-		end
-		if sg.irisState() == "Closed" then
-			t:fill(0xb4b4b4)
-		elseif sg.stargateState() == "Connected" then
-			t:fill(0x4086FF)
-		else
-			t:fill(tmp.GMLbgcolor)
-		end
-	end
-	stargate.fill = function(t, hex)
-		local subfill = function(sy, vy)
-			t.renderTarget.fill(t.posX + 12, sy, 16, 1, ' ')
-			t.renderTarget.fill(t.posX + 8, sy + 1 * vy, 24, 1, ' ')
-			t.renderTarget.fill(t.posX + 6, sy + 2 * vy, 28, 1, ' ')
-			t.renderTarget.fill(t.posX + 4, sy + 3 * vy, 32, 1, ' ')
-			t.renderTarget.fill(t.posX + 3, sy + 4 * vy, 34, 1, ' ')
-		end
-		t.renderTarget.setBackground(hex)
-		subfill(t.posY + 1, 1)
-		t.renderTarget.fill(t.posX + 2, t.posY + 6, 36, 8, ' ')
-		subfill(t.posY + t.height - 2, -1)
-	end
-	stargate.lockSymbol = function(t, number)
-		if (number == 1 and t.symbolIndex == 0) or number == 0 then
-			t.renderTarget.setBackground(number == 0 and t.color or 0xff6600)
-			t.renderTarget.fill(t.posX + 2, t.posY + 15, 2, 1, ' ')
-			t.renderTarget.fill(t.posX + 3, t.posY + 16, 2, 1, ' ')
-			t.symbolIndex = 1
-		end
-		if (number == 2 and t.symbolIndex == 1) or number == 0 then
-			t.renderTarget.setBackground(number == 0 and t.color or 0xff6600)
-			t.renderTarget.fill(t.posX, t.posY + 8, 2, 2, ' ')
-			t.symbolIndex = 2
-		end
-		if (number == 3 and t.symbolIndex == 2) or number == 0 then
-			t.renderTarget.setBackground(number == 0 and t.color or 0xff6600)
-			t.renderTarget.fill(t.posX + 5, t.posY + 2, 3, 1, ' ')
-			t.renderTarget.fill(t.posX + 4, t.posY + 3, 2, 1, ' ')
-			t.symbolIndex = 3
-		end
-		if (number == 4 and t.symbolIndex == 3) or number == 0 then
-			t.renderTarget.setBackground(number == 0 and t.color or 0xff6600)
-			t.renderTarget.fill(t.posX + 18, t.posY, 4, 1, ' ')
-			t.symbolIndex = 4
-		end
-		if (number == 5 and t.symbolIndex == 4) or number == 0 then
-			t.renderTarget.setBackground(number == 0 and t.color or 0xff6600)
-			t.renderTarget.fill(t.posX + 32, t.posY + 2, 3, 1, ' ')
-			t.renderTarget.fill(t.posX + 34, t.posY + 3, 2, 1, ' ')
-			t.symbolIndex = 5
-		end
-		if (number == 6 and t.symbolIndex == 5) or number == 0 then
-			t.renderTarget.setBackground(number == 0 and t.color or 0xff6600)
-			t.renderTarget.fill(t.posX + 38, t.posY + 8, 2, 2, ' ')
-			t.symbolIndex = 6
-		end
-		if (number == 7 and t.symbolIndex == 6) or number == 0 then
-			t.renderTarget.setBackground(number == 0 and t.color or 0xff6600)
-			t.renderTarget.fill(t.posX + 35, t.posY + 16, 2, 1, ' ')
-			t.renderTarget.fill(t.posX + 36, t.posY + 15, 2, 1, ' ')
-			t.symbolIndex = 7
-		end
-		if (number == 8 and t.symbolIndex == 7) or number == 0 then
-			t.renderTarget.setBackground(number == 0 and t.color or 0xff6600)
-			t.renderTarget.fill(t.posX + 24, t.posY + 19, 4, 1, ' ')
-			t.symbolIndex = 8
-		end
-		if (number == 9 and t.symbolIndex == 8) or number == 0 then
-			t.renderTarget.setBackground(number == 0 and t.color or 0xff6600)
-			t.renderTarget.fill(t.posX + 12, t.posY + 19, 4, 1, ' ')
-			t.symbolIndex = 9
-		end
-		if number == 0 then t.symbolIndex = 0 end
-	end
-	gui:addComponent(stargate)
-	return stargate
 end
 
 local function separateAddress(addr)
@@ -617,6 +495,7 @@ local function irisTimerFunction()
 end
 
 local function modifyList(action)
+	element.stargate:suspendDrawing()
 	local function isSelected()
 		return element.list.selectedLabel ~= nil
 	end
@@ -748,10 +627,12 @@ local function modifyList(action)
 			end
 		end)
 		mgui:run()
+		element.stargate:activateDrawing()
 	end
 end
 
 local function manageGroups()
+	element.stargate:suspendDrawing()
 	local ggui = gml.create("center", "center", 70, 31)
 	local groupsUpdated = false
 	ggui.style = darkStyle
@@ -897,6 +778,7 @@ local function manageGroups()
 		element.groupSelector:refresh()
 		saveConfig()
 	end
+	element.stargate:activateDrawing()
 end
 
 local function dial()
@@ -916,7 +798,7 @@ local function dial()
 		else
 			GMLmessageBox(translateResponse(response), {"OK"})
 		end
-	elseif sg.stargateState() == "Connected" or sg.stargateState() == "Dialing" then
+	elseif sg.stargateState() == "Connected" or sg.stargateState() == "Dialling" then
 		sg.disconnect()
 		countdownTimer:stop()
 	elseif sg.stargateState() ~= "Offline" then
@@ -1053,6 +935,7 @@ local function clearAddress(addr)
 end
 
 local function coordsCalculator()
+	element.stargate:suspendDrawing()
 	local cgui = gml.create("center", "center", 60, 21)
 	cgui.style = darkStyle
 	cgui:addButton(42, 18, 12, 1, "Close", function() cgui:close() end)
@@ -1133,9 +1016,11 @@ local function coordsCalculator()
 		end
 	end)
 	cgui:run()
+	element.stargate:activateDrawing()
 end
 
 local function channelCodeChooser(isChannel)
+	element.stargate:suspendDrawing()
 	local what = isChannel and "the channel port" or "the security code"
 	local rangeFrom = isChannel and 10000 or 1000
 	local rangeTo = isChannel and 50000 or 9999
@@ -1179,6 +1064,7 @@ local function channelCodeChooser(isChannel)
 		cgui:close()
 	end)
 	cgui:run()
+	element.stargate:activateDrawing()
 end
 
 local function countdown(timer)
@@ -1187,6 +1073,51 @@ local function countdown(timer)
 	if string.len(seconds) == 1 then seconds = "0" .. seconds end
 	element.timeout["text"] = "Remaining time: " .. minutes .. ":" .. seconds
 	element.timeout:draw()
+end
+
+local function onStargateStateChange(newState)
+	element.status["text"] = "Status: " .. sg.stargateState()
+	element.status:draw()
+	if newState == "Idle" then
+		if data.config.autoIris then
+			event.timer(2, function()
+				sg.openIris()
+			end)
+		end
+		element.connectionType:hide()
+		element.remoteAddress:hide()
+		element.timeout:hide()
+		element.dial["text"] = "Open a tunnel"
+		element.dial:draw()
+		countdownTimer:stop()
+		timeToClose = 0
+		element.stargate:onDisconnected()
+	elseif newState == "Connected" then
+		element.remoteAddress["text"] = "Remote address: " .. separateAddress(sg.remoteAddress())
+		element.remoteAddress:show()
+		element.timeout["text"] = "Remaining time: "
+		element.timeout:show()
+		element.dial["text"] = "Close the tunnel"
+		element.dial:draw()
+		countdownTimer:start(1, timeToClose)
+		element.stargate:onConnected()
+		element.distance.text = "Distance: " .. tostring(computeDistance(sg.remoteAddress()))
+		element.distance:draw()
+	end
+end
+
+function onStargateIrisStateChange(newState)
+	element.iris["text"] = "Iris: " .. sg.irisState()
+		element.iris:draw()
+		if newState == "Closed" then
+			element.irisButton["text"] = "Open the iris"
+			element.irisButton:draw()
+			element.stargate:onIrisClosed()
+		elseif newState == "Open" then
+			element.irisButton["text"] = "Close the iris"
+			element.irisButton:draw()
+			element.stargate:onIrisOpened()
+		end
 end
 
 local function createUI()
@@ -1201,7 +1132,7 @@ local function createUI()
 	addTitle()
 	gui:addLabel(35, 2, 10, version)["text-color"] = 0x666666
 	addBar(53, 1, 15, false)
-	element.stargate = addStargate()
+	element.stargate = graphics.createStargateComponent(gui, 90, 14)
 	gui:addButton("right", 1, 10, 1, "Exit", function() gui:close() end)
 	gui:addLabel(56, 4, 22, "Address: " .. separateAddress(sg.localAddress()))
 	element.status = gui:addLabel(56, 5, 25, "Status: " .. sg.stargateState())
@@ -1347,6 +1278,17 @@ local function createUI()
 	------------------------
 
 	tmp.GMLbgcolor = GMLextractProperty(gui, GMLgetAppliedStyles(gui), "fill-color-bg")
+
+	local remoteAddress = sg.remoteAddress()
+	event.timer(2, function ()
+		if #remoteAddress > 0 then
+			timeToClose = 300
+			onStargateStateChange(sg.stargateState())
+			onStargateIrisStateChange(sg.irisState())
+			element.stargate:onConnected(remoteAddress)
+		end
+	end)
+
 	gui:run()
 end
 
@@ -1373,48 +1315,11 @@ local function __eventListener(...)
 		element.remoteAddress["text"] = "Remote address: " .. separateAddress(sg.remoteAddress())
 		element.remoteAddress:show()
 	elseif ev[1] == "sgIrisStateChange" then
-		element.iris["text"] = "Iris: " .. sg.irisState()
-		element.iris:draw()
-		if ev[3] == "Closed" then
-			element.irisButton["text"] = "Open the iris"
-			element.irisButton:draw()
-		elseif ev[3] == "Open" then
-			element.irisButton["text"] = "Close the iris"
-			element.irisButton:draw()
-		end
-		if ev[3] == "Open" or ev[3] == "Closed" then element.stargate:draw() end
+		onStargateIrisStateChange(ev[3])
 	elseif ev[1] == "sgStargateStateChange" then
-		element.status["text"] = "Status: " .. sg.stargateState()
-		element.status:draw()
-		if ev[3] == "Idle" then
-			if data.config.autoIris then
-				event.timer(2, function()
-					sg.openIris()
-				end)
-			end
-			element.connectionType:hide()
-			element.remoteAddress:hide()
-			element.timeout:hide()
-			element.dial["text"] = "Open a tunnel"
-			element.dial:draw()
-			countdownTimer:stop()
-			timeToClose = 0
-			element.stargate:draw()
-			element.stargate:lockSymbol(0)
-		elseif ev[3] == "Connected" then
-			element.remoteAddress["text"] = "Remote address: " .. separateAddress(sg.remoteAddress())
-			element.remoteAddress:show()
-			element.timeout["text"] = "Remaining time: "
-			element.timeout:show()
-			element.dial["text"] = "Close the tunnel"
-			element.dial:draw()
-			countdownTimer:start(1, timeToClose)
-			element.stargate:draw()
-			element.distance.text = "Distance: " .. tostring(computeDistance(sg.remoteAddress()))
-			element.distance:draw()
-		end
+		onStargateStateChange(ev[3])
 	elseif ev[1] == "sgChevronEngaged" then
-		element.stargate:lockSymbol(ev[3])
+		element.stargate:onSymbolLocked(ev[3], ev[4])
 	elseif ev[1] == "modem_message" then
 		if ev[4] == data.config.port then
 			local matches = false

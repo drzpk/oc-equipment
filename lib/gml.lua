@@ -28,7 +28,7 @@ local gfxbuffer=require("gfxbuffer")
 
 local doubleClickThreshold=.25
 
-local gml={VERSION="1.2.2"}
+local gml={VERSION="1.2.3"}
 local startArgs = {...}
 if startArgs[1] == "version_check" then return gml.VERSION end
 
@@ -1823,7 +1823,7 @@ function gml.create(x,y,width,height,renderTarget)
   function newGui.removeComponent(obj,component)
     local pos=0
     for i,comp in pairs(newGui.components) do
-      if newGui.components[i]==comp then
+      if newGui.components[i]==component then
         pos=i
         break
       end
@@ -1902,7 +1902,8 @@ end
 --**********************
 
 gml.api = {
-  baseComponent = baseComponent
+  baseComponent = baseComponent,
+  findStyleProperties = findStyleProperties
 }
 
 defaultStyle=gml.loadStyle("default")

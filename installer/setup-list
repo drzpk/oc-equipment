@@ -10,7 +10,7 @@
 	--library
 	{"rtpo","2.0","https://gitlab.com/d_rzepka/oc-equipment/raw/master/archive/rtpo.lua","Network protocol","IlynPayne",nil,true,nil,nil,true},
 	{"ds-api","1.3","https://gitlab.com/d_rzepka/oc-equipment/raw/master/archive/ds-api.lua","Data server API","IlynPayne",{"rtpo"},nil,nil,nil,true},
-	{"gml","1.2.2","https://gitlab.com/d_rzepka/oc-equipment/raw/master/lib/gml.lua","GUI library","Gopher",{"gfxbuffer","default-style"},true,nil,nil},
+	{"gml","1.2.3","https://gitlab.com/d_rzepka/oc-equipment/raw/master/lib/gml.lua","GUI library","Gopher",{"gfxbuffer","default-style"},true,nil,nil},
 	{"gfxbuffer","none","https://gitlab.com/d_rzepka/oc-equipment/raw/master/lib/gfxbuffer.lua","GML dependency","Gopher",nil,true,nil,nil},
 	{"colorutils","none","https://gitlab.com/d_rzepka/oc-equipment/raw/master/lib/colorutils.lua","Color conversion tools (old dependency of gfxbuffer, currently not used)","Gopher",nil,true,nil,nil},
 	{"default-style","none","https://gitlab.com/d_rzepka/oc-equipment/raw/master/lib/default.gss","Default GML theme","Gopher",nil,true,nil,"default.gss"},
@@ -18,10 +18,11 @@
 	{"hdp","2.1","https://gitlab.com/d_rzepka/oc-equipment/raw/master/lib/hdp.lua","Network protocol (better version)","IlynPayne",nil,true,nil,nil},
 	{"dsapi","2.3","https://gitlab.com/d_rzepka/oc-equipment/raw/master/lib/dsapi.lua","Data server API","IlynPayne",{"hdp"},true,nil,nil},
 	{"support_v1","1.2","https://gitlab.com/d_rzepka/oc-equipment/raw/master/lib/support_v1.lua","Support library v1","IlynPayne",nil,true,nil,nil},
-	{"color_grid","1.0","https://gitlab.com/d_rzepka/oc-equipment/raw/master/lib/color_grid.lua","LIbrary for simple drawings","IlynPayne",nil,true,nil,nil},
+	{"color_grid","2.0","https://gitlab.com/d_rzepka/oc-equipment/raw/master/lib/color_grid.lua","LIbrary for simple drawings","IlynPayne",nil,true,nil,nil},
 	--programs
-	{"sgcx","0.6.4","https://gitlab.com/d_rzepka/oc-equipment/raw/master/stargate/sgcx.lua","Stargate controller","IlynPayne",{"gml","gfxbuffer","default-style","dark-style", "support_v1", "color_grid"},nil,nil,nil},
+	{"sgcx","0.7.0","https://gitlab.com/d_rzepka/oc-equipment/raw/master/stargate/sgcx.lua","Stargate controller","IlynPayne",{"gml","gfxbuffer","default-style","dark-style", "support_v1", "color_grid", "sgcx_graphics"},nil,nil,nil},
 	{"irisAuth","1.8","https://gitlab.com/d_rzepka/oc-equipment/raw/master/stargate/irisAuth.lua","Remote iris authenticator for stargate controller","IlynPayne",nil,nil,nil,nil},
+	{"sgcx_graphics","1.0","https://gitlab.com/d_rzepka/oc-equipment/raw/master/stargate/sgcx_graphics.lua","SGCX graphics library","IlynPayne",nil,true,nil,nil},
 	{"geo_analyzer","1.3","https://gitlab.com/d_rzepka/oc-equipment/raw/master/misc/geo_analyzer.lua","Terrain scanner","IlynPayne",nil,nil,nil,nil},
 	{"projector","1.0","https://gitlab.com/d_rzepka/oc-equipment/raw/master/misc/projector.lua","Terrain stan projector","IlynPayne",nil,nil,nil,nil},
 	{"dataSrv2","2.4","https://gitlab.com/d_rzepka/oc-equipment/raw/master/servers/dataSrv2.lua","Data server","IlynPayne",{"hdp"},nil,nil,nil},
