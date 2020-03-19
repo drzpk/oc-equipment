@@ -28,7 +28,7 @@ local gfxbuffer=require("gfxbuffer")
 
 local doubleClickThreshold=.25
 
-local gml={VERSION="1.2.3"}
+local gml={VERSION="1.2.4"}
 local startArgs = {...}
 if startArgs[1] == "version_check" then return gml.VERSION end
 
@@ -1898,12 +1898,26 @@ end
 
 
 
+local function apiSaveFrame(gui)
+  local result = frameAndSave(gui)
+  return {
+    state = result,
+    gui = gui
+  }
+end
+
+local function apiRestoreFrame(frame)
+  -- renderTarget,x,y,prevState
+  restoreFrame(frame.gui.renderTarget, frame.gui.posX, frame.gui.posY, frame.state)
+end
 
 --**********************
 
 gml.api = {
   baseComponent = baseComponent,
-  findStyleProperties = findStyleProperties
+  findStyleProperties = findStyleProperties,
+  saveFrame = apiSaveFrame,
+  restoreFrame = apiRestoreFrame
 }
 
 defaultStyle=gml.loadStyle("default")

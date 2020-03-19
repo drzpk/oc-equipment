@@ -146,7 +146,7 @@
 		will be disabled.
 ]]
 
-local version = "2.3.0"
+local version = "2.3.1"
 local apiLevel = 4
 local args = {...}
 
@@ -2520,19 +2520,29 @@ local function bLogs()
 	lgui:run()
 end
 
-local function bLock()
+local function lockInterface()
 	if settings.debugMode then return end
-	local lgui = gml.create(1, 1, resolution[1], resolution[2])
-	lgui.style = gui.style
-	lgui:addLabel("center", 23, 22, " << PROGRAM LOCKED >>")
-	lgui:addButton("center", 25, 16, 3, "UNLOCK", function()
-		if passwordPrompt() then
-			lgui:close()
-		else
-			GMLmessageBox(lgui, "Entered password is incorrect.", {"OK"})
-		end
-	end)
-	lgui:run()
+
+	local function showLock()
+		local lgui = gml.create(1, 1, resolution[1], resolution[2])
+		lgui.style = gui.style
+		lgui:addLabel("center", 23, 22, " << PROGRAM LOCKED >>")
+		lgui:addButton("center", 25, 16, 3, "UNLOCK", function()
+			if passwordPrompt() then
+				lgui:close()
+			else
+				GMLmessageBox(lgui, "Entered password is incorrect.", {"OK"})
+			end
+		end)
+		lgui:run()	
+	end
+
+	local frame = gml.api.saveFrame(gui)
+	while true do
+		local s, e = pcall(showLock)
+		if s then break end
+	end
+	gml.api.restoreFrame(frame)
 end
 
 -- # Crash protection
@@ -2604,7 +2614,7 @@ local function createMainGui()
 	gui:addButton(141, 19, 16, 1, "Information", function() safeCall(bInformation) end)
 	gui:addButton(142, 25, 14, 1, "Settings", function() safeCall(bSettings) end)
 	gui:addButton(142, 27, 14, 1, "Logs", function() safeCall(bLogs) end)
-	gui:addButton(142, 29, 14, 1, "Lock program", function() safeCall(bLock) end)
+	gui:addButton(142, 29, 14, 1, "Lock program", function() safeCall(lockInterface) end)
 	gui:addButton(142, 31, 14, 1, "Exit", function() safeCall(bExit) end)
 	
 	addBar(gui, 138, 1, 39, false)
