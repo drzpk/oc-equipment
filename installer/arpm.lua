@@ -66,6 +66,8 @@
 ]]
 
 local version = "0.3.4"
+local args = {...}
+if args[1] == "version_check" then return version end
 
 local component = require("component")
 
