@@ -790,7 +790,7 @@ local function main()
 	elseif args[1] == "self-update" then
 		selfUpdate()
 	elseif args[1] == "version_check" then
-		print(version)
+		return version
 	else
 		usage()
 	end
