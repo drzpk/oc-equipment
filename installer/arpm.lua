@@ -59,11 +59,13 @@
 			Installs selected package. [f] forces installation, [n] disables installation of dependencies.
 		* remove <package> [-d]
 			Removes specified package. [d] also removes dependencies.
+		* self-update
+		   Updates this ARPM script
 		* test <path>
 			Tests offline registry (setup-list) for known errors before uploading.
 ]]
 
-local version = "0.3.3"
+local version = "0.3.4"
 
 local component = require("component")
 
@@ -88,11 +90,14 @@ local event = require("event")
 local keyboard = require("keyboard")
 local shell = require("shell")
 local os = require("os")
+local process = require("process")
+local thread = require("thread")
 
 local resolution = {gpu.getResolution()}
 local args, options = shell.parse(...)
 
 local setupListUrl = "https://gitlab.com/d_rzepka/oc-equipment/raw/master/installer/setup-list"
+local selfUrl = "https://gitlab.com/d_rzepka/oc-equipment/raw/master/installer/arpm.lua"
 local additionalHeaders = {
 	["User-Agent"] = "ARPM/" .. version -- Gitlab returns HTTP 403 when default user agent is used (e.g. Java/1.8.0_131)
 }
@@ -148,6 +153,7 @@ local function usage()
 	printCommand("install <package> [-f] [-d]", "Installs selected package. [f] forces installation, [n] disables installation of dependencies.")
 	printCommand("remove <package> [-d]", "Removes specified package. [d] also removes dependencies.")
 	printCommand("refresh", "Forces refresh of the registry (downloads it again from server).")
+	printCommand("self-update", "Updates ARPM")
 	printCommand("test <path>", "Tests offline registry (setup-list) for known errors before uploading.")
 	textColor(prev)
 end
@@ -348,6 +354,57 @@ local function testRepo(path)
 		textColor(colors.green)
 		print("Test completed succesfully.")
 	end
+end
+
+local function selfUpdate()
+	textColor(colors.blue)
+	print("\nStarting ARPM update...\n")
+	os.sleep(0.2)
+
+	textColor(colors.cyan)
+	io.write("Current version: ")
+	textColor(colors.green)
+	print(version)
+	textColor(colors.cyan)
+	io.write("New version: ")
+
+	local newContent = getContent(selfUrl)
+	local newPackage = load(newContent)
+	local newVersion = newPackage("version_check")
+	textColor(colors.green)
+	print(newVersion)
+
+	if version == newVersion then
+		textColor(colors.orange)
+		print("Versions match, no update will be performed")
+		return
+	end
+
+	local tmpFilePath = "/tmp/arpm_update.lua"
+	local tmpFile = io.open(tmpFilePath, "w")
+	if not tmpFile then
+		io.stderr:write("\nCannot create file: " .. tmpFile)
+		tmpFile:close()
+		return
+	end
+	tmpFile:write(newContent)
+	tmpFile:close()
+
+	local fullPath = shell.resolve(process.info().path)
+	local extension = ".lua"
+	if fullPath:sub(-#extension) ~= extension then
+		fullPath = fullPath .. extension
+	end
+
+	local executable = thread.create(function (targetFilePath, updateFilePath)
+		os.sleep(1)
+		fs.copy(updateFilePath, targetFilePath)
+		fs.remove(updateFilePath)
+	end, fullPath, tmpFilePath)
+	executable:detach()
+
+	textColor(colors.green)
+	print("Update successful")
 end
 
 local function packetInfo(packetName)
@@ -646,7 +703,7 @@ local function installApp(appName, force_install, disable_dep_install)
 			end
 		end
 		textColor(colors.green)
-		term.write("\nInstallation sucessful")
+		term.write("\nInstallation successful")
 	else
 		io.stderr:write("Couldn't download the registry.")
 		return
@@ -730,6 +787,10 @@ local function main()
 		refreshRegistry()
 	elseif args[1] == "test" then
 		testRepo(args[2])
+	elseif args[1] == "self-update" then
+		selfUpdate()
+	elseif args[1] == "version_check" then
+		print(version)
 	else
 		usage()
 	end
