@@ -63,7 +63,7 @@
 			Tests offline registry (setup-list) for known errors before uploading.
 ]]
 
-local version = "0.3.2"
+local version = "0.3.3"
 
 local component = require("component")
 
@@ -91,6 +91,11 @@ local os = require("os")
 
 local resolution = {gpu.getResolution()}
 local args, options = shell.parse(...)
+
+local setupListUrl = "https://gitlab.com/d_rzepka/oc-equipment/raw/master/installer/setup-list"
+local additionalHeaders = {
+	["User-Agent"] = "ARPM/" .. version -- Gitlab returns HTTP 403 when default user agent is used (e.g. Java/1.8.0_131)
+}
 
 local appList = nil
 local installed = {}
@@ -149,7 +154,7 @@ end
 
 local function getContent(url)
 	local sContent = ""
-	local result, response = pcall(internet.request, url)
+	local result, response = pcall(internet.request, url, nil, additionalHeaders)
 	if not result then
 		return nil
 	end
@@ -188,7 +193,7 @@ local function fetchAppList(force)
 			end
 		end
 	end
-	local resp = getContent("https://gitlab.com/d_rzepka/oc-equipment/raw/master/installer/setup-list")
+	local resp = getContent(setupListUrl)
 	if resp then
 		local s, e = serial.unserialize(resp)
 		if not s then
