@@ -42,7 +42,7 @@
 
 package.loaded.sgcx_graphics = nil
 
-local version = "0.7.0"
+local version = "0.7.1"
 local dataStorageVersion = 2
 local startArgs = {...}
 
@@ -93,6 +93,10 @@ local timerEneriga = nil
 local irisTime = 0
 local irisTimer = nil
 local timeToClose = 0
+
+-- Constants
+local MIN_CONNECTION_TIME = 10 -- seconds
+local MAX_CONNECTION_TIME = 300 -- seconds
 
 -- Constants required for address calculation
 local SYMBOLS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789'
@@ -1192,13 +1196,27 @@ local function createUI()
 	gui:addButton(48, 48, 15, 1, "Move to", function() modifyList("to") end)
 	gui:addLabel(45, 22, 7, "Name:")["text-color"] = 0x999999
 	gui:addLabel(45, 25, 9, "World:")["text-color"] = 0x999999
-	gui:addLabel(45, 29, 11, "Address:")["text-color"] = 0x999999
-	gui:addLabel(45, 32, 27, "Connection time [10-300]:")["text-color"] = 0x999999
+	gui:addLabel(45, 28, 11, "Address:")["text-color"] = 0x999999
+	gui:addLabel(45, 37, 16, "Connection time:")["text-color"] = 0x999999
 	element.name = gui:addTextField(45, 23, 25)
 	element.world = gui:addTextField(45, 26, 25)
-	element.address = gui:addTextField(45, 30, 25)
-	element.time = gui:addTextField(45, 33, 10)
-	element.dial = gui:addButton(45, 36, 25, 3, "Open a tunnel", dial)
+	element.address = gui:addTextField(45, 29, 25)
+	element.dial = gui:addButton(45, 33, 25, 3, "Open a tunnel", dial)
+	element.time = gui:addTextField(64, 37, 6)
+	element.time.text = tostring(MAX_CONNECTION_TIME)
+	element.time.onBlur = function (self)
+		local number = tonumber(self.text)
+		if not number or number > MAX_CONNECTION_TIME then
+			self.text = tostring(MAX_CONNECTION_TIME)
+			self:draw()
+		elseif number < MIN_CONNECTION_TIME then
+			self.text = tostring(MIN_CONNECTION_TIME)
+			self:draw()
+		elseif number ~= math.floor(number) then
+			self.text = tostring(math.floor(number))
+			self:draw()
+		end
+	end
 	element.irisButton = gui:addButton(45, 40, 25, 3, "", function()
 		if sg.irisState() == "Open" then
 			sg.closeIris()
@@ -1360,15 +1378,24 @@ elseif type(newAddress) == "nil" then
 end
 if not loadConfig(newAddress) then return end
 
+local function starter()
+	timerEneriga = event.timer(5, energyRefresh, math.huge)
+	main()
+	event.cancel(timerEneriga)
+	if data.config.port and modem.isOpen(data.config.port) then modem.close(data.config.port) end
+end
+
 event.listen("sgDialIn", eventListener)
 event.listen("sgIrisStateChange", eventListener)
 event.listen("sgStargateStateChange", eventListener)
 event.listen("sgChevronEngaged", eventListener)
 event.listen("modem_message", eventListener)
-timerEneriga = event.timer(5, energyRefresh, math.huge)
-main()
-event.cancel(timerEneriga)
-if data.config.port and modem.isOpen(data.config.port) then modem.close(data.config.port) end
+
+local status, message = pcall(starter)
+if not status then
+	io.stderr:write(messsage)
+end
+
 event.ignore("sgDialIn", eventListener)
 event.ignore("sgIrisStateChange", eventListener)
 event.ignore("sgStargateStateChange", eventListener)

@@ -28,7 +28,7 @@ local gfxbuffer=require("gfxbuffer")
 
 local doubleClickThreshold=.25
 
-local gml={VERSION="1.2.4"}
+local gml={VERSION="1.2.5"}
 local startArgs = {...}
 if startArgs[1] == "version_check" then return gml.VERSION end
 
@@ -1877,6 +1877,9 @@ function gml.create(x,y,width,height,renderTarget)
   function newGui.changeFocusTo(gui,target)
     if gui.focusElement then
       gui.focusElement.state=nil
+      if gui.focusElement.onBlur then
+        gui.focusElement:onBlur()
+      end
       if gui.focusElement.lostFocus then
         gui.focusElement:lostFocus()
       elseif not gui.hidden then
@@ -1885,6 +1888,9 @@ function gml.create(x,y,width,height,renderTarget)
     end
     gui.focusElement=target
     target.state="focus"
+    if target.onFocus then
+      target:onFocus()
+    end
     if target.gotFocus then
       target:gotFocus()
     elseif not gui.hidden then
