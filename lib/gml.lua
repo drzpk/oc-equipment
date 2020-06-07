@@ -778,7 +778,7 @@ local function contains(element,x,y)
   return x>=ex and x<=ex+ew-1 and y>=ey and y<=ey+eh-1
 end
 
-local function runGui(gui)
+local function runGui(gui,mode)
   gui.running=true
   --draw gui background, preserving underlying screen
   gui.prevTermState=frameAndSave(gui)
@@ -833,16 +833,20 @@ local function runGui(gui)
     end
   end
 
+  local screenAddress = gui.renderTarget.parent.getScreen()
+  local keyboardToScreenAddressMapping = {}
+  local thisScreen = component.proxy(screenAddress)
+  for _, a in pairs(thisScreen.getKeyboards()) do keyboardToScreenAddressMapping[a] = true end
+
   local lastClickTime, lastClickPos, lastClickButton, dragButton, dragging=0,{0,0},nil,nil,false
   local draggingObj=nil
 
-  while true do
-    gui.renderTarget:flush()
-    local e={event.pull()}
+  local function handleEvent(e)
     if e[1]=="gui_close" then
-      break
+      return false
     elseif e[1]=="touch" then
       --figure out what was touched!
+      if e[2] ~= screenAddress then return true end
       local tx, ty, button=e[3],e[4],e[5]
       if gui:contains(tx,ty) then
         tx=tx-gui.bodyX+1
@@ -869,6 +873,7 @@ local function runGui(gui)
         lastClickButton=button
       end
     elseif e[1]=="drag" then
+      if e[2] ~= screenAddress then return true end
       --if we didn't click /on/ something to start this drag, we do nada
       if clickedOn then
         local tx,ty=e[3],e[4]
@@ -893,6 +898,7 @@ local function runGui(gui)
         end
       end
     elseif e[1]=="drop" then
+      if e[2] ~= screenAddress then return true end
       local tx,ty=e[3],e[4]
       tx=tx-gui.bodyX+1
       ty=ty-gui.bodyY+1
@@ -908,6 +914,7 @@ local function runGui(gui)
       dragging=false
 
     elseif e[1]=="key_down" then
+      if not keyboardToScreenAddressMapping[e[2]] then return true end
       local char,code=e[3],e[4]
       --tab
       if code==15 and gui.focusElement then
@@ -944,14 +951,32 @@ local function runGui(gui)
       end
 
     end
+
+    return true
   end
 
-  gui.running=false
+  local function closeGui()
+    gui.running=false
 
-  cleanup(gui)
+    cleanup(gui)
 
-  if gui.onExit then
-    gui.onExit()
+    if gui.onExit then
+      gui.onExit()
+    end
+  end
+
+  if mode == "manual" then
+    return function (e)
+      if not gui.running then error("gui is not running") end
+      if not handleEvent(e) then closeGui() end
+    end
+  else
+    while true do
+      gui.renderTarget:flush()
+      local e={event.pull()}
+      if not handleEvent(e) then break end
+    end  
+    closeGui()
   end
 end
 
