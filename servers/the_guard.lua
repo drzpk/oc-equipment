@@ -146,7 +146,7 @@
 		will be disabled.
 ]]
 
-local version = "2.3.1"
+local version = "2.3.2"
 local apiLevel = 4
 local args = {...}
 
@@ -2550,7 +2550,9 @@ local function safeCall(fun, ...)
 	local s, r = pcall(fun, ...)
 	if not s then
 		GMLmessageBox(gui, "An error occurred during program execution.\nFurther details are available in logs.")
-		silentLog("safeCall", r)
+		local trace = debug.traceback()
+		trace = trace:gsub('\t', '')
+		silentLog("safeCall", r .. "\n" .. trace)
 		gui:draw()
 		return nil
 	end
