@@ -147,7 +147,7 @@
 		}
 ]]
 
-local version = "1.3.4"
+local version = "1.3.5"
 local args = {...}
 
 if args[1] == "version_check" then return version end
@@ -467,7 +467,7 @@ local function getEntities(detector)
 			for a, t in pairs(entities) do
 				local found = false
 				for _, b in pairs(lists.turrets.black) do
-					if a.name == b then
+					if t.name == b then
 						found = true
 						break
 					end

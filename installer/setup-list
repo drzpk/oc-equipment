@@ -34,7 +34,7 @@
 	{"levels","1.1","https://gitlab.com/d_rzepka/oc-equipment/raw/master/servers/mod_tg/mod_tg_levels.lua","Security levels module for the_guard","IlynPayne",nil,nil,nil,"mod_tg/mod_tg_levels.lua"},
 	{"auth","1.2.3","https://gitlab.com/d_rzepka/oc-equipment/raw/master/servers/mod_tg/mod_tg_auth.lua","Card readers and keypads module for the_guard","IlynPayne",nil,nil,nil,"mod_tg/mod_tg_auth.lua"},
 	{"io","1.1","https://gitlab.com/d_rzepka/oc-equipment/raw/master/servers/mod_tg/mod_tg_io.lua","Redstone control module for the_guard","IlynPayne",nil,nil,nil,"mod_tg/mod_tg_io.lua"},
-	{"turrets","1.3.4","https://gitlab.com/d_rzepka/oc-equipment/raw/master/servers/mod_tg/mod_tg_turrets.lua","Turrets and sensors module for the_guard","IlynPayne",nil,nil,nil,"mod_tg/mod_tg_turrets.lua"},
+	{"turrets","1.3.5","https://gitlab.com/d_rzepka/oc-equipment/raw/master/servers/mod_tg/mod_tg_turrets.lua","Turrets and sensors module for the_guard","IlynPayne",nil,nil,nil,"mod_tg/mod_tg_turrets.lua"},
 	-- utils
 	{"tg2_decrypt","1.0","https://gitlab.com/d_rzepka/oc-equipment/raw/master/util/tg2_decrypt.lua","The Guard 2 config file decryptor","IlynPayne",nil,nil,nil,nil},
 	--3rd party
