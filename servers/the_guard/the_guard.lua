@@ -1,5 +1,5 @@
 -- ################################################
--- #                The Guard  2.2                #
+-- #                The Guard  3.0                #
 -- #                                              #
 -- #  03.2016                by: Dominik Rzepka   #
 -- ################################################
@@ -146,8 +146,8 @@
 		will be disabled.
 ]]
 
-local version = "2.3.2"
-local apiLevel = 4
+local version = "3.0.0"
+local apiLevel = 5
 local args = {...}
 
 if args[1] == "version_check" then return version end
@@ -157,6 +157,7 @@ local computer = require("computer")
 local component = require("component")
 local event = require("event")
 local serial = require("serialization")
+local os = require("os")
 local uni = require("unicode")
 local fs = require("filesystem")
 local term = require("term")
@@ -196,8 +197,9 @@ local bmodules = {} -- corrupted modules
 local pmodules = {} -- modules avaiting installation
 local token = nil -- device token (id)
 
-local configDir = "/etc/the_guard"
-local modulesDir = "/usr/bin/mod_tg"
+local SUBSYSTEMS_DIR = "/usr/bin/the_guard/subsystems"
+local MODULES_DIR = "/usr/bin/the_guard/test_modules"
+local CONFIG_DIR = "/etc/the_guard"
 
 -- # Function declarations
 local silentLog = nil
@@ -208,6 +210,8 @@ local GMLextractProperty = nil
 local GMLextractProperties = nil
 local GMLfindStyleProperties = nil
 local GMLcalcBody = nil
+
+local subsystems = {}
 
 -- # Zones
 local zones = {
@@ -980,7 +984,7 @@ Returns default module directory
 	RET: absolute path to module directory
 ]]
 interface.getConfigDirectory = function(mod)
-	local dir = fs.concat(configDir .. "/modules", mod.name)
+	local dir = fs.concat(CONFIG_DIR .. "/modules", mod.name)
 	if not fs.isDirectory(dir) then fs.makeDirectory(dir) end
 	return dir
 end
@@ -990,7 +994,7 @@ Returns encryption key
 	@mod - calling module
 	RET: encryption key in binary format
 ]]
-interface.secretKey = function(mod)
+interface.secretKey = function(mod) -- todo: remove this (settings will be managed by the dedicated subsystem)
 	return token
 end
 
@@ -1001,6 +1005,10 @@ Returns theme used by server
 ]]
 interface.getStyle = function(mod)
 	return gui.style
+end
+
+interface.createSettingsEditor = function (mod, settingsName)
+	return subsystems.settings:createModuleSettingsEditor(mod, settingsName)
 end
 
 -- # Funkcje pomocnicze Gui
@@ -1228,6 +1236,61 @@ local function addTitle(target, posX, posY)
 	end
 	target:addComponent(title)
 	return title
+end
+
+
+local function validateSubsystem(name, subsystem)
+	if type(subsystem) ~= "table" then
+		error("Subsystem " .. name .. " wasn't loaded correctly")
+	elseif type(subsystem.initialize) ~= "function" then
+		error("Subsystem " .. name .. " is missing initialization function")
+	end
+end
+
+local function loadSubsystem(name)
+	local subsystemFile = nil
+	if fs.isDirectory(fs.concat(SUBSYSTEMS_DIR, name)) then
+		subsystemFile = fs.concat(SUBSYSTEMS_DIR, name, name .. ".lua")
+	elseif fs.exists(fs.concat(SUBSYSTEMS_DIR, name .. ".lua")) then
+		subsystemFile = fs.concat(SUBSYSTEMS_DIR, name .. ".lua")
+	else
+		error("Subsystem " .. name .. " wasn't found")
+	end
+
+	local compiled, err = loadfile(subsystemFile)
+	if compiled then
+		local status, subsystem = pcall(compiled)
+		if status then
+			validateSubsystem(name, subsystem)
+			subsystems[name] = subsystem
+
+			subsystem.subsystems = subsystems
+
+			if not subsystem.initialize() then
+				io.stderr:write("Initialization of subsystem: " .. name .. " failed\n")
+				os.exit(1)
+			end
+		else
+			io.stderr:write("Error while loading subsystem: " .. name .. "\n")
+			io.stderr:write(subsystem)
+			os.exit(1)
+		end
+	else
+		io.stderr:write("Error while compiling subsystem: " .. name .. "\n")
+		io.stderr:write(err)
+		os.exit(1)
+	end
+end
+
+local function injectContextIntoSubsystems()
+	local context = {
+		guiStyle = gui.style,
+		api = interface
+	}
+
+	for _, subsystem in pairs(subsystems) do
+		subsystem.context = context
+	end
 end
 
 -- # Other functions
@@ -1494,7 +1557,8 @@ local function loadConfig()
 		internalLog("Checked " .. tostring(counter) .. " components(s)", "", true)
 	end
 	
-	local function checkPassword()
+	local function checkPassword() -- todo: to be changed
+		if true then return true end 
 		if not passwd or passwd:len() == 0 then
 			local prev = component.gpu.setForeground(0xff0000)
 			print("No master password set. Enter a new password")
@@ -1579,7 +1643,7 @@ local function loadConfig()
 			if s then
 				components = s
 			else
-				internaLog("loadConfig", "components file is corrupted or empty", false, 0xffff00)
+				internalLog("loadConfig", "components file is corrupted or empty", false, 0xffff00)
 			end
 			f:close()
 		else
@@ -1982,7 +2046,7 @@ local function bModuleList()
 		rtab = {}
 		local n, l = {}, {}
 		for _, t in pairs(pmodules) do
-			if t.shape == "normal" then
+			if true or t.shape == "normal" then -- todo: remove shapes
 				table.insert(n, t.name .. ", " .. t.version)
 			elseif t.shape == "landscape" then
 				table.insert(l, t.name .. ", " .. t.version)
@@ -2049,7 +2113,7 @@ local function bModuleList()
 	
 	local function toLeft()
 		local index = getIndex(rlist:getSelected():match("^(.+), .+"))
-		if index and pmodules[index].shape == "normal" then
+		if index and (pmodules[index].shape == "normal" or true) then -- todo: remove shapes
 			local free = nil
 			for i = 1, 4 do
 				if not modules[i] then free = i break end
@@ -2335,7 +2399,8 @@ local function restore(port)
 	rgui:run()
 end
 
-local function bSettings()
+local function openMainSettings()
+	
 	local sgui = gml.create("center", "center", 60, 13)
 	sgui.style = gui.style
 	sgui:addLabel("center", 1, 11, "Settings")
@@ -2433,7 +2498,7 @@ sure you want to continue?
 	sgui:run()
 end
 
-local function bLogs()
+local function bLogs() -- todo: move to logging subsystem
 	local lineWidth = 85
 	local ll, list = {}, nil
 	local function refresh()
@@ -2566,6 +2631,9 @@ local function secureErrorHandler(err)
 end
 
 local function secureFunction(fun, ...)
+	-- todo: temporarily disable error handler while logging sybsystem overhaul is in progress
+	if true then return fun(...) end 
+
 	local args = {...}
 	local call = function()
 		fun(table.unpack(args))
@@ -2614,10 +2682,9 @@ local function createMainGui()
 	gui:addButton(141, 15, 16, 1, "New component", function() safeCall(bNewComponent) end)
 	gui:addButton(141, 17, 16, 1, "Modules", function() safeCall(bModuleList) end)
 	gui:addButton(141, 19, 16, 1, "Information", function() safeCall(bInformation) end)
-	gui:addButton(142, 25, 14, 1, "Settings", function() safeCall(bSettings) end)
-	gui:addButton(142, 27, 14, 1, "Logs", function() safeCall(bLogs) end)
-	gui:addButton(142, 29, 14, 1, "Lock program", function() safeCall(lockInterface) end)
-	gui:addButton(142, 31, 14, 1, "Exit", function() safeCall(bExit) end)
+	gui:addButton(142, 25, 14, 1, "Settings", function() safeCall(openMainSettings) end)
+	gui:addButton(142, 27, 14, 1, "Lock program", function() safeCall(lockInterface) end)
+	gui:addButton(142, 29, 14, 1, "Exit", function() safeCall(bExit) end)
 	
 	addBar(gui, 138, 1, 39, false)
 	addBar(gui, 1, 40, 158, true)
@@ -2753,19 +2820,13 @@ local function loadModules()
 			internalLog(dvn, "missing id")
 			return false
 		elseif not checkID(mo.id) then
-			internalLog(dvn, "id " .. tostring(mo.id) .. " is already yesen")
+			internalLog(dvn, "id " .. tostring(mo.id) .. " is already taken")
 			return false
 		elseif type(mo.apiLevel) ~= "number" then
 			internalLog(dvn, "missing api level")
 			return false
 		elseif mo.apiLevel > apiLevel then
 			internalLog(dvn, "too old server version")
-			return false
-		elseif type(mo.shape) ~= "string" then
-			internalLog(dvn, "no shape defined")
-			return false
-		elseif mo.shape ~= "normal" and mo.shape ~= "landscape" then
-			internalLog(dvn, "invalid shape")
 			return false
 		elseif type(mo.setUI) ~= "function" then
 			internalLog(dvn, "missing setUI() function")
@@ -2797,6 +2858,11 @@ local function loadModules()
 	
 	local function loadModule(filename)
 		local name = filename:match("mod_tg_(.+)%.lua")
+		if not name then
+			-- todo: temporary solution
+			name = filename:match("test_modules/(.+)%.lua")
+		end
+
 		internalLog("  " .. name, "", true, 0xffff00)
 		local m, e = loadfile(filename)
 		if m then
@@ -2828,16 +2894,11 @@ local function loadModules()
 				local buffer = loadModule(tab.file)
 				if buffer then
 					if not mod[buffer.name] then
-						if (buffer.shape == "normal" and (num > 0 and num < 5)) or (buffer.shape == "landscape" and num == 5) then
-							mod[buffer.name] = buffer
-							modules[num].name = buffer.name
-							modules[num].version = buffer.version
-							modules[num].shape = buffer.shape
-							modules[num].id = buffer.id
-						else
-							internaLog("loader", "zone not consistent with shape")
-							modules[num] = nil
-						end
+						mod[buffer.name] = buffer
+						modules[num].name = buffer.name
+						modules[num].version = buffer.version
+						modules[num].shape = buffer.shape
+						modules[num].id = buffer.id
 					else
 						internalLog("loader", "module with name '" .. buffer.name .. "' already exists", 0xffff00)
 					end
@@ -2870,14 +2931,14 @@ local function loadModules()
 		return v1 or v2
 	end
 	internalLog("Loading inactive modules", "", true, 0x00a6ff)
-	for n in fs.list(modulesDir) do
-		local name = n:match("^mod_tg_(.+)%.lua$")
-		if name and not isAdded(fs.concat(modulesDir, n)) then
-			local buffer = loadModule(fs.concat(modulesDir, n))
+	for n in fs.list(MODULES_DIR) do
+		local name = n:match("^(.+)%.lua$")
+		if name and not isAdded(fs.concat(MODULES_DIR, n)) then
+			local buffer = loadModule(fs.concat(MODULES_DIR, n))
 			if buffer then
 				local t = {
 					name = buffer.name,
-					file = fs.concat(modulesDir, n),
+					file = fs.concat(MODULES_DIR, n),
 					version = buffer.version,
 					shape = buffer.shape,
 					id = buffer.id
@@ -3108,6 +3169,8 @@ local function main()
 		event.listen(e, backgroundListener)
 	end
 	eventsready = true
+
+	injectContextIntoSubsystems()
 	
 	internalLog("Starting the server", "", false, 0x00ff00)
 	os.sleep(0.5)
@@ -3137,58 +3200,22 @@ local function main()
 	return true
 end
 
-local function loadToken()
-	local path = fs.concat(configDir, "token")
-	local ee = component.eeprom
-	if not ee then
-		internalLog("token", "EEPROM is missing!", false, 0xff0000)
-		return false
-	end
-	if fs.isDirectory(path) then fs.remove(path) end
-	if fs.exists(path) then
-		local file, e = io.open(path, "r")
-		if file then
-			local dec = data.decode64(file:read("*a"))
-			if dec then
-				if ee.address == dec then
-					token = data.md5(ee.address)
-					return true
-				else
-					internalLog("token", "Tokens differ!", false, 0xff0000)
-				end
-			else
-				internalLog("token", "Couldn't decode a token", false, 0xff0000)
-			end
-		else
-			internalLog("token", "Couldn't open token file (" .. e .. ")", false, 0xff0000)
-		end
-	else
-		internalLog("token", "Token is missing, creating a new one", false, 0xffff00)
-		local file, e = io.open(path, "w")
-		if file then
-			file:write(data.encode64(ee.address))
-			file:close()
-			token = data.md5(ee.address)
-			return true
-		else
-			internalLog("token", "Couldn't create a new token (" .. e .. ")", false, 0xff0000)
-		end
-	end
-	return false
-end
-
 local function init()
-	if not fs.isDirectory(configDir) then
-		fs.makeDirectory(configDir)
+	loadSubsystem("migration")
+	subsystems.migration:migrate()
+	subsystems.migration = nil
+
+	loadSubsystem("settings")
+	loadSubsystem("logging")
+	loadSubsystem("ui")
+
+	if not fs.isDirectory(CONFIG_DIR) then
+		fs.makeDirectory(CONFIG_DIR)
 	end
 	local prev = component.gpu.setForeground(0x00ff00)
 	print("THE GUARD server, version " .. version)
 	component.gpu.setForeground(prev)
 	internalLog("init", "Loading token")
-	if not loadToken() then
-		internalLog("init", "Token initialization failed", false, 0xff0000)
-		return
-	end
 	internalLog("init", "Initializing the server")
 	if not main() then
 		internalLog("init", "Initialization failed", false, 0xff0000)

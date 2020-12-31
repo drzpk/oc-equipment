@@ -40,43 +40,7 @@ local server = nil
 local mod = nil
 
 -- # Logi
-local levels = {
-	[1] = {
-		title = "SEVERE",
-		color = 0xff00cc
-	},
-	[2] = {
-		title = "ERROR",
-		color = 0xff0000
-	},
-	[3] = {
-		title = "WARNING",
-		color = 0xffff00
-	},
-	[4] = {
-		title = "INFO",
-		color = 0x000000
-	},
-	[5] = {
-		title = "DEBUG",
-		color = 0x00ff00
-	}
-}
 
-local formats = {
-	[1] = {"normal", function(time, level, title, text) -- 12:04 DEBUG: title/text
-		return time .. " " .. levels[level].title .. ": " .. title .. "/" .. text
-	end},
-	[2] = {"short", function(time, level, title, text) -- 12:04 D: title/text
-		return time .. " " .. string.sub(levels[level].title, 1, 1) .. ": " .. title .. "/" .. text
-	end},
-	[3] = {"square", function(time, level, title, text) -- 12:04[D] >title<  text
-		return time .. "[" .. string.sub(levels[level].title, 1, 1) .. "] >" .. title .. "<  " .. text
-	end},
-	[4] = {"pretty", function(time, level, title, text) -- 12:04 /D >> title | text
-		return time .. " /" .. string.sub(levels[level].title, 1, 1) .. " >> " .. title .. " | " .. text
-	end}
-}
 
 -- # Action handling
 local function flushLog()
