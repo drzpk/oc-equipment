@@ -28,7 +28,7 @@ local gfxbuffer=require("gfxbuffer")
 
 local doubleClickThreshold=.25
 
-local gml={VERSION="1.2.5"}
+local gml={VERSION="1.2.6"}
 local startArgs = {...}
 if startArgs[1] == "version_check" then return gml.VERSION end
 
@@ -1543,6 +1543,7 @@ local function listBoxSelect(lb,index)
     --update scroll position
     lb.scrollBar.scrollPos=scrollIndex
     scrollListBox(lb.scrollBar)
+    updateScrollBarGrip(lb.scrollBar)
   else
     if prevSelected>=scrollIndex and prevSelected<=scrollIndex+lb.bodyH-1 then
       local pl=lb.labels[prevSelected-scrollIndex+1]
@@ -1586,9 +1587,9 @@ local function updateListBoxList(lb,newList)
   lb.list=newList
   lb.scrollBar.scrollPos=1
   lb.scrollBar.scrollMax=math.max(1,#newList-lb.bodyH+1)
-  updateScrollBarGrip(lb.scrollBar)
   lb.selectedLabel=1
   scrollListBox(lb.scrollBar)
+  updateScrollBarGrip(lb.scrollBar)
   lb:draw()
 
 end
