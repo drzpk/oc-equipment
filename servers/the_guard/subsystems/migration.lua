@@ -86,6 +86,10 @@ function migration:initialize()
     return true
 end
 
+function migration:createUI() end
+
+function migration:cleanup() end
+
 function migration:migrate()
     if migrateFrom2To3() then
         print("Migrated configuration files from the guard 2 to 3")

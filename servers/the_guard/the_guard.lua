@@ -202,7 +202,6 @@ local MODULES_DIR = "/usr/bin/the_guard/test_modules"
 local CONFIG_DIR = "/etc/the_guard"
 
 -- # Function declarations
-local silentLog = nil
 local GMLmessageBox = nil
 local GMLcontains = nil
 local GMLgetAppliedStyles = nil
@@ -212,6 +211,10 @@ local GMLfindStyleProperties = nil
 local GMLcalcBody = nil
 
 local subsystems = {}
+
+local logger = nil
+local subsystemsLogger = nil
+local modulesLogger = nil
 
 -- # Zones
 local zones = {
@@ -227,9 +230,6 @@ local zones = {
 -- # variables
 local gui = nil
 local mod = {}
-local intlog = ""
-local lastlog = {}
-local loglines = 0
 local internalMod = math.random()
 
 -- # Module interface
@@ -476,7 +476,7 @@ interface.call = function(mod, id, p1, p2, silent)
 			if s then
 				return r
 			else
-				silentLog("interface.call", "action " .. tostring(id) .. " call failed: " .. r)
+				logger:error("interface.call", "action {} call failed: {}" .. r, id, r)
 				if not silent then
 					GMLmessageBox(gui, "Action " .. tostring(id) .. " call failed.", {"OK"})
 				end
@@ -485,13 +485,13 @@ interface.call = function(mod, id, p1, p2, silent)
 		end
 		if et:len() > 0 then
 			local m = "Wrong action parameters. ("
-			silentLog("interface.call", m .. et .. ")")
+			logger:error("interface.call", m .. et .. ")")
 			if not silent then
 				GMLmessageBox(gui, m .. et .. ")", {"OK"})
 			end
 		end
 	else
-		silentLog("interface.call", "action " .. tostring(id) .. " wasn't found")
+		logger:error("interface.call", "action {} wasn't found", id)
 		if not silent then
 			GMLmessageBox(gui, "Couldn't find action " .. tostring(id) .. "!", {"OK"})
 		end
@@ -522,7 +522,7 @@ interface.callByName = function(mod, name, p1, p2, silent)
 	if found ~= nil then
 		return interface.call(mod, found, p1, p2, silent)
 	else
-		silentLog("interface.call", "action \"" .. name .. "\" wasn't found")
+		logger:error("interface.call", "action \"" .. name .. "\" wasn't found")
 		if not silent then
 			GMLmessageBox(gui, "Couldn't find action with name " .. name .. "!", {"OK"})
 		end
@@ -548,12 +548,12 @@ interface.actionDetails = function(mod, id)
 end
 
 --[[
-Adds new log
+Returns the logger
 	@mod - calling module
 	@msg - message do display
 ]]
-interface.log = function(mod, msg)
-	silentLog(mod.name, msg)
+interface.logger = function(mod, msg)
+	return modulesLogger
 end
 
 --[[
@@ -564,7 +564,7 @@ message in the system logs.
 interface.pcall = function(mod, ...)
 	local s, r = pcall(...)
 	if not s then
-		silentLog(mod.name, r)
+		logger:error(mod.name, r)
 	end
 
 	return s, r
@@ -607,7 +607,7 @@ interface.messageBox = function(mod, message, buttons)
 	if r then
 		return e
 	else
-		silentLog("interface.messageBox", "couldn't display message: " .. e)
+		logger:error("interface.messageBox", "couldn't display message: " .. e)
 		return nil
 	end
 end
@@ -1244,6 +1244,10 @@ local function validateSubsystem(name, subsystem)
 		error("Subsystem " .. name .. " wasn't loaded correctly")
 	elseif type(subsystem.initialize) ~= "function" then
 		error("Subsystem " .. name .. " is missing initialization function")
+	elseif type(subsystem.cleanup) ~= "function" then
+		error("Subsystem " .. name .. " is missing cleanup function")
+	elseif type(subsystem.createUI) ~= "function" then
+		error("Subsystem " .. name .. " is missing UI creation function")
 	end
 end
 
@@ -1264,9 +1268,11 @@ local function loadSubsystem(name)
 			validateSubsystem(name, subsystem)
 			subsystems[name] = subsystem
 
+			subsystem.name = name
+			subsystem.api = interface
 			subsystem.subsystems = subsystems
 
-			if not subsystem.initialize() then
+			if not subsystem:initialize() then
 				io.stderr:write("Initialization of subsystem: " .. name .. " failed\n")
 				os.exit(1)
 			end
@@ -1294,14 +1300,6 @@ local function injectContextIntoSubsystems()
 end
 
 -- # Other functions
-local function flushLog()
-	local file = io.open("/tmp/tg.log", "a")
-	if file then
-		file:write(intlog)
-		file:close()
-		intlog = ""
-	end
-end
 
 local function generateUid()
     local template ='xyxyxy'
@@ -1326,49 +1324,12 @@ local function generateComponentUid()
 	end
 end
 
-silentLog = function(source, description, disableTimer, color)
-	local timer = disableTimer and "" or (os.date():sub(-8) .. " - ")
-	local text = timer .. source
-	if description ~= nil and description:len() > 0 then
-		text = text .. ": " .. description
-	end
-	intlog = intlog .. text .. "\n"
-	loglines = loglines + 1
-	if loglines > 20 then
-		flushLog()
-		loglines = 0
-	end
-	table.insert(lastlog, text)
-	if #lastlog > 10 then table.remove(lastlog, 1) end
-	return text
-end
-
-local function internalLog(source, description, disableTimer, color)
-	local prev = nil
-	if color then
-		prev = component.gpu.setForeground(color)
-	end
-	print(silentLog(source, description, disableTimer, color))
-	if color then
-		component.gpu.setForeground(prev)
-	end
-end
-
 local function isPasswordValid(plain)
 	return data.sha256(plain) == passwd
 end
 
 -- # Configuration
 local save = {}
-
-function save.log(silent, ...)
-	if silent then
-		silentLog(...)
-		save.err()
-	else
-		internalLog(...)
-	end
-end
 
 function save.err()
 	GMLmessageBox(gui, "An error occurred while saving settings, check the logs.", {"OK"})
@@ -1382,11 +1343,11 @@ function save.settings(silent)
 			f:write(s)
 			f:close()
 		else
-			save.log(silent, "save", "error while opening settings file: " .. e)
+			logger:error("save", "error while opening settings file: " .. e)
 			return false
 		end
 	else
-		save.log(silent, "save", "cannot serialize settings: " .. s)
+		logger:error("save", "cannot serialize settings: " .. s)
 		return false
 	end
 	return true
@@ -1404,11 +1365,11 @@ function save.modules(silent)
 			f:write(s)
 			f:close()
 		else
-			save.log(silent, "save", "error while opening modules file: " .. e)
+			logger:error("save", "error while opening modules file: " .. e)
 			return false
 		end
 	else
-		save.log(silent, "save", "cannot serialize modules: " .. s)
+		logger:error("save", "cannot serialize modules: " .. s)
 		return false
 	end
 	return true
@@ -1422,11 +1383,11 @@ function save.components(silent)
 			f:write(s)
 			f:close()
 		else
-			save.log(silent, "save", "error while opening components file: " .. e)
+			logger:error("save", "error while opening components file: " .. e)
 			return false
 		end
 	else
-		save.log(silent, "save", "cannot serialize components: " .. s)
+		logger:error("save", "cannot serialize components: " .. s)
 		return false
 	end
 	return true
@@ -1439,7 +1400,7 @@ function save.passwd(silent)
 		f:write(output)
 		f:close()
 	else
-		save.log(silent, "save", "cannot open master password file: " .. e)
+		logger:error("save", "cannot open master password file: " .. e)
 		return false
 	end
 	return true
@@ -1447,16 +1408,16 @@ end
 
 local function saveConfig()
 	if not save.settings() then
-		internalLog("save", "couldn't save settings", false, 0xff0000)
+		logger:error("save", "couldn't save settings")
 	end
 	if not save.modules() then
-		internalLog("save", "couldn't save modules' settings", false, 0xff0000)
+		logger:error("save", "couldn't save modules' settings")
 	end
 	if not save.components() then
-		internalLog("save", "couldn't save components' settings", false, 0xff0000)
+		logger:error("save", "couldn't save components' settings")
 	end
 	if not save.passwd() then
-		internalLog("save", "couldn't save master password", false, 0xff0000)
+		logger:error("save", "couldn't save master password")
 	end
 end
 
@@ -1489,63 +1450,63 @@ local function loadConfig()
 		for i, m in pairs(modules) do
 			local added = true
 			if type(i) ~= "number" then
-				internalLog("checkModules", "wrong zone identifier")
+				logger:error("checkModules", "wrong zone identifier")
 				modules[i] = nil
 				added = false
 			else
 				if type(m.file) == "string" then
 					local path = m.file
 					if not (fs.exists(path) and not fs.isDirectory(path)) then
-						internalLog("checkModules", "file doesn't exist")
+						logger:error("checkModules", "file doesn't exist")
 						modules[i] = nil
 						added = false
 					end
 				else
-					internalLog("checkModules", "missing file name")
+					logger:error("checkModules", "missing file name")
 					modules[i] = nil
 					added = false
 				end
 			end
 			if added then counter = counter + 1 end
 		end
-		internalLog("Checked " .. tostring(counter) .. " module(s)", "", true)
+		logger:debug("checkModules", "Checked {} module(s)", counter)
 	end
 
 	local function checkComponents()
 		local counter = 0 
 		for i, c in pairs(components) do
 			if type(c["id"]) ~= "string" then
-				internalLog("checkComponents", "wrong id")
+				logger:error("checkComponents", "wrong id")
 				components[i]["id"] = generateComponentUid()
 			end
 			if type(c["address"]) == "string" then
 				if component.proxy(c["address"]) then
 					if type(c["type"]) ~= "string" then
-						internalLog("checkComponents", "wrong type")
+						logger:error("checkComponents", "wrong type")
 						components[i]["type"] = ""
 					end
 					if type(c["state"]) ~= "boolean" then
-						internalLog("checkComponents", "wrong state")
+						logger:error("checkComponents", "wrong state")
 						components[i]["state"] = false
 					end
 					if not (type(c["x"]) == "number" or type(c["x"]) == "nil") then
-						internalLog("checkComponents", "wrong x coord")
+						logger:error("checkComponents", "wrong x coord")
 						components[i]["x"] = nil
 					end
 					if not (type(c["y"]) == "number" or type(c["y"]) == "nil") then
-						internalLog("checkComponents", "wrong y coord")
+						logger:error("checkComponents", "wrong y coord")
 						components[i]["y"] = nil
 					end
 					if not (type(c["z"]) == "number" or type(c["z"]) == "nil") then
-						internalLog("checkComponents", "wrong z coord")
+						logger:error("checkComponents", "wrong z coord")
 						components[i]["z"] = nil
 					end
 				else
-					internalLog("checkComponents", "device " .. c["address"] .. " is offline")
+					logger:debug("checkComponents", "device " .. c["address"] .. " is offline")
 					components[i].state = false
 				end
 			else
-				internalLog("checkComponents", "wrong address format")
+				logger:error("checkComponents", "wrong address format")
 				if type(i) == "number" then
 					table.remove(components, i)
 				else
@@ -1554,7 +1515,7 @@ local function loadConfig()
 			end
 			counter = counter + 1
 		end
-		internalLog("Checked " .. tostring(counter) .. " components(s)", "", true)
+		logger:debug("checkComponents", "Checked {} components(s)", counter)
 	end
 	
 	local function checkPassword() -- todo: to be changed
@@ -1585,7 +1546,7 @@ local function loadConfig()
 				f:write(data.encode64(passwd))
 				f:close()
 			else
-				internalLog("passwd", "An error occurred while saving password: " .. e)
+				logger:error("passwd", "An error occurred while saving password: " .. e)
 				return false
 			end
 		end
@@ -1594,7 +1555,7 @@ local function loadConfig()
 	end
 
 	local dir = "/etc/the_guard/"
-	internalLog("Loading settings", "", true)
+	logger:info("loadConfig", "Loading settings")
 	local path = fs.concat(dir, "/config.conf")
 	if fs.exists(path) and not fs.isDirectory(path) then
 		local f, e = io.open(path, "r")
@@ -1603,15 +1564,15 @@ local function loadConfig()
 			if s then
 				settings = s
 			else
-				internalLog("loadConfig", "settings file is corrupted or empty", false, 0xffff00)
+				logger:error("loadConfig", "settings file is corrupted or empty")
 			end
 			f:close()
 		else
-			internalLog("loadConfig", "settings file error: " .. e, false, 0xff0000)
+			logger:error("loadConfig", "settings file error: " .. e)
 			return false
 		end
 	else
-		internalLog("loadConfig", "settings file missing, loading defaults")
+		logger:error("loadConfig", "settings file missing, loading defaults")
 	end
 	checkSettings()
 	
@@ -1623,15 +1584,15 @@ local function loadConfig()
 			if s then
 				modules = s
 			else
-				internalLog("loadConfig", "modules file is corrupted or empty",  false, 0xffff00)
+				logger:error("loadConfig", "modules file is corrupted or empty")
 			end
 			f:close()
 		else
-			internalLog("loadConfig", "modules file error: " .. e, false, 0xff0000)
+			logger:error("loadConfig", "modules file error: " .. e)
 			return false
 		end
 	else
-		internalLog("loadConfig", "modules file missing, loading defauls")
+		logger:warn("loadConfig", "modules file missing, loading defaults")
 	end
 	checkModules()
 	
@@ -1643,15 +1604,15 @@ local function loadConfig()
 			if s then
 				components = s
 			else
-				internalLog("loadConfig", "components file is corrupted or empty", false, 0xffff00)
+				logger:error("loadConfig", "components file is corrupted or empty")
 			end
 			f:close()
 		else
-			internalLog("loadConfig", "components file error: " .. e, false, 0xff0000)
+			logger:error("loadConfig", "components file error: " .. e)
 			return false
 		end
 	else
-		internalLog("loadConfig", "components file missing, loading defaults")
+		logger:warn("loadConfig", "components file missing, loading defaults")
 	end
 	checkComponents()
 	
@@ -1662,12 +1623,12 @@ local function loadConfig()
 			passwd = data.decode64(f:read("*a"))
 			f:close()
 		else
-			internalLog("passwd", "couldn't open password file: " .. e)
+			logger:error("passwd", "couldn't open password file: " .. e)
 			f:close()
 			return false
 		end
 	else
-		internalLog("passwd", "password file missing, loading defaults")
+		logger:error("passwd", "password file missing, loading defaults")
 	end
 	if not checkPassword() then return false end
 	
@@ -2617,7 +2578,7 @@ local function safeCall(fun, ...)
 		GMLmessageBox(gui, "An error occurred during program execution.\nFurther details are available in logs.")
 		local trace = debug.traceback()
 		trace = trace:gsub('\t', '')
-		silentLog("safeCall", r .. "\n" .. trace)
+		logger:error("safeCall", r .. "\n" .. trace)
 		gui:draw()
 		return nil
 	end
@@ -2627,7 +2588,7 @@ end
 local function secureErrorHandler(err)
 	local trace = debug.traceback()
 	trace = trace:gsub('\t', '')
-	silentLog("secureFunction", err .. '\n' .. trace)
+	logger:error("secureFunction", err .. '\n' .. trace)
 end
 
 local function secureFunction(fun, ...)
@@ -2648,8 +2609,8 @@ local function secureFunction(fun, ...)
 end
 
 local function errorHandler(err)
-	internalLog("An error occurred", err, false, 0xff0000)
-	io.stderr:write(debug.traceback())
+	logger:error("An error occurred: " .. err)
+	io.stderr:write(debug.traceback()) -- todo: shouldn't this be written to log?
 	print()
 end
 
@@ -2665,6 +2626,7 @@ end
 
 -- # Main GUI
 local function createMainGui()
+	logger:info("gui", "Creating main GUI")
 	gui = gml.create(1, 1, resolution[1], resolution[2])
 	
 	if settings.dark then
@@ -2672,7 +2634,7 @@ local function createMainGui()
 		if s then
 			gui.style = r
 		else
-			internalLog("gui", "cannot load dark theme", false, 0xffff00)
+			logger:error("gui", "cannot load dark theme")
 		end
 	end
 	
@@ -2726,10 +2688,10 @@ local function initializeActions()
 					if fun then
 						fun()
 					else
-						silentLog("reflect", "function invocation failed: " .. err)
+						logger:error("reflect", "function invocation failed: " .. err)
 					end
 				else
-					silentLog("reflect", "couldn't find component with id " .. p1)
+					logger:error("reflect", "couldn't find component with id " .. p1)
 				end
 			end
 		}
@@ -2751,52 +2713,52 @@ local function loadModules()
 		local counter = 0
 		for i, t in pairs(ac) do
 			if type(i) ~= "number" then
-				internalLog(davn, "invalid identifier (" .. type(i) .. ")")
+				logger:error(davn, "invalid identifier ({})", type(i))
 				return false
 			elseif type(t["type"]) ~= "string" then
-				internalLog(davn, "invalid type (" .. type(t["type"]) .. ")")
+				logger:error(davn, "invalid type ({})",  type(t["type"]))
 				return false
 			elseif type(t["desc"]) ~= "string" then
-				internalLog(davn, "invalid description (" .. type(t["desc"]) .. ")")
+				logger:error(davn, "invalid description ({})", type(t["desc"]))
 				return false
 			elseif type(t["exec"]) ~= "function" then
-				internalLog(davn, "no function definition")
+				logger:error(davn, "no function definition")
 				return false
 			elseif t["hidden"] and type(t["hidden"]) ~= "boolean" then
-				internalLog(davn, "visibility not defined")
+				logger:error(davn, "visibility not defined")
 				return false
 			end
 			local p1t = type(t["p1type"])
 			if p1t == "string" then
 				if not (t["p1type"] == "number" or t["p1type"] == "string" or t["p1type"] == "table" or t["p1type"] == "function" or t["p1type"] == "nil") then
-					internalLog(davn, "1st parameter type is incorrect (" .. t["p1type"] .. ")")
+					logger:error(davn, "1st parameter type is incorrect ({})", t["p1type"])
 					return false
 				end
 				if type(t["p1desc"]) ~= "string" then
-					internalLog(davn, "1st parameter description is empty")
+					logger:error(davn, "1st parameter description is empty")
 					return false
 				end
 			elseif p1t ~= "nil" then
-				internalLog(davn, "1st parameter is invalid (" .. p1t .. ")")
+				logger:error(davn, "1st parameter is invalid ({})", p1t)
 				return false
 			end
 			local p2t = type(t["p2type"])
 			if p2t == "string" then
 				if not (t["p2type"] == "number" or t["p2type"] == "string" or t["p2type"] == "table" or t["p2type"] == "function" or t["p2type"] == "nil") then
-					internalLog(davn, "2nd parameter type is incorrect (" .. t["p2type"] .. ")")
+					logger:error(davn, "2nd parameter type is incorrect ({})", t["p2type"])
 					return false
 				end
 				if type(t["p2desc"]) ~= "string" then
-					internalLog(davn, "2nd parameter description is empty")
+					logger:error(davn, "2nd parameter description is empty")
 					return false
 				end
 			elseif p2t ~= "nil" then
-				internalLog(davn, "2nd parameter is invalid (" .. p2t .. ")")
+				logger:error(davn, "2nd parameter is invalid ({})", p2t)
 				return false
 			end
 			counter = counter + 1
 		end
-		internalLog(name .. ": registered " .. tostring(counter) .. " action(s)", "")
+		logger:debug(davn, "{}: registered {} action(s)", name, counter)
 		return true
 	end
 	
@@ -2810,38 +2772,38 @@ local function loadModules()
 	local function doValidation(mo)
 		local dvn = "validator"
 		if type(mo.name) ~= "string" then
-			internalLog(dvn, "missing name")
+			logger:error(dvn, "missing name")
 			return false
 		end
 		if type(mo.version) ~= "string" then
-			internalLog(dvn, "missing version")
+			logger:error(dvn, "missing version")
 			return false
 		elseif type(mo.id) ~= "number" then
-			internalLog(dvn, "missing id")
+			logger:error(dvn, "missing id")
 			return false
 		elseif not checkID(mo.id) then
-			internalLog(dvn, "id " .. tostring(mo.id) .. " is already taken")
+			logger:error(dvn, "id {} is already taken", mo.id)
 			return false
 		elseif type(mo.apiLevel) ~= "number" then
-			internalLog(dvn, "missing api level")
+			logger:error(dvn, "missing api level")
 			return false
 		elseif mo.apiLevel > apiLevel then
-			internalLog(dvn, "too old server version")
+			logger:error(dvn, "too old server version")
 			return false
 		elseif type(mo.setUI) ~= "function" then
-			internalLog(dvn, "missing setUI() function")
+			logger:error(dvn, "missing setUI() function")
 			return false
 		elseif type(mo.start) ~= "function" then
-			internalLog(dvn, "missing start() function")
+			logger:error(dvn, "missing start() function")
 			return false
 		elseif type(mo.stop) ~= "function" then
-			internalLog(dvn, "missing stop() function")
+			logger:error(dvn, "missing stop() function")
 			return false
 		elseif type(mo.pullEvent) ~= "function" then
-			internalLog(dvn, "missing pullEvent() function")
+			logger:error(dvn, "missing pullEvent() function")
 			return false
 		elseif type(mo.actions) ~= "table" then
-			internalLog(dvn, "missing action table")
+			logger:error(dvn, "missing action table")
 			return false
 		elseif not doActionValidation(mo.actions, mo.name) then
 			return false
@@ -2851,7 +2813,7 @@ local function loadModules()
 
 	local function checkStrict()
 		if strict then
-			internalLog("loader", "strict mode is enabled - ending program")
+			logger:error("loader", "strict mode is enabled - ending program")
 			require("os").exit()
 		end
 	end
@@ -2863,7 +2825,7 @@ local function loadModules()
 			name = filename:match("test_modules/(.+)%.lua")
 		end
 
-		internalLog("  " .. name, "", true, 0xffff00)
+		logger:info("loader", "Loading module " .. name)
 		local m, e = loadfile(filename)
 		if m then
 			local s, buffer = pcall(m)
@@ -2871,15 +2833,15 @@ local function loadModules()
 				if buffer and doValidation(buffer) then
 					return buffer
 				else
-					internalLog("Module corrupted", "deactivating", true, 0xff0000)
+					logger:error("loader", "Module corrupted, deactivating")
 					checkStrict()
 				end
 			else
-				internalLog("Syntax error", buffer, true, 0xff0000)
+				logger:error("loader", "Syntax error: " .. buffer)
 				checkStrict()
 			end
 		else
-			internalLog("loader", "loading error: " .. e)
+			logger:error("loader", "loading error: " .. e)
 			checkStrict()
 		end
 		return nil
@@ -2887,7 +2849,7 @@ local function loadModules()
 	
 	for num, tab in pairs(modules) do
 		if type(num) ~= "number" then
-			internalLog("loader", "invalid zone, removing")
+			logger:warn("loader", "invalid zone, removing")
 			modules[num] = nil
 		elseif num > 0 and num < 6 then
 			if type(tab.file) == "string" then
@@ -2900,14 +2862,14 @@ local function loadModules()
 						modules[num].shape = buffer.shape
 						modules[num].id = buffer.id
 					else
-						internalLog("loader", "module with name '" .. buffer.name .. "' already exists", 0xffff00)
+						logger:error("loader", "module with name '{}' already exists", buffer.name)
 					end
 				else
 					modules[num] = nil
 					table.insert(bmodules, tab.file)
 				end
 			else
-				internalLog("loader", "entry is corrpted, removing")
+				logger:warn("loader", "entry is corrpted, removing")
 				modules[num] = nil
 			end
 		end
@@ -2930,7 +2892,7 @@ local function loadModules()
 		end
 		return v1 or v2
 	end
-	internalLog("Loading inactive modules", "", true, 0x00a6ff)
+	logger:info("loader", "Loading inactive modules")
 	for n in fs.list(MODULES_DIR) do
 		local name = n:match("^(.+)%.lua$")
 		if name and not isAdded(fs.concat(MODULES_DIR, n)) then
@@ -2957,7 +2919,7 @@ backgroundListener = function(...)
 			if params[1] == n and mod[m] then
 				local s, r = pcall(function () mod[m].pullEvent(table.unpack(params)) end)
 				if not s then
-					silentLog(mod[m].name .. ".event", r)
+					logger:error(mod[m].name .. ".event", r)
 				end
 			end
 		end
@@ -2986,7 +2948,15 @@ local function internalListener(...)
 	end
 end
 
-local function createGUI()
+local function createSubsystemsGUIs()
+	logger:info("subsystems", "Creatings subsystems' GUIs")
+	for _, subsystem in pairs(subsystems) do
+		subsystem:createUI(gui)
+	end
+end
+
+local function createModulesGUI()
+	logger:info("modules", "Creating modules' GUIs")
 	local function calcPosition(x, y, width, height, maxWidth, maxHeight)
 		width = math.min(width, maxWidth)
 		height = math.min(height, maxHeight)
@@ -3023,7 +2993,7 @@ local function createGUI()
 	end
 	for z, t in pairs(modules) do
 		if z > 0 and z < 6 then
-			internalLog(t.name, "")
+			logger:info("modules", "creating GUI of module " .. t.name)
 			local m = mod[t.name]
 			if m then
 				local coord = zones[z]
@@ -3105,12 +3075,12 @@ local function createGUI()
 							end
 						end
 					end
-					internalLog("added " .. counter .. " GUI element(s)", "", false)
+					logger:debug("modules", "added {} GUI element(s)", counter)
 				else
-					internalLog("modGUI", "cannot open GUI: " .. r, false, 0xffff00)
+					logger:error("modules", "cannot open GUI: " .. r)
 				end
 			else
-				internalLog("modGUI", "integrity error, module not found", false, 0xff0000)
+				logger:error("modules", "integrity error, module not found")
 			end
 		end
 	end
@@ -3118,17 +3088,17 @@ end
 
 local function main()
 	if fs.exists("/etc/the_guard") and not fs.isDirectory("/etc/the_guard") then
-		internalLog("main", "deleting invalid directory")
+		logger.warn("configuration", "deleting invalid directory")
 		fs.remove("/etc/the_guard")
 	end
 	if not fs.exists("/etc/the_guard") then
-		internalLog("main", "config directory missing, creating")
+		logger:info("configuration", "config directory missing, creating")
 		fs.makeDirectory("/etc/the_guard")
 	end
 
-	internalLog("Loading configuration", "", true, 0x00a6ff)
+	logger:info("configuration", "Loading configuration")
 	if not loadConfig() then
-		internalLog("main", "loading failed", false, 0xff0000)
+		logger:error("configuration", "loading failed")
 		return false
 	end
 	
@@ -3139,30 +3109,26 @@ local function main()
 			try = try + 1
 		until try == 3
 		if try == 3 then
-			internalLog("main", "too many incorrect password attempts", false, 0xff0000)
+			logger:error("configuration", "too many incorrect password attempts")
 			return false
 		end
 	end
 	
-	internalLog("Loading modules", "", true, 0x00a6ff)
 	loadModules()
 	
-	internalLog("Launching modules", "", true, 0x00a6ff)
 	for n, m in pairs(mod) do
-		internalLog(n, "")
+		logger:info("modules", "Starting module " .. n)
 		local s, e = pcall(m.start, interface)
 		if not s then
-			internalLog("failure", e, false, 0xff0000)
+			logger:error("modules", "Unable to start module: " .. e)
 		end
 	end
 	
-	internalLog("Creating GUI", "", true, 0x00a6ff)
 	createMainGui()
+	createSubsystemsGUIs()
+	createModulesGUI()
 	
-	internalLog("Creating modules' GUIs", "", true, 0x00a6ff)
-	createGUI()
-	
-	internalLog("init", "Loading event listeners")
+	logger:info("init", "Loading event listeners")
 	event.listen("component_added", internalListener)
 	event.listen("component_removed", internalListener)
 	for _, e in pairs(revents) do
@@ -3172,32 +3138,42 @@ local function main()
 
 	injectContextIntoSubsystems()
 	
-	internalLog("Starting the server", "", false, 0x00ff00)
+	logger:info("init", "Starting the server")
+	subsystems.logging:setGUIMode(true)
 	os.sleep(0.5)
 	gui:run()
 	os.sleep(0.5)
+	subsystems.logging:setGUIMode(false)
 	eventsready = nil
 	
-	internalLog("init", "Unloading events listeners")
-	event.ignore("component_added", internalListener)
+	logger:info("init", "Unloading events listeners")
+	event.ignore("component_added", internalListener) -- todo: this should probably be moved to the cleanup function
 	event.ignore("component_removed", internalListener)
 	for _, e in pairs(revents) do
 		event.ignore(e, backgroundListener)
 	end
 	
-	internalLog("Disabling modules", "", true, 0x00a6ff)
 	for n, m in pairs(mod) do
-		internalLog(n, "")
+		logger:debug("init", "Disabling module " .. n)
 		xpcall(m.stop, errorHandler, interface)
 	end
 	
 	if settings.saveOnExit then
-		internalLog("Saving configuration", "", true)
+		logger:info("init", "Saving configuration")
 		saveConfig()
 	end
-	internalLog("Saving logs", "", true, 0x00a6ff)
-	flushLog()
+
 	return true
+end
+
+local function initailizeLogging()
+	logger = subsystems.logging:createLogger("main")
+	subsystemsLogger = subsystems.logging:createLogger("subsystems")
+	modulesLogger = subsystems.logging:createLogger("modules")
+
+	for _, subsystem in pairs(subsystems) do
+		subsystem.logger = subsystemsLogger
+	end
 end
 
 local function init()
@@ -3209,18 +3185,45 @@ local function init()
 	loadSubsystem("logging")
 	loadSubsystem("ui")
 
+	initailizeLogging()
+
 	if not fs.isDirectory(CONFIG_DIR) then
 		fs.makeDirectory(CONFIG_DIR)
 	end
+
 	local prev = component.gpu.setForeground(0x00ff00)
-	print("THE GUARD server, version " .. version)
+	print("THE GUARD server, version " .. version .. "\n")
 	component.gpu.setForeground(prev)
-	internalLog("init", "Loading token")
-	internalLog("init", "Initializing the server")
+
+	logger:info("init", "Loading token")
+	logger:info("init", "Initializing the server")
 	if not main() then
-		internalLog("init", "Initialization failed", false, 0xff0000)
+		logger:error("init", "Initialization failed")
 		return
 	end
 end
 
-init()
+local function cleanup()
+	if logger then logger:close() end
+	if subsystemsLogger then subsystemsLogger:close() end
+	if modulesLogger then modulesLogger:close() end
+
+	if subsystems then
+		for _, subsystem in pairs(subsystems) do
+			if subsystem.cleanup then subsystem:cleanup() end
+		end
+	end
+end
+
+local function starter()
+	local status, msg = xpcall(init, function (err)
+		io.stderr:write("Unhandled the_guard error:\n")
+		io.stderr:write(err .. "\n")
+		io.stderr:write(debug.traceback())
+	end)
+
+	-- Cleanup must always be called (i.e. to close open files)
+	cleanup()
+end
+
+starter()

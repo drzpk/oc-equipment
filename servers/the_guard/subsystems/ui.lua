@@ -19,6 +19,10 @@ function ui:initialize()
     return true
 end
 
+function ui:createUI() end
+
+function ui:cleanup() end
+
 function ui:messageBox(message, buttons)
     local buttons = buttons or {"cancel", "ok"}
 	local choice

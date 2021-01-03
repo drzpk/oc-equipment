@@ -52,10 +52,35 @@ local function settingsValidationTest()
     editor:show("Settings editor (validation)")
 end
 
+local function settingsSelectPropertyTest()
+    local values1 = {
+        "a", "b", "c"
+    }
+    local values2 = {
+        a = "first", 
+        b = "second",
+        c = "third",
+        d = "fourth",
+        e = "fifth",
+        f = "sixth",
+        g = "seventh",
+        h = "eight",
+        i = "nineth",
+        j = "teenth"
+    }
+
+    local editor = core.createSettingsEditor(mod, "testSettings_select")
+    editor:addSelectProperty("select_1", "Select value 1", values1, nil, {required = true})
+    editor:addPropertySeparator()
+    editor:addSelectProperty("select_2", "select value 2", values2, "d")
+    editor:show("Settings editor (select properties)")
+end
+
 function mod.setUI(window)
     window:addLabel("center", 1, 26, ">> settings test module <<")
     window:addButton(2, 3, 24, 1, "settings editor test", settingsEditorTest)
     window:addButton(2, 4, 28, 1, "settings validation test", settingsValidationTest)
+    window:addButton(2, 5, 29, 1, "settings select property test", settingsSelectPropertyTest)
 end
 
 function mod.start(api)

@@ -46,6 +46,20 @@ function utils.deepcopy(orig)
     return copy
 end
 
+function utils.copy(orig)
+    local origType = type(orig)
+    local copy
+    if origType == 'table' then
+        copy = {}
+        for origKey, origValue in pairs(orig) do
+            copy[origKey] = origValue
+        end
+    else -- number, string, boolean, etc
+        copy = orig
+    end
+    return copy
+end
+
 function utils.indexOf(value, item)
     local type = type(value)
     if type == "table" then

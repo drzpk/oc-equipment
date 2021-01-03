@@ -9,7 +9,9 @@ local args = {...}
 
 if args[1] == "version_check" then return version end
 
-local SettingsManager = {}
+local SettingsManager = {
+    _type = "SettingsManager"
+}
 
 function SettingsManager:new(settings)
     local obj = {
@@ -37,6 +39,10 @@ function SettingsManager:defineBooleanProperty(key, defaultValue)
     self:_defineProperty(key, "boolean", defaultValue, function (input) return input and true or false end)
 end
 
+function SettingsManager:defineRawProperty(key, defaultValue)
+    self:_defineProperty(key, nil, defaultValue, nil)
+end
+
 function SettingsManager:getValue(key)
     local property = self.properties[key]
     if not property then
@@ -58,7 +64,7 @@ function SettingsManager:setValue(key, value)
     end
 
     local targetValue = value
-    if value and type(value) ~= property.type then
+    if value and property.type and type(value) ~= property.type then
         if property.converter then
             local status, result = pcall(property.converter, value)
             if status then
@@ -97,7 +103,7 @@ end
 
 function SettingsManager:_defineProperty(key, propertyType, defaultValue, fromStringConverter)
     -- no default value means that property is "nillable"
-    if defaultValue and type(defaultValue) ~= propertyType then
+    if defaultValue and propertyType and type(defaultValue) ~= propertyType then
         error("Wrong default value for property '" .. key .. "': required '" .. propertyType .. "' type but got '" .. type(defaultValue) .. "'")
     end
 

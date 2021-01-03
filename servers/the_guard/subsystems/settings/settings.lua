@@ -18,6 +18,7 @@ if args[1] == "version_check" then return version end
 
 package.loaded.gml = nil
 package.loaded["subsystems/settings/settings_editor"] = nil
+package.loaded["subsystems/settings/settings_manager"] = nil
 
 local component = require("component")
 local fs = require("filesystem")
@@ -25,22 +26,24 @@ local gml = require("gml")
 local serial = require("serialization")
 ---
 local SettingsEditor = require("subsystems/settings/settings_editor")
+local SettingsManager = require("subsystems/settings/settings_manager")
 
 local data = nil
 local masterPassword = nil
 
 local ROOT_CONFIG_DIR = "/etc/the_guard"
+local SUBSYSTEMS_CONFIG_SUBDIR = "subsystems"
 local MODULES_CONFIG_SUBDIR = "modules"
 
 
 -- Internal functions
 
-local function loadModuleConfigContent(module, settingsName)
+local function loadSettings(configSubdir, settingsName)
     if not settingsName:match("^[%a_]+$") then
         error("Settings name can contain only letters and underscore")
     end
 
-    local configDirectoryName = fs.concat(ROOT_CONFIG_DIR, MODULES_CONFIG_SUBDIR, module.name)
+    local configDirectoryName = fs.concat(ROOT_CONFIG_DIR, configSubdir)
     if not fs.isDirectory(configDirectoryName) then
         fs.makeDirectory(configDirectoryName)
     end
@@ -67,9 +70,9 @@ local function loadModuleConfigContent(module, settingsName)
     return content
 end
 
-local function saveModuleConfigContent(module, settingsName, content)
+local function saveSettings(configSubdir, settingsName, content)
     local serialized = serial.serialize(content)
-    local configFileName = fs.concat(ROOT_CONFIG_DIR, MODULES_CONFIG_SUBDIR, module.name, settingsName .. ".conf")
+    local configFileName = fs.concat(ROOT_CONFIG_DIR, configSubdir, settingsName .. ".conf")
     local handle = io.open(configFileName, "w")
     handle:write(serialized)
     handle:close()
@@ -89,14 +92,29 @@ function settings:initialize()
     return true
 end
 
+function settings:cleanup() end
+
+function settings:createUI() end
+
 function settings:createModuleSettingsEditor(module, settingsName)
     local callback = function (result)
         if result.updated then
-            saveModuleConfigContent(module, settingsName, result.properties)
+            self:saveModuleSettings(module, settingsName, result.properties)
         end
     end
 
-    local content = loadModuleConfigContent(module, settingsName)
+    local content = self:loadModuleSettings(module, settingsName)
+    return SettingsEditor:new(self.context.api, content, callback)
+end
+
+function settings:createSubsystemSettingsEditor(subsystem, settingsName)
+    local callback = function (result)
+        if result.updated then
+            self:saveSubsystemSettings(subsystem, settingsName, result.properties)
+        end
+    end
+
+    local content = self:loadSubsystemSettings(subsystem, settingsName)
     return SettingsEditor:new(self.context.api, content, callback)
 end
 
@@ -105,12 +123,33 @@ function settings:requiresMasterPassword()
     return false
 end
 
-function settings:loadSystemSettings(password)
-    
+function settings:loadModuleSettings(module, settingsName)
+    local subdir = MODULES_CONFIG_SUBDIR .. "/" .. module.name
+    return loadSettings(subdir, settingsName)
 end
 
-function settings:loadModuleSettings()
+function settings:saveModuleSettings(module, settingsName, content)
+    local subdir = MODULES_CONFIG_SUBDIR .. "/" .. module.name
+    return saveSettings(subdir, settingsName, content)
+end
 
+function settings:loadSubsystemSettings(subsystem, settingsName, asSettingsManager)
+    local subdir = SUBSYSTEMS_CONFIG_SUBDIR .. "/" .. subsystem.name
+    local loaded = loadSettings(subdir, settingsName)
+
+    if asSettingsManager then
+        return SettingsManager:new(loaded)
+    else
+        return loaded
+    end
+end
+
+function settings:saveSubsystemSettings(subsystem, settingsName, content)
+    local subdir = SUBSYSTEMS_CONFIG_SUBDIR .. "/" .. subsystem.name
+    if content._type == "SettingsManager" then
+        content = content:getSettings()
+    end
+    return saveSettings(subdir, settingsName, content)
 end
 
 return settings

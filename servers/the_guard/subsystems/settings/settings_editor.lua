@@ -12,11 +12,13 @@ if args[1] == "version_check" then return version end
 package.loaded.gml = nil
 package.loaded["subsystems/settings/settings_manager"] = nil
 package.loaded["subsystems/settings/constraint_validator"] = nil
+package.loaded["common/utils"] = nil
 
 local gml = require("gml")
 ---
 local SettingsManager = require("subsystems/settings/settings_manager")
 local ConstraintValidator = require("subsystems/settings/constraint_validator")
+local utils = require("common/utils")
 
 
 local SettingsEditor = {}
@@ -27,6 +29,41 @@ local function checkArg(number, requiredType, value, allowNil)
     if type(value) ~= requiredType then
         error("Wrong argument " .. tostring(number) .. ": required '" .. requiredType .. "' type but got '" .. type(value) .. "'")
     end
+end
+
+--[[
+    @ret: status, selected option index
+]]
+local function showSelectPropertyModal(options, currentOptionIndex, isRequired)
+    local status = false
+    local selectedOption = nil
+
+    local mgui = gml.create("center", "center", 30, 18)
+    mgui:addLabel("center", 1, 16, "Select an option")
+    local listbox = mgui:addListBox(3, 3, 26, 12, options)
+    
+    if currentOptionIndex then listbox:select(currentOptionIndex) end
+    listbox.onChange = function ()
+        if not currentOptionIndex and isRequired then
+            table.remove(listbox.list, 1)
+            listbox:updateList(listbox.list)
+        end
+        listbox.onChange = nil
+    end
+
+    mgui:addButton(16, 16, 10, 1, "Cancel", function () mgui:close() end)
+    mgui:addButton(4, 16, 10, 1, "Select", function ()
+        if listbox.selectedLabel then
+            status = true
+            selectedOption = listbox.selectedLabel
+            mgui:close()
+        else
+            api.messageBox(nil, "An option must be selected", {"OK"})
+        end
+    end)
+
+    mgui:run()
+    return status, selectedOption
 end
 
 --[[
@@ -68,7 +105,7 @@ function SettingsEditor:addStringProperty(key, name, defaultValue, constraints)
         validator = ConstraintValidator:createValidator(constraints, {"required", "minLength", "maxLength"})
     }
 
-    table.insert(self.properties, property)
+    self:_addProperty(property)
     self.manager:defineStringProperty(key, defaultValue)
 end
 
@@ -89,7 +126,7 @@ function SettingsEditor:addIntegerProperty(key, name, defaultValue, constraints)
         validator = ConstraintValidator:createValidator(constraints, {"required", "minValue", "maxValue"})
     }
 
-    table.insert(self.properties, property)
+    self:_addProperty(property)
     self.manager:defineNumberProperty(key, defaultValue)
 end
 
@@ -106,8 +143,44 @@ function SettingsEditor:addBooleanProperty(key, name, defaultValue)
         valueWidth = 8
     }
 
-    table.insert(self.properties, property)
+    self:_addProperty(property)
     self.manager:defineBooleanProperty(key, defaultValue)
+end
+
+--[[
+    Available constraints:
+    required
+]]
+function SettingsEditor:addSelectProperty(key, name, options, defaultOption, constraints)
+    if defaultOption and not options[defaultOption] then
+        error("Default option doesn't exist in options table")
+    end
+
+    local optionKeys = {}
+    local optionLabels = {}
+    for k, l in pairs(options) do
+        table.insert(optionKeys, k)
+        table.insert(optionLabels, l)
+    end
+
+    local property = {
+        kind = "property",
+        key = key,
+        name = name,
+        type = "select",
+        optionKeys = optionKeys,
+        optionLabels = optionLabels,
+        default = defaultOption,
+        modalSelectOptionThreshold = 10,
+        selectedOptionUpdatedListener = nil,
+        valueWidth = 12,
+        requiresSeparators = true,
+        validator = ConstraintValidator:createValidator(constraints, {"required"})
+    }
+
+    self:_addProperty(property)
+    self.manager:defineRawProperty(key, defaultOption)
+    return property
 end
 
 function SettingsEditor:addPropertySeparator()
@@ -134,13 +207,29 @@ function SettingsEditor:addButtonSeparator()
 end
 
 --[[
+    Used to impose restrictions on minimum editor window size, so, for example, a custom GUI elements
+    can fit (see the second parameter of SettingsEditor:show function).
+]]
+function SettingsEditor:setMinimumSize(minWidth, minHeight)
+    if type(minWidth) == "number" and minWidth > 0 then
+        self.minWidth = minWidth
+    end
+    if type(minHeight) == "number" and maxHeight > 0 then
+        self.minHeight = minHeight
+    end
+end
+
+--[[
     Displays the editor
+
+    @param customElementCreatorHandler - a function called to add custom GUI elements.
+        First parameter is the editor's GUI.
     @returns table: {
         updated = false, -- whether properties were updated (user clicked OK button)
         properties = {} -- properties table (with current values)
     }
 ]]
-function SettingsEditor:show(title)
+function SettingsEditor:show(title, customElementCreatorHandler)
     if #self.properties == 0 then error("No properties were defined") end
 
     local verticalPadding = 1
@@ -156,6 +245,15 @@ function SettingsEditor:show(title)
     local totalHeight = math.max(#self.properties, #self.buttons) + 4 + 2
     local valueX = horizontalPadding + nameWidth + nameValueDistance + 1
     local buttonX = valueX + valueWidth + valueButtonDistance
+
+    if self.minWidth then
+        totalWidth = math.max(totalWidth, self.minWidth)
+    end
+    if self.minHeight then
+        totalHeight = max.max(totalHeight, self.minHeight)
+    end
+    self.totalWidth = totalWidth
+    self.totalHeight = totalHeight
 
     local gui = gml.create("center", "center", totalWidth, totalHeight)
     gui:addLabel("center", 1, title:len(), title)
@@ -184,6 +282,10 @@ function SettingsEditor:show(title)
         end
     end)
     gui:addButton(totalWidth - 13, totalHeight, 10, 1, "Cancel", function () gui:close() end)
+
+    if type(customElementCreatorHandler) == "function" then
+        customElementCreatorHandler(gui)
+    end
 
     gui:run()
 
@@ -269,9 +371,100 @@ function SettingsEditor:_createPropertyGUI(gui, property, labelX, valueX, y)
         end)
         property.guiElement.propertyKey = property.key
 
+    elseif property.type == "select" then
+        local value = manager:getValue(property.key)
+        local labels = utils.copy(property.optionLabels)
+        local isRequired = property.validator and property.validator.constraints.required
+        if not value then
+            -- add empty choice
+            table.insert(labels, 1, "")
+        end
+
+        local getTableValue = function (tab, index)
+            if not isRequired and index == 1 then
+                -- first option is empty if property isn't required
+                return nil
+            else
+                if not isRequired then index = index - 1 end
+                return tab[index]
+            end
+        end
+
+        if #property.optionKeys < property.modalSelectOptionThreshold then
+            -- combo box
+            property.guiElement = gui:addComboBox(valueX, y - 1, property.valueWidth, labels)
+            for i, l in pairs(property.optionKeys) do
+                if l == value then
+                    if not isRequired then i = i + 1 end
+                    property.guiElement:select(i, false)
+                    break
+                end
+            end
+            
+            property.guiElement.onSelected = function (element, selectedPosition)
+                local newValue = getTableValue(property.optionKeys, selectedPosition)
+                manager:setValue(property.key, newValue)
+                if property.selectedOptionUpdatedListener then property.selectedOptionUpdatedListener(newValue) end
+                if isRequired and not value and not element.wasRemoved then
+                    table.remove(element.list, 1)
+                    element:updateList(element.list)
+                    element.wasRemoved = true
+                end
+            end
+        else
+            -- modal window
+            local updateButtonLabel = function (label)
+                property.guiElement.text = label
+                property.guiElement:draw()
+            end
+            property.guiElement = gui:addButton(valueX, y, property.valueWidth, 1, "", function ()
+                local value = manager:getValue(property.key)
+                local index = not isRequired and 1 or nil
+                for i, l in pairs(property.optionKeys) do
+                    if l == value then
+                        index = i
+                        if not isRequired then index = index + 1 end
+                        break
+                    end
+                end
+
+                local status, selectedIndex = showSelectPropertyModal(labels, index, isRequired)
+                if status then
+                    local newKey = getTableValue(property.optionKeys, selectedIndex)
+                    manager:setValue(property.key, newKey)
+                    if property.selectedOptionUpdatedListener then property.selectedOptionUpdatedListener(newKey) end
+
+                    local newLabel = getTableValue(property.optionLabels, selectedIndex)
+                    updateButtonLabel(newLabel)
+                end
+            end)
+
+            local index = nil
+            local valueToCompare = value or property.default
+            for i, v in pairs(property.optionKeys) do
+                if v == valueToCompare then
+                    updateButtonLabel(property.optionLabels[i])
+                    break
+                end
+            end
+        end
+
     else
         error("Unknown property type: " .. property.type)
     end
+end
+
+function SettingsEditor:_addProperty(property)
+    local lastProperty = self.properties[#self.properties]
+    if lastProperty then
+        if property.requiresSeparators and lastProperty.kind ~= "separator" then
+            error("Property '" .. property.key .. "' requires a separator before it")
+        elseif lastProperty.requiresSeparators and property.kind ~= "separator" then
+            error("Property '" .. lastProperty.key .. "' requires a separator after it")
+        end
+    end
+
+    table.insert(self.properties, property)
 end
 
 function SettingsEditor:_createButtonGUI(gui, button, x, y, width)
