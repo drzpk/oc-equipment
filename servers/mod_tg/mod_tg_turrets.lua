@@ -147,7 +147,7 @@
 		}
 ]]
 
-local version = "1.3.5"
+local version = "1.3.6"
 local args = {...}
 
 if args[1] == "version_check" then return version end
@@ -411,7 +411,7 @@ local function calcValues(turret, target)
 	local a = target.x - (turret.x + 0.5)
 	local b = (turret.z + 0.5) - target.z
 	local c = math.sqrt(a * a + b * b)
-	local angle = 90 - (math.floor(math.atan2(b, a) * 180 / math.pi * 10) / 10)
+	local angle = 90 - (math.floor(math.atan(b / a) * 180 / math.pi * 10) / 10)
 	local h = target.y + targetHeight
 	local dh = turret.hidden and 1.375 or 1
 	h = h - turret.y - (turret.upside and -dh or dh)
