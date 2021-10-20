@@ -147,7 +147,7 @@
 		}
 ]]
 
-local version = "1.3.6"
+local version = "1.3.7"
 local args = {...}
 
 if args[1] == "version_check" then return version end
@@ -408,14 +408,15 @@ local function disableTurrets()
 end
 
 local function calcValues(turret, target)
-	local a = target.x - (turret.x + 0.5)
-	local b = (turret.z + 0.5) - target.z
+	local a = target.x - turret.x
+	local b = target.z - turret.z
 	local c = math.sqrt(a * a + b * b)
-	local angle = 90 - (math.floor(math.atan(b / a) * 180 / math.pi * 10) / 10)
+
+	local angle = (90 + (math.floor(math.atan(b, a) * 180 / math.pi * 10) / 10)) % 360
 	local h = target.y + targetHeight
 	local dh = turret.hidden and 1.375 or 1
 	h = h - turret.y - (turret.upside and -dh or dh)
-	local pitch = math.floor(math.atan(h / c) * 180 / math.pi * 10) / 10
+	local pitch = math.floor(math.atan(h, c) * 180 / math.pi * 10) / 10
 	return angle, pitch
 end
 
@@ -527,15 +528,16 @@ local function turretsLoop()
 		return
 	end
 	tamount = tamount - 1
-	
+
 	local function checkYaw(angle, turret)
-		if (angle >= -45 and angle <= 0) or (angle >= 0 and angle < 45) then
+		local yaw = angle - 180
+		if (yaw >= 135 and yaw <= 180) or (yaw >= -180 and yaw < -135) then
 			return not turret.walls.n
-		elseif angle >= 45 and angle < 135 then
+		elseif yaw >= -135 and yaw < -45 then
 			return not turret.walls.e
-		elseif (angle >= 135 and angle <= 180) or (angle >= -180 and angle < -135) then
+		elseif yaw >= -45 and yaw < 45 then
 			return not turret.walls.s
-		elseif angle >= -135 and angle < -45 then
+		elseif yaw >= 45 and yaw < 135 then
 			return not turret.walls.w
 		end
 		return false
