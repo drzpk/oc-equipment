@@ -146,8 +146,13 @@
 		will be disabled.
 ]]
 
+-- todo: actions subsystem; look for doActionValidation function in version 2.x
+-- todo: api subsystem; standardize api docs: https://stevedonovan.github.io/ldoc/manual/doc.md.html
+-- todo: maintenance subsystem (crash log generation)
+-- todo: network and component subsystem
+
 local version = "3.0.0"
-local apiLevel = 5
+local apiLevel = 6
 local args = {...}
 
 if args[1] == "version_check" then return version end
@@ -174,10 +179,10 @@ local data = nil
 if component.isAvailable("data") then
 	data = component.data
 end
-if not data then
+if not data and false then -- todo: debug-only
 	io.stderr:write("Server requires a data card tier 2 in order to work.")
 	return
-elseif not data.encrypt then
+elseif false and not data.encrypt then
 	io.stderr:write("Used data card must be at least of tier 2.")
 	return
 end
@@ -192,13 +197,9 @@ end
 local passwd = nil -- master password
 local settings = {} -- settings
 local components = {} -- installed components
-local modules = {} -- available modules
-local bmodules = {} -- corrupted modules
-local pmodules = {} -- modules avaiting installation
 local token = nil -- device token (id)
 
 local SUBSYSTEMS_DIR = "/usr/bin/the_guard/subsystems"
-local MODULES_DIR = "/usr/bin/the_guard/test_modules"
 local CONFIG_DIR = "/etc/the_guard"
 
 -- # Function declarations
@@ -216,17 +217,6 @@ local logger = nil
 local subsystemsLogger = nil
 local modulesLogger = nil
 
--- # Zones
-local zones = {
-	[1] = {1, 1},
-	[2] = {70, 1},
-	[3] = {1, 21},
-	[4] = {70, 21},
-	[5] = {1, 41},
-	normal = {68, 19},
-	landscape = {158, 10}
-}
-
 -- # variables
 local gui = nil
 local mod = {}
@@ -239,6 +229,9 @@ local events = {}
 local eventsready = false
 local revents = {}
 local backgroundListener = nil
+
+interface.apiLevel = apiLevel
+interface.debugMode = true -- todo
 
 --[[
 Loads module's primary configuration file
@@ -568,6 +561,30 @@ interface.pcall = function(mod, ...)
 	end
 
 	return s, r
+end
+
+--[[
+Runs given function in a try-catch (xpcall in Lua) block.
+	@mod - subsystem or module
+	@fun - function to execute
+	@disableLogging - if set to true, error won't be logged
+	@severe - if set to true, a crash window will be displayed (it will allow to upload to Pastebin or similar server)
+	@ret status, result
+	SINCE: API.6
+]]
+interface.tryCatch = function(mod, fun, disableLogging, severe)
+	local status, result = xpcall(fun, function (message)
+		local fullMessage = message .. "\n" .. debug.traceback()
+		if not disableLogging then
+			mod.logger:error("tryCatch", fullMessage)
+		end
+	end)
+
+	if not status and severe then
+		-- todo: crash window
+	end
+
+	return status, result
 end
 
 --[[
@@ -1271,6 +1288,7 @@ local function loadSubsystem(name)
 			subsystem.name = name
 			subsystem.api = interface
 			subsystem.subsystems = subsystems
+			subsystem.logger = subsystemsLogger
 
 			if not subsystem:initialize() then
 				io.stderr:write("Initialization of subsystem: " .. name .. " failed\n")
@@ -1985,156 +2003,6 @@ local function bComponentList()
 	cgui:run()
 end
 
-local function bModuleList()
-	local changeg = false
-	local llist, rlist = nil, nil
-	local ltab, rtab = {}, {}
-	
-	local function refTabs()
-		ltab = {}
-		for i = 1, 4 do
-			if modules[i] then
-				if #ltab == 0 then table.insert(ltab, "  NORMAL:") end
-				table.insert(ltab, tostring(i) .. ". " .. modules[i].name .. ", " .. modules[i].version)
-			end
-		end
-		if modules[5] then
-			if #ltab > 0 then table.insert(ltab, "") end
-			table.insert(ltab, "  LANDSCAPE:")
-			table.insert(ltab, "5. " .. modules[5].name .. ", " .. modules[5].version)
-		end
-		
-		rtab = {}
-		local n, l = {}, {}
-		for _, t in pairs(pmodules) do
-			if true or t.shape == "normal" then -- todo: remove shapes
-				table.insert(n, t.name .. ", " .. t.version)
-			elseif t.shape == "landscape" then
-				table.insert(l, t.name .. ", " .. t.version)
-			end
-		end
-		if #n > 0 then
-			table.insert(rtab, "  NORMAL:")
-			for _, e in pairs(n) do table.insert(rtab, e) end
-		end
-		if #l > 0 then
-			if #n > 0 then table.insert(rtab, "  LANDSCAPE:") end
-			for _, e in pairs(l) do table.insert(rtab, e) end
-		end
-		
-		if #ltab == 0 then table.insert(ltab, "") end
-		if #rtab == 0 then table.insert(rtab, "") end
-	end
-	
-	local function up()
-		if #ltab > 1 then
-			local num = tonumber(llist:getSelected():match("^(%d)%. .+"))
-			if num and num > 1 and num < 5 then
-				if modules[num - 1] then
-					local buffer = modules[num - 1]
-					modules[num - 1] = modules[num]
-					modules[num] = buffer
-				else
-					modules[num - 1] = modules[num]
-					modules[num] = nil
-				end
-				refTabs()
-				llist:updateList(ltab)
-				changed = true
-			end
-		end
-	end
-	
-	local function down()
-		if #ltab > 1 then
-			local num = tonumber(llist:getSelected():match("^(%d)%. .+"))
-			if num and num > 0 and num < 4 then
-				if modules[num + 1] then
-					local buffer = modules[num + 1]
-					modules[num + 1] = modules[num]
-					modules[num] = buffer
-				else
-					modules[num + 1] = modules[num]
-					modules[num] = nil
-				end
-				refTabs()
-				llist:updateList(ltab)
-				changed = true
-			end
-		end
-	end
-	
-	local function getIndex(pname)
-		if not pname then return nil end
-		for i, t in pairs(pmodules) do
-			if t.name == pname then return i end
-		end
-		return nil
-	end
-	
-	local function toLeft()
-		local index = getIndex(rlist:getSelected():match("^(.+), .+"))
-		if index and (pmodules[index].shape == "normal" or true) then -- todo: remove shapes
-			local free = nil
-			for i = 1, 4 do
-				if not modules[i] then free = i break end
-			end
-			if free then
-				modules[free] = pmodules[index]
-				pmodules[index] = nil
-				refTabs()
-				llist:updateList(ltab)
-				rlist:updateList(rtab)
-				changed = true
-			else
-				GMLmessageBox(gui, "No free zones.", {"OK"})
-			end
-		elseif index and pmodules[index].shape == "landscape" then
-			if not modules[5] then
-				modules[5] = pmodules[index]
-				pmodules[index] = nil
-				refTabs()
-				llist:updateList(ltab)
-				rlist:updateList(rtab)
-				changed = true
-			else
-				GMLmessageBox(gui, "No free zones.", {"OK"})
-			end
-		end
-	end
-	
-	local function toRight()
-		local num = tonumber(llist:getSelected():match("^(%d)%. .+"))
-		if num then
-			table.insert(pmodules, modules[num])
-			modules[num] = nil
-			refTabs()
-			llist:updateList(ltab)
-			rlist:updateList(rtab)
-			changed = true
-		end
-	end
-	refTabs()
-	local mgui = gml.create("center", "center", 90, 24)
-	mgui.style = gui.style
-	mgui:addLabel("center", 1, 15, "Module list")
-	mgui:addLabel(3, 3, 17, "Active modules:")
-	mgui:addLabel(57, 3, 20, "Inactive modules:")
-	llist = mgui:addListBox(3, 5, 30, 14, ltab)
-	rlist = mgui:addListBox(57, 5, 30, 14, rtab)
-	mgui:addButton(35, 8, 9, 1, "-->", toRight)
-	mgui:addButton(46, 8, 9, 1, "<--", toLeft)
-	mgui:addButton(35, 12, 6, 1, "/\\", up)
-	mgui:addButton(35, 14, 6, 1, "\\/", down)
-	mgui:addButton(71, 21, 14, 1, "Close", function() mgui:close() end)
-
-	mgui:run()
-	if changed then
-		save.modules(true)
-		GMLmessageBox(gui, "Changes will be applied after server restart.", {"OK"})
-	end
-end
-
 local function componentDistribution()
 	local list, all, tab = nil, nil
 	local function refreshList()
@@ -2459,93 +2327,6 @@ sure you want to continue?
 	sgui:run()
 end
 
-local function bLogs() -- todo: move to logging subsystem
-	local lineWidth = 85
-	local ll, list = {}, nil
-	local function refresh()
-		ll = {}
-		for _, s in pairs(lastlog) do
-			table.insert(ll, s:sub(1, 82))
-		end
-	end
-	local function details()
-		local line = nil
-		for _, s in pairs(lastlog) do
-			if s:sub(1, 20) == list:getSelected():sub(1, 20) then
-				line = s
-				break
-			end
-		end
-		if line then
-			local buffer = {}
-			local count = 0
-
-			for chunk in line:gmatch('[^\r\n]+') do
-				local br = false
-
-				for i = 1, chunk:len(), lineWidth do
-					count = count + 1
-					local tmp = chunk:sub(i, i + lineWidth - 1)
-					if i > 1 then
-						tmp = '    ' .. tmp
-					end
-
-					if count <= 10 then
-						table.insert(buffer, tmp)
-					else
-						table.insert(buffer, '(...)')
-						br = true
-						break
-					end
-				end
-
-				if br then break end
-			end
-
-			-- for i = 1, line:len(), lineWidth do
-			-- 	count = count + 1
-			-- 	if i < line:len() then 
-			-- 		if count < 10 then
-			-- 			local tmp = line:sub(i, i + lineWidth)
-			-- 			if count > 1 then
-			-- 				tmp = "   " .. tmp
-			-- 			end
-			-- 			table.insert(buffer, tmp)
-			-- 		else
-			-- 			table.insert(buffer, "(...)")
-			-- 			break
-			-- 		end
-			-- 	else
-			-- 		break
-			-- 	end
-			-- end
-
-			local dgui = gml.create("center", "center", lineWidth + 25, 6 + #buffer)
-			dgui.style = gui.style
-			dgui:addLabel("center", 1, 11, "Details")
-			for i = 1, #buffer do
-				dgui:addLabel(2, 2 + i, lineWidth + 5, buffer[i])
-			end
-			dgui:addButton(lineWidth + 7, 4 + #buffer, 14, 1, "Close", function() dgui:close() end)
-			dgui:run()
-			refresh()
-			list:updateList(ll)
-		end
-	end
-	refresh()
-	local lgui = gml.create("center", "center", 90, 18)
-	lgui.style = gui.style
-	lgui:addLabel("center", 1, 14, "Latest logs")
-	list = lgui:addListBox(3, 3, 84, 12, ll)
-	list.onDoubleClick = details
-	lgui:addButton(55, 17, 14, 1, "Refresh", function()
-		refresh()
-		list:updateList(ll)
-	end)
-	lgui:addButton(71, 17, 14, 1, "Close", function() lgui:close() end)
-	lgui:run()
-end
-
 local function lockInterface()
 	if settings.debugMode then return end
 
@@ -2642,7 +2423,7 @@ local function createMainGui()
 	gui:addLabel(150, 7, 8, "(" .. version .. ")")
 	gui:addButton(141, 13, 16, 1, "Components", function() safeCall(bComponentList) end)
 	gui:addButton(141, 15, 16, 1, "New component", function() safeCall(bNewComponent) end)
-	gui:addButton(141, 17, 16, 1, "Modules", function() safeCall(bModuleList) end)
+	gui:addButton(141, 17, 16, 1, "Modules", function() subsystems.modules:showModuleManager() end)
 	gui:addButton(141, 19, 16, 1, "Information", function() safeCall(bInformation) end)
 	gui:addButton(142, 25, 14, 1, "Settings", function() safeCall(openMainSettings) end)
 	gui:addButton(142, 27, 14, 1, "Lock program", function() safeCall(lockInterface) end)
@@ -2697,218 +2478,15 @@ local function initializeActions()
 		}
 	}
 
-	for _, t in pairs(modules) do
-		local mul = mod[t.name].id * 100
-		local buff = {}
-		for n, at in pairs(mod[t.name].actions) do
-			buff[n + mul] = at
-		end
-		actions[t.name] = buff
-	end
-end
-
-local function loadModules()
-	local function doActionValidation(ac, name)
-		local davn = "action validator"
-		local counter = 0
-		for i, t in pairs(ac) do
-			if type(i) ~= "number" then
-				logger:error(davn, "invalid identifier ({})", type(i))
-				return false
-			elseif type(t["type"]) ~= "string" then
-				logger:error(davn, "invalid type ({})",  type(t["type"]))
-				return false
-			elseif type(t["desc"]) ~= "string" then
-				logger:error(davn, "invalid description ({})", type(t["desc"]))
-				return false
-			elseif type(t["exec"]) ~= "function" then
-				logger:error(davn, "no function definition")
-				return false
-			elseif t["hidden"] and type(t["hidden"]) ~= "boolean" then
-				logger:error(davn, "visibility not defined")
-				return false
-			end
-			local p1t = type(t["p1type"])
-			if p1t == "string" then
-				if not (t["p1type"] == "number" or t["p1type"] == "string" or t["p1type"] == "table" or t["p1type"] == "function" or t["p1type"] == "nil") then
-					logger:error(davn, "1st parameter type is incorrect ({})", t["p1type"])
-					return false
-				end
-				if type(t["p1desc"]) ~= "string" then
-					logger:error(davn, "1st parameter description is empty")
-					return false
-				end
-			elseif p1t ~= "nil" then
-				logger:error(davn, "1st parameter is invalid ({})", p1t)
-				return false
-			end
-			local p2t = type(t["p2type"])
-			if p2t == "string" then
-				if not (t["p2type"] == "number" or t["p2type"] == "string" or t["p2type"] == "table" or t["p2type"] == "function" or t["p2type"] == "nil") then
-					logger:error(davn, "2nd parameter type is incorrect ({})", t["p2type"])
-					return false
-				end
-				if type(t["p2desc"]) ~= "string" then
-					logger:error(davn, "2nd parameter description is empty")
-					return false
-				end
-			elseif p2t ~= "nil" then
-				logger:error(davn, "2nd parameter is invalid ({})", p2t)
-				return false
-			end
-			counter = counter + 1
-		end
-		logger:debug(davn, "{}: registered {} action(s)", name, counter)
-		return true
-	end
-	
-	local function checkID(id)
-		for _, t in pairs(mod) do
-			if t.id == id then return false end
-		end
-		return true
-	end
-	
-	local function doValidation(mo)
-		local dvn = "validator"
-		if type(mo.name) ~= "string" then
-			logger:error(dvn, "missing name")
-			return false
-		end
-		if type(mo.version) ~= "string" then
-			logger:error(dvn, "missing version")
-			return false
-		elseif type(mo.id) ~= "number" then
-			logger:error(dvn, "missing id")
-			return false
-		elseif not checkID(mo.id) then
-			logger:error(dvn, "id {} is already taken", mo.id)
-			return false
-		elseif type(mo.apiLevel) ~= "number" then
-			logger:error(dvn, "missing api level")
-			return false
-		elseif mo.apiLevel > apiLevel then
-			logger:error(dvn, "too old server version")
-			return false
-		elseif type(mo.setUI) ~= "function" then
-			logger:error(dvn, "missing setUI() function")
-			return false
-		elseif type(mo.start) ~= "function" then
-			logger:error(dvn, "missing start() function")
-			return false
-		elseif type(mo.stop) ~= "function" then
-			logger:error(dvn, "missing stop() function")
-			return false
-		elseif type(mo.pullEvent) ~= "function" then
-			logger:error(dvn, "missing pullEvent() function")
-			return false
-		elseif type(mo.actions) ~= "table" then
-			logger:error(dvn, "missing action table")
-			return false
-		elseif not doActionValidation(mo.actions, mo.name) then
-			return false
-		end
-		return true
-	end
-
-	local function checkStrict()
-		if strict then
-			logger:error("loader", "strict mode is enabled - ending program")
-			require("os").exit()
-		end
-	end
-	
-	local function loadModule(filename)
-		local name = filename:match("mod_tg_(.+)%.lua")
-		if not name then
-			-- todo: temporary solution
-			name = filename:match("test_modules/(.+)%.lua")
-		end
-
-		logger:info("loader", "Loading module " .. name)
-		local m, e = loadfile(filename)
-		if m then
-			local s, buffer = pcall(m)
-			if s then
-				if buffer and doValidation(buffer) then
-					return buffer
-				else
-					logger:error("loader", "Module corrupted, deactivating")
-					checkStrict()
-				end
-			else
-				logger:error("loader", "Syntax error: " .. buffer)
-				checkStrict()
-			end
-		else
-			logger:error("loader", "loading error: " .. e)
-			checkStrict()
-		end
-		return nil
-	end
-	
-	for num, tab in pairs(modules) do
-		if type(num) ~= "number" then
-			logger:warn("loader", "invalid zone, removing")
-			modules[num] = nil
-		elseif num > 0 and num < 6 then
-			if type(tab.file) == "string" then
-				local buffer = loadModule(tab.file)
-				if buffer then
-					if not mod[buffer.name] then
-						mod[buffer.name] = buffer
-						modules[num].name = buffer.name
-						modules[num].version = buffer.version
-						modules[num].shape = buffer.shape
-						modules[num].id = buffer.id
-					else
-						logger:error("loader", "module with name '{}' already exists", buffer.name)
-					end
-				else
-					modules[num] = nil
-					table.insert(bmodules, tab.file)
-				end
-			else
-				logger:warn("loader", "entry is corrpted, removing")
-				modules[num] = nil
-			end
-		end
-	end
-	initializeActions()
-	
-	local function isAdded(filename)
-		local v1, v2 = false, false
-		for _, t in pairs(modules) do
-			if t.file == filename then
-				v1 = true
-				break
-			end
-		end
-		for _, t in pairs(bmodules) do
-			if t == filename then
-				v2 = true
-				break
-			end
-		end
-		return v1 or v2
-	end
-	logger:info("loader", "Loading inactive modules")
-	for n in fs.list(MODULES_DIR) do
-		local name = n:match("^(.+)%.lua$")
-		if name and not isAdded(fs.concat(MODULES_DIR, n)) then
-			local buffer = loadModule(fs.concat(MODULES_DIR, n))
-			if buffer then
-				local t = {
-					name = buffer.name,
-					file = fs.concat(MODULES_DIR, n),
-					version = buffer.version,
-					shape = buffer.shape,
-					id = buffer.id
-				}
-				table.insert(pmodules, t)
-			end
-		end
-	end
+	-- todo: actions
+	-- for _, t in pairs(modules) do 
+	-- 	local mul = mod[t.name].id * 100
+	-- 	local buff = {}
+	-- 	for n, at in pairs(mod[t.name].actions) do
+	-- 		buff[n + mul] = at
+	-- 	end
+	-- 	actions[t.name] = buff
+	-- end
 end
 
 -- #Event listeners
@@ -2955,137 +2533,6 @@ local function createSubsystemsGUIs()
 	end
 end
 
-local function createModulesGUI()
-	logger:info("modules", "Creating modules' GUIs")
-	local function calcPosition(x, y, width, height, maxWidth, maxHeight)
-		width = math.min(width, maxWidth)
-		height = math.min(height, maxHeight)
-
-		if x == "left" then
-			x = 1
-		elseif x == "right" then
-			x = maxWidth - width + 1
-		elseif x == "center" then
-			x = math.max(1, math.floor((maxWidth - width) / 2))
-		elseif x < 0 then
-			x = maxWidth - width + 2 + x
-		elseif x < 1 then
-			x = 1
-		elseif x + width - 1 > maxWidth then
-			x = maxWidth - width + 1
-		end
-
-		if y == "top" then
-			y = 1
-		elseif y == "bottom" then
-			y = maxHeight - height + 1
-		elseif y == "center" then
-			y = math.max(1, math.floor((maxHeight - height) / 2))
-		elseif y < 0 then
-			y = maxHeight - height + 2 + y
-		elseif y < 1 then
-			y = 1
-		elseif y + height - 1 > maxHeight then
-			y = maxHeight - height + 1
-		end
-
-		return x, y, width, height
-	end
-	for z, t in pairs(modules) do
-		if z > 0 and z < 6 then
-			logger:info("modules", "creating GUI of module " .. t.name)
-			local m = mod[t.name]
-			if m then
-				local coord = zones[z]
-				local dim = m.shape == "normal" and zones.normal or zones.landscape
-				local subgui = gml.create(coord[1], coord[2], dim[1] + 2, dim[2] + 2)
-				local counter = 0
-				subgui.addLabel = function(...)
-					local aa = {...}
-					local x, y, w = calcPosition(aa[2], aa[3], aa[4], 1, dim[1], dim[2])
-					counter = counter + 1
-					local g = gui:addLabel(x + coord[1] - 1, y + coord[2] - 1, w, aa[5])
-					g.mark = true
-					return g
-				end
-				subgui.addButton = function(...)
-					local aa = {...}
-					local x, y, w, h = calcPosition(aa[2], aa[3], aa[4], aa[5], dim[1], dim[2])
-					counter = counter + 1
-					local g = gui:addButton(x + coord[1] - 1, y + coord[2] - 1, w, h, aa[6], aa[7])
-					g.mark = true
-					return g
-				end
-				subgui.addTextField = function(...)
-					local aa = {...}
-					local x, y, w = calcPosition(aa[2], aa[3], aa[4], 1, dim[1], dim[2])
-					counter = counter + 1
-					local g = gui:addTextField(x + coord[1] - 1, y + coord[2] - 1, w, aa[5])
-					g.mark = true
-					return g
-				end
-				subgui.addListBox = function(...)
-					local aa = {...}
-					local x, y, w, h = calcPosition(aa[2], aa[3], aa[4], aa[5], dim[1], dim[2])
-					counter = counter + 1
-					local g = gui:addListBox(x + coord[1] - 1, y + coord[2] - 1, w, h, aa[6])
-					g.mark = true
-					return g
-				end
-				subgui.addComponent = function(obj, comp)
-					comp.posX = comp.posX + coord[1] - 1
-					comp.posY = comp.posY + coord[2] - 1
-					comp.bodyX, comp.bodyY, comp.bodyW, comp.bodyH = GMLcalcBody(comp)
-					gui:addComponent(comp)
-				end
-				local s, r = pcall(m.setUI, subgui)
-				
-				if s then
-					for _, t in pairs(gui.components) do
-						if t.mark then
-							if t.onClick then
-								local o = t.onClick
-								t.onClick = function(...)
-									return secureFunction(o, ...) 
-								end
-							end
-							if t.onDoubleClick then
-								local o = t.onDoubleClick
-								t.onDoubleClick = function(...)
-									return secureFunction(o, ...)
-								end
-							end
-							if t.onBeginDrag then
-								local o = t.onBeginDrag
-								t.onBeginDrag = function(...)
-									return secureFunction(o, ...)
-								end
-							end
-							if t.onDrag then
-								local o = t.onDrag
-								t.onDrag = function(...)
-									return secureFunction(o, ...)
-								end
-							end
-							if t.onDrop then
-								local o = t.onDrop
-								t.onDrop = function(...)
-									return secureFunction(o, ...)
-								end
-							end
-						end
-					end
-					logger:debug("modules", "added {} GUI element(s)", counter)
-				else
-					logger:error("modules", "cannot open GUI: " .. r)
-				end
-			else
-				logger:error("modules", "integrity error, module not found")
-			end
-		end
-	end
-end
-
 local function main()
 	if fs.exists("/etc/the_guard") and not fs.isDirectory("/etc/the_guard") then
 		logger.warn("configuration", "deleting invalid directory")
@@ -3114,19 +2561,12 @@ local function main()
 		end
 	end
 	
-	loadModules()
-	
-	for n, m in pairs(mod) do
-		logger:info("modules", "Starting module " .. n)
-		local s, e = pcall(m.start, interface)
-		if not s then
-			logger:error("modules", "Unable to start module: " .. e)
-		end
-	end
+	subsystems.modules:loadModules()
 	
 	createMainGui()
 	createSubsystemsGUIs()
-	createModulesGUI()
+
+	subsystems.modules:launchModules()
 	
 	logger:info("init", "Loading event listeners")
 	event.listen("component_added", internalListener)
@@ -3170,10 +2610,6 @@ local function initailizeLogging()
 	logger = subsystems.logging:createLogger("main")
 	subsystemsLogger = subsystems.logging:createLogger("subsystems")
 	modulesLogger = subsystems.logging:createLogger("modules")
-
-	for _, subsystem in pairs(subsystems) do
-		subsystem.logger = subsystemsLogger
-	end
 end
 
 local function init()
@@ -3183,9 +2619,10 @@ local function init()
 
 	loadSubsystem("settings")
 	loadSubsystem("logging")
-	loadSubsystem("ui")
-
 	initailizeLogging()
+
+	loadSubsystem("ui")
+	loadSubsystem("modules")
 
 	if not fs.isDirectory(CONFIG_DIR) then
 		fs.makeDirectory(CONFIG_DIR)

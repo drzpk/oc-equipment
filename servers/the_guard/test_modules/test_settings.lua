@@ -12,8 +12,7 @@ local core = nil
 local mod = {
     name = "test_settings",
     version = version,
-    id = 50,
-    apiLevel = 5,
+    apiLevel = 6,
     actions = {}
 }
 

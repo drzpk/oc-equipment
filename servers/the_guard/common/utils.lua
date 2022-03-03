@@ -73,4 +73,13 @@ function utils.indexOf(value, item)
     end
 end
 
+function utils.remove(tab, object)
+    for p, o in ipairs(tab) do
+        if o == object then
+            table.remove(tab, p)
+            break
+        end
+    end
+end
+
 return utils
