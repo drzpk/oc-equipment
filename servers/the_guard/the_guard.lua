@@ -196,7 +196,6 @@ end
 -- # Configuration
 local passwd = nil -- master password
 local settings = {} -- settings
-local components = {} -- installed components
 local token = nil -- device token (id)
 
 local SUBSYSTEMS_DIR = "/usr/bin/the_guard/subsystems"
@@ -1260,7 +1259,7 @@ local function validateSubsystem(name, subsystem)
 	if type(subsystem) ~= "table" then
 		error("Subsystem " .. name .. " wasn't loaded correctly")
 	elseif type(subsystem.initialize) ~= "function" then
-		error("Subsystem " .. name .. " is missing initialization function")
+		error("Subsystem '" .. name .. "' is missing initialization function")
 	elseif type(subsystem.cleanup) ~= "function" then
 		error("Subsystem " .. name .. " is missing cleanup function")
 	elseif type(subsystem.createUI) ~= "function" then
@@ -1295,12 +1294,12 @@ local function loadSubsystem(name)
 				os.exit(1)
 			end
 		else
-			io.stderr:write("Error while loading subsystem: " .. name .. "\n")
+			io.stderr:write("Error while starting subsystem: " .. name .. "\n")
 			io.stderr:write(subsystem)
 			os.exit(1)
 		end
 	else
-		io.stderr:write("Error while compiling subsystem: " .. name .. "\n")
+		io.stderr:write("Error while loading subsystem: " .. name .. "\n")
 		io.stderr:write(err)
 		os.exit(1)
 	end
@@ -1318,29 +1317,6 @@ local function injectContextIntoSubsystems()
 end
 
 -- # Other functions
-
-local function generateUid()
-    local template ='xyxyxy'
-    return string.gsub(template, '[xy]', function (c)
-        local v = (c == 'x') and math.random(0, 0xf) or math.random(8, 0xb)
-        return string.format('%x', v)
-    end)
-end
-
-local function generateComponentUid()
-	while true do
-		local uid = generateUid()
-		local unique = true
-		for _, c in pairs(components) do
-			if c.id == uid then
-				unique = false
-				break
-			end
-		end
-
-		if unique then return uid end
-	end
-end
 
 local function isPasswordValid(plain)
 	return data.sha256(plain) == passwd
@@ -1366,46 +1342,6 @@ function save.settings(silent)
 		end
 	else
 		logger:error("save", "cannot serialize settings: " .. s)
-		return false
-	end
-	return true
-end
-
-function save.modules(silent)
-	local out = {}
-	for z, t in pairs(modules) do
-		out[z] = {file = t.file}
-	end
-	local r, s = pcall(serial.serialize, out)
-	if r then
-		local f, e = io.open("/etc/the_guard/modules.conf", "w")
-		if f then
-			f:write(s)
-			f:close()
-		else
-			logger:error("save", "error while opening modules file: " .. e)
-			return false
-		end
-	else
-		logger:error("save", "cannot serialize modules: " .. s)
-		return false
-	end
-	return true
-end
-
-function save.components(silent)
-	local r, s = pcall(serial.serialize, components)
-	if r then
-		local f, e = io.open("/etc/the_guard/components.conf", "w")
-		if f then
-			f:write(s)
-			f:close()
-		else
-			logger:error("save", "error while opening components file: " .. e)
-			return false
-		end
-	else
-		logger:error("save", "cannot serialize components: " .. s)
 		return false
 	end
 	return true
@@ -1463,7 +1399,7 @@ local function loadConfig()
 		end
 	end
 	
-	local function checkModules()
+	local function checkModules() -- todo: move to the modules subsystem
 		local counter = 0
 		for i, m in pairs(modules) do
 			local added = true
@@ -1488,52 +1424,6 @@ local function loadConfig()
 			if added then counter = counter + 1 end
 		end
 		logger:debug("checkModules", "Checked {} module(s)", counter)
-	end
-
-	local function checkComponents()
-		local counter = 0 
-		for i, c in pairs(components) do
-			if type(c["id"]) ~= "string" then
-				logger:error("checkComponents", "wrong id")
-				components[i]["id"] = generateComponentUid()
-			end
-			if type(c["address"]) == "string" then
-				if component.proxy(c["address"]) then
-					if type(c["type"]) ~= "string" then
-						logger:error("checkComponents", "wrong type")
-						components[i]["type"] = ""
-					end
-					if type(c["state"]) ~= "boolean" then
-						logger:error("checkComponents", "wrong state")
-						components[i]["state"] = false
-					end
-					if not (type(c["x"]) == "number" or type(c["x"]) == "nil") then
-						logger:error("checkComponents", "wrong x coord")
-						components[i]["x"] = nil
-					end
-					if not (type(c["y"]) == "number" or type(c["y"]) == "nil") then
-						logger:error("checkComponents", "wrong y coord")
-						components[i]["y"] = nil
-					end
-					if not (type(c["z"]) == "number" or type(c["z"]) == "nil") then
-						logger:error("checkComponents", "wrong z coord")
-						components[i]["z"] = nil
-					end
-				else
-					logger:debug("checkComponents", "device " .. c["address"] .. " is offline")
-					components[i].state = false
-				end
-			else
-				logger:error("checkComponents", "wrong address format")
-				if type(i) == "number" then
-					table.remove(components, i)
-				else
-					components[i] = nil
-				end
-			end
-			counter = counter + 1
-		end
-		logger:debug("checkComponents", "Checked {} components(s)", counter)
 	end
 	
 	local function checkPassword() -- todo: to be changed
@@ -1593,47 +1483,7 @@ local function loadConfig()
 		logger:error("loadConfig", "settings file missing, loading defaults")
 	end
 	checkSettings()
-	
-	path = fs.concat(dir, "modules.conf")
-	if fs.exists(path) and not fs.isDirectory(path) then
-		local f, e = io.open(path, "r")
-		if f then
-			local s = serial.unserialize(f:read("*a"))
-			if s then
-				modules = s
-			else
-				logger:error("loadConfig", "modules file is corrupted or empty")
-			end
-			f:close()
-		else
-			logger:error("loadConfig", "modules file error: " .. e)
-			return false
-		end
-	else
-		logger:warn("loadConfig", "modules file missing, loading defaults")
-	end
-	checkModules()
-	
-	path = fs.concat(dir, "components.conf")
-	if fs.exists(path) and not fs.isDirectory(path) then
-		local f, e = io.open(path, "r")
-		if f then
-			local s = serial.unserialize(f:read("*a"))
-			if s then
-				components = s
-			else
-				logger:error("loadConfig", "components file is corrupted or empty")
-			end
-			f:close()
-		else
-			logger:error("loadConfig", "components file error: " .. e)
-			return false
-		end
-	else
-		logger:warn("loadConfig", "components file missing, loading defaults")
-	end
-	checkComponents()
-	
+
 	path = fs.concat(dir, "passwd.bin")
 	if fs.exists(path) and not fs.isDirectory(path) then
 		local f, e = io.open(path, "rb")
@@ -1688,117 +1538,6 @@ local function passwordPrompt()
 	pgui:addButton(34, 5, 12, 1, "Cancel", function() pgui:close() end)
 	pgui:run()
 	return status
-end
-
-local function addCreator(address, typee)
-	local uid = generateComponentUid()
-	local agui = gml.create("center", "center", 54, 16)
-	agui.style = gui.style
-	agui:addLabel("center", 1, 24, "New component wizard")
-	agui:addLabel(2, 3, 20, "UID:     " .. uid)
-	agui:addLabel(2, 4, 50, "Address: " .. address)
-	agui:addLabel(2, 5, 48, "Type:    " .. typee)
-	agui:addLabel(2, 6, 7, "Name:")
-	agui:addLabel(2, 7, 9, "Status:")
-	agui:addLabel(2, 9, 17, "X coordinate:")
-	agui:addLabel(2, 10, 17, "Y coordinate:")
-	agui:addLabel(2, 11, 17, "Z coordinate:")
-	local name = agui:addTextField(11, 6, 22)
-	local cx = agui:addTextField(20, 9, 10)
-	local cy = agui:addTextField(20, 10, 10)
-	local cz = agui:addTextField(20, 11, 10)
-	local button = agui:addButton(11, 7, 13, 1, "enabled", function(self)
-		if self.status then
-			self.text = "disabled"
-			self.status = false
-			self:draw()
-		else
-			self.text = "enabled"
-			self.status = true
-			self:draw()
-		end
-	end)
-	button.status = true
-	agui:addButton(20, 14, 14, 1, "Apply", function()
-		local nx = tonumber(cx.text)
-		local ny = tonumber(cy.text)
-		local nz = tonumber(cz.text)
-		if not nx and cx.text:len() > 0 then
-			GMLmessageBox(gui, "The X coordiante is incorrect.", {"OK"})
-		elseif not ny and cy.text:len() > 0 then
-			GMLmessageBox(gui, "The Y coordinate is incorrect.", {"OK"})
-		elseif not nz and cz.text:len() > 0 then
-			GMLmessageBox(gui, "The Z coordinate is incorrect.", {"OK"})
-		elseif name.text:len() > 20 then
-			GMLmessageBox(gui, "Component name cannot be longer than 20 characters.", {"OK"})
-		else
-			local t = {
-				id = uid,
-				address = address,
-				type = typee,
-				name = name.text,
-				state = button.status,
-				x = nx,
-				y = ny,
-				z = nz
-			}
-			table.insert(components, t)
-			save.components(true)
-			agui:close()
-		end
-	end)
-	agui:addButton(36, 14, 14, 1, "Cancel", function() agui:close() end)
-	agui:run()
-end
-
-local function bNewComponent(returnOnly, typeFilter)
-	local selected = nil
-	local ngui, list, tab = nil, nil, nil
-	local function isAdded(address)
-		for _, t in pairs(components) do
-			local matches = typeFilter and t.type == typeFilter or true
-			if t.address == address and matches then return true end
-		end
-		return false
-	end
-	local function reloadList()
-		tab = {}
-		for addr, name in component.list() do
-			if not isAdded(addr) then
-				table.insert(tab, addr .. "   " .. name)
-			end
-		end
-	end
-	local function addComponent()
-		local addr, typ = list:getSelected():match("^(%x+%-%x+%-%x+%-%x+%-%x+)%s%s%s(.+)")
-		if addr and typ then
-			selected = addr
-			if returnOnly then
-				ngui:close()
-			else
-				addCreator(addr, typ)
-				reloadList()
-				list:updateList(tab)
-			end
-		end
-	end
-	reloadList()
-	ngui = gml.create("center", "center", 70, 30)
-	ngui.style = gui.style
-	ngui:addLabel("center", 1, 21, "Add new component")
-	list = ngui:addListBox(2, 3, 64, 23, tab)
-	list.onDoubleClick = addComponent
-	ngui:addButton(36, 28, 14, 1, "Refresh", function()
-		reloadList()
-		list:updateList(tab)
-	end)
-	ngui:addButton(52, 28, 14, 1, "Close", function()
-		selected = nil
-		ngui:close()
-	end)
-	ngui:run()
-
-	return selected
 end
 
 local function componentDetails(t)
@@ -1905,102 +1644,6 @@ local function componentDetails(t)
 	dgui:addButton(36, 15, 14, 1, "Cancel", function() dgui:close() end)
 	dgui:run()
 	return shouldRefresh
-end
-
-local function bComponentList()
-	local list, tab = nil, nil
-	local function refreshList()
-		local buffer = {}
-		for _, t in pairs(components) do
-			if not buffer[t.type] then buffer[t.type] = {} end
-			local str = "[" .. t.id .. "] "
-			str = str .. t.name .. " "
-			str = str .. "(" .. t.address:sub(1, 8) .. "...) "
-			str = str .. (t.state and "ON" or "OFF")
-			if t.x then str = str .. "  X:" .. tostring(t.x) end
-			if t.y then str = str .. "  Y:" .. tostring(t.y) end
-			if t.z then str = str .. "  Z:" .. tostring(t.z) end
-			if not component.proxy(t.address) then str = "*" .. str end
-			table.insert(buffer[t.type], str)
-		end
-		local buffer2 = {}
-		for a, b in pairs(buffer) do
-			table.insert(buffer2, {a, b})
-		end
-		table.sort(buffer2, function(a, b) return string.byte(a[1], 1) < string.byte(b[1], 1) end)
-		tab = {}
-		for _, t in pairs(buffer2) do
-			table.insert(tab, string.upper(t[1]) .. ":")
-			for _, l in pairs(t[2]) do
-				table.insert(tab, "  " .. l)
-			end
-		end
-	end
-	local function enableAll()
-		for _, t in pairs(components) do
-			if component.proxy(t.address) then t.state = true end
-		end
-		refreshList()
-		list:updateList(tab)
-		save.components(true)
-		computer.pushSignal("components_changed")
-	end
-	local function disableAll()
-		for _, t in pairs(components) do
-			t.state = false
-		end
-		refreshList()
-		list:updateList(tab)
-		save.component(true)
-		computer.pushSignal("components_changed")
-	end
-	local function deleteOffline()
-		if GMLmessageBox(gui, "Are you sure you want to remove all offline devices?", {"Yes", "No"}) == "Yes" then
-			for i, t in pairs(components) do
-				if not component.proxy(t.address) then components[i] = nil end
-			end
-			refreshList()
-			list:updateList(tab)
-			save.components(true)
-			computer.pushSignal("components_changed")
-		end
-	end
-	local function reloadList()
-		refreshList()
-		list:updateList(tab)
-	end
-	local function details()
-		local first = list:getSelected():find("%[")
-		local last = list:getSelected():find("%]")
-		if first and last then
-			local id = list:getSelected():sub(first + 1, last - 1)
-			for _, t in pairs(components) do
-				if t.id == id then
-					local refresh = componentDetails(t)
-					if refresh then reloadList() end
-					break
-				end
-			end
-			refreshList()
-			list:updateList(tab)
-			computer.pushSignal("components_changed")
-		end
-	end
-	
-	refreshList()
-	local cgui = gml.create("center", "center", 90, 30)
-	cgui.style = gui.style
-	cgui:addLabel("center", 1, 22, "Installed components")
-	list = cgui:addListBox(2, 3, 84, 20, tab)
-	list.onDoubleClick = details
-	cgui:addLabel(4, 23, 32, "Legend: [ID] name (address...)")
-	cgui:addLabel(68, 23, 13, "* - offline")
-	cgui:addButton(3, 25, 21, 1, "Enable all", enableAll)
-	cgui:addButton(3, 27, 21, 1, "Disable all", disableAll)
-	cgui:addButton(26, 27, 18, 1, "Remove offline", deleteOffline)
-	cgui:addButton(54, 27, 14, 1, "Refresh", reloadList)
-	cgui:addButton(70, 27, 14, 1, "Close", function() cgui:close() end)
-	cgui:run()
 end
 
 local function componentDistribution()
@@ -2421,8 +2064,8 @@ local function createMainGui()
 	
 	addTitle(gui, 143, 3)
 	gui:addLabel(150, 7, 8, "(" .. version .. ")")
-	gui:addButton(141, 13, 16, 1, "Components", function() safeCall(bComponentList) end)
-	gui:addButton(141, 15, 16, 1, "New component", function() safeCall(bNewComponent) end)
+	gui:addButton(141, 13, 16, 1, "Components", function() subsystems.components:showComponentManager() end)
+	gui:addButton(141, 15, 16, 1, "New component", function() subsystems.components:showNewComponentWizard() end)
 	gui:addButton(141, 17, 16, 1, "Modules", function() subsystems.modules:showModuleManager() end)
 	gui:addButton(141, 19, 16, 1, "Information", function() safeCall(bInformation) end)
 	gui:addButton(142, 25, 14, 1, "Settings", function() safeCall(openMainSettings) end)
@@ -2561,6 +2204,7 @@ local function main()
 		end
 	end
 	
+	subsystems.components:loadComponents()
 	subsystems.modules:loadModules()
 	
 	createMainGui()
@@ -2621,6 +2265,7 @@ local function init()
 	loadSubsystem("logging")
 	initailizeLogging()
 
+	loadSubsystem("components")
 	loadSubsystem("ui")
 	loadSubsystem("modules")
 
