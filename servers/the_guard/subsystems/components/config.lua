@@ -20,6 +20,54 @@ local Config = {
         "keyboard",
         "gpu",
         "computer"
+    },
+
+    -- Components that have additional properties exposed to modules
+    --[[
+        Schema:
+        additionalProperties = {
+            component_name = {
+                properties = {
+                    -- Display order is defined by indides
+                    [index] = {
+                        name = "name under which property is stored",
+                        displayName = "name displayed in GUI",
+                        type = "string|number|decimal",
+                        required = false
+                   }
+                },
+                -- Digest is a short summary of custom properties, which
+                -- is displayed on component list
+                digest = function (propsObj) return "short description" end
+            }
+        }
+    ]]
+    additionalProperties = {
+        os_energyturret = {
+            properties = {
+                [1] = {
+                    name = "x",
+                    displayName = "X coordinate",
+                    type = "number",
+                    required = true
+                },
+                [2] = {
+                    name = "y",
+                    displayName = "Y coordinate",
+                    type = "number",
+                    required = true
+                },
+                [3] = {
+                    name = "z",
+                    displayName = "Z coordinate",
+                    type = "number",
+                    required = true
+                }
+            },
+            digest = function (props)
+                return "X:" .. props.x .. " Y:" .. props.y .. " Z:" .. props.z
+            end
+        }
     }
 }
 

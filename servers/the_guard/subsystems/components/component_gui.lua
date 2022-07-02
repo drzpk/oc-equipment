@@ -11,10 +11,12 @@ if args[1] == "version_check" then return version end
 
 package.loaded["gml"] = nil
 package.loaded["common/dialogs"] = nil
+package.loaded["subsystems/components/additional_properties"] = nil
 
 local gml = require("gml")
 local hal = require("subsystems/components/hal")
 local Component = require("subsystems/components/component")
+local AdditionalProperties = require("subsystems/components/additional_properties")
 local dialogs = require("common/dialogs")
 
 local ComponentGui = {}
@@ -33,11 +35,7 @@ function ComponentGui:registeredComponentsList(components)
             str = str .. c.name .. " "
             str = str .. "(" .. c.address:sub(1, 8) .. "...) "
             str = str .. (c.state and "ON" or "OFF")
-
-            -- todo: these should be custom properties
-            if c.x then str = str .. "  X:" .. tostring(c.x) end
-            if c.y then str = str .. "  Y:" .. tostring(c.y) end
-            if c.z then str = str .. "  Z:" .. tostring(c.z) end
+            str = str .. " " .. AdditionalProperties.digest(c)
 
             if not c:isOnline() then str = "*" .. str end
             table.insert(componentsByType[c.type], str)
@@ -174,9 +172,13 @@ end
 
 function ComponentGui:_componentEditor(component, isNew)
     local saved = nil
+    local additionalProperties = AdditionalProperties.forComponent(component)
+    local additionalPropertiesHeight = additionalProperties.count
+    if additionalPropertiesHeight > 0 then additionalPropertiesHeight = additionalPropertiesHeight + 1 end
 
-    local agui = gml.create("center", "center", 54, 16)
+    local agui = gml.create("center", "center", 54, 11 + additionalPropertiesHeight)
     local title = isNew and "New component wizard" or "Component editor"
+
     agui:addLabel("center", 1, #title, title)
     agui:addLabel(2, 3, 20, "UID:     " .. component.id)
     agui:addLabel(2, 4, 50, "Address: " .. component.address)
@@ -200,7 +202,17 @@ function ComponentGui:_componentEditor(component, isNew)
     end)
     button.status = true
 
-    agui:addButton(20, 14, 14, 1, "Apply", function()
+    local additionalPropertyFields = {}
+    if additionalProperties.count > 0 then
+        for prop in additionalProperties:iterator() do
+            agui:addLabel(2, 8 + prop.index, 16, prop.displayName .. ":")
+            local field = agui:addTextField(19, 8 + prop.index, 20)
+            field.text = tostring(prop.value)
+            table.insert(additionalPropertyFields, field)
+        end
+    end
+
+    local applyHandler = function ()
         if name.text:len() < 1 then
             dialogs.messageBox(agui, "Component name cannot be empty.", {"OK"})
         elseif name.text:len() > 20 then
@@ -213,11 +225,25 @@ function ComponentGui:_componentEditor(component, isNew)
                 component:disable()
             end
 
-            saved = true
-            agui:close()
+            local propertyValues = {}
+            for _, field in pairs(additionalPropertyFields) do
+                table.insert(propertyValues, field.text)
+            end
+            local status, errors = additionalProperties:set(propertyValues)
+
+            if status then
+                saved = true
+                agui:close()
+            else
+                local message = ""
+                for _, error in pairs(errors) do message = message .. error .. "\n" end
+                dialogs.messageBox(agui, "Additional properties validation errors:\n" .. message, {"OK"})
+            end
         end
-    end)
-    agui:addButton(36, 14, 14, 1, "Cancel", function() agui:close() end)
+    end
+
+    agui:addButton(20, 9 + additionalPropertiesHeight, 14, 1, "Apply", applyHandler)
+    agui:addButton(36, 9 + additionalPropertiesHeight, 14, 1, "Cancel", function() agui:close() end)
 
     agui:run()
 
